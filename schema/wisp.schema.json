@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/phrp720/wisp/main/schema/wisp.schema.json",
   "title": "Wisp workspace file",
-  "description": "A .wisp.json: the bolts that start a project's working context — its links, folders, files, apps and commands — with one word. Committed next to the code, so the repository carries its own context.",
+  "description": "A .wisp.json: the bolts that start a project's working context (its links, folders, files, apps and commands) with one word. Committed next to the code, so the repository carries its own context.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -13,7 +13,7 @@
     "name": {
       "type": "string",
       "minLength": 1,
-      "description": "What this project is called. Optional — a file that does not name itself is named after its directory.",
+      "description": "What this project is called. Optional: a file that does not name itself is named after its directory.",
       "examples": [
         "Acme",
         "Platform"
@@ -64,14 +64,14 @@
     },
     "commands": {
       "type": "array",
-      "description": "Shared shell commands. These do NOT run until the reader allows this exact file with `wisp trust` — any edit asks again.",
+      "description": "Shared shell commands. These do NOT run until the reader allows this exact file with `wisp trust`. Any edit asks again.",
       "items": {
         "$ref": "#/$defs/command"
       }
     },
     "bolts": {
       "type": "array",
-      "description": "What you run: 'Work on api', 'Incident response'. A bolt lists what to start, in order — inline, or by naming a shared asset.",
+      "description": "What you run: 'Work on api', 'Incident response'. A bolt lists what to start, in order: inline, or by naming a shared asset.",
       "items": {
         "$ref": "#/$defs/bolt"
       }
@@ -133,7 +133,7 @@
     },
     "openWith": {
       "type": "string",
-      "description": "Which app opens this folder or file. Honoured only in your personal workspaces; a shared project file cannot choose anyone's editor — readers set their own with `wisp open-with`."
+      "description": "Which app opens this folder or file. Honoured only in your personal workspaces; a shared project file cannot choose anyone's editor; readers set their own with `wisp open-with`."
     },
     "link": {
       "oneOf": [
@@ -173,7 +173,7 @@
     "pathProperty": {
       "type": "string",
       "minLength": 1,
-      "description": "Relative to this file — that is what makes it work on every machine. An absolute or ~ path works, but only where it exists; put those in .wisp.local.json.",
+      "description": "Relative to this file, which is what makes it work on every machine. An absolute or ~ path works, but only where it exists; put those in .wisp.local.json.",
       "examples": [
         "apps/api",
         "README.md"
@@ -331,7 +331,7 @@
       },
       "background": {
         "type": "boolean",
-        "description": "Always run it in the background, even when you have chosen to open commands in terminal windows — for anything you never need to look at.",
+        "description": "Always run it in the background, even when you have chosen to open commands in terminal windows. For anything you never need to look at.",
         "default": false
       },
       "shell": {
@@ -550,7 +550,7 @@
             "compose": {
               "type": "string",
               "minLength": 1,
-              "description": "A docker compose file, relative to this file. Its services are started with `up --wait` — the step is done when they are healthy — shown with their state and logs, and stopped by `wisp down`. Waits for `wisp trust`, like a command.",
+              "description": "A docker compose file, relative to this file. Its services are started with `up --wait` (the step is done when they are healthy), shown with their state and logs, and stopped by `wisp down`. Waits for `wisp trust`, like a command.",
               "examples": [
                 "compose.yaml",
                 "deployments/development/docker-compose.yml"
@@ -588,7 +588,7 @@
             "bolt": {
               "type": "string",
               "minLength": 1,
-              "description": "Another bolt to run first — once per run, and skipped where its commands are already running."
+              "description": "Another bolt to run first: once per run, and skipped where its commands are already running."
             },
             "workspace": {
               "type": "string",
@@ -628,11 +628,11 @@
         "job": {
           "type": "boolean",
           "default": false,
-          "description": "A job runs to completion — Test, Build, Release: its commands run attached, the first failure stops it, and every run is kept in `wisp history`. Bolts it depends on still start the way they normally do."
+          "description": "A job runs to completion (Test, Build, Release): its commands run attached, the first failure stops it, and every run is kept in `wisp history`. Bolts it depends on still start the way they normally do."
         },
         "down": {
           "type": "array",
-          "description": "Run by `wisp down` after it has stopped what this bolt started — teardown that is not a process, like `docker compose stop`.",
+          "description": "Run by `wisp down` after it has stopped what this bolt started: teardown that is not a process, like `docker compose stop`.",
           "items": {
             "$ref": "#/$defs/step"
           }

@@ -6,12 +6,12 @@ links, apps and shell commands, with optional waits and dependencies between the
 
 ## Files
 
-- `.wisp.json` — committed in a project. Wisp finds it by walking up from the
+- `.wisp.json`: committed in a project. Wisp finds it by walking up from the
   current directory, like git finds `.git`. Paths in it are relative to the file.
-- `.wisp.local.json` — optional, beside it, usually gitignored. Same format. Its lists
+- `.wisp.local.json`: optional, beside it, usually gitignored. Same format. Its lists
   are added to the project's, its name/icon/color win, and a bolt with the same label
   replaces the project's bolt.
-- Personal workspaces — the same format, in the `workspaces` directory that
+- Personal workspaces: the same format, in the `workspaces` directory that
   `wisp doctor` prints. Trusted automatically, since they are yours.
 
 ## The smallest file
@@ -44,7 +44,7 @@ Any inline step may also carry `"label"` and `"os"`.
 
 ## Jobs
 
-A bolt with `"job": true` runs to completion instead of starting things — Test, Build,
+A bolt with `"job": true` runs to completion instead of starting things: Test, Build,
 Release:
 
 ```json
@@ -61,8 +61,8 @@ Release:
 
 ## Up and down
 
-Wisp tracks every command it starts — in a terminal window, a tmux window or the
-background — so it knows which bolts are **up**, never starts a second copy of a running
+Wisp tracks every command it starts (in a terminal window, a tmux window or the
+background), so it knows which bolts are **up**, never starts a second copy of a running
 command, and can stop them: `wisp down <bolt>` stops the bolt's own commands (`--deps`
 for the bolts it depends on too), then runs its `down` steps:
 
@@ -96,8 +96,8 @@ names the folder.
   colours, with that output kept: `wisp logs <name>`, `wisp ps`, and a pane each in
   the TUI. They outlive Wisp. `--window`, or `wisp open-with terminal <app|tmux>`,
   puts them in terminal or tmux windows instead. A job's commands always run attached.
-- `restart` brings a command back when it stops — `"on-failure"` after a crash, `"always"`
-  whenever it exits — waiting 1s, 2s, 4s… up to 30s, and giving up after 10 in a row. It
+- `restart` brings a command back when it stops: `"on-failure"` after a crash, `"always"`
+  whenever it exits. It waits 1s, 2s, 4s… up to 30s, and gives up after 10 in a row. It
   keeps working after Wisp is closed.
 
 ## Per-OS values
@@ -108,7 +108,7 @@ skipped quietly. OS names: `macos`, `linux`, `windows`.
 
 ## Trust
 
-Commands — and files or apps that would execute when opened — **do not run** until the
+Commands, and files or apps that would execute when opened, **do not run** until the
 user approves that exact file with `wisp trust`. Any edit to the file or its local
 override withdraws approval until it is approved again. Personal workspaces are trusted.
 
@@ -121,8 +121,8 @@ under "Runs code" and ask them to approve it.**
 |---|---|
 | `wisp` | at a terminal, the TUI; without one (pipes, scripts, agents), what this project can run |
 | `wisp status` | what this project can run, as text, even at a terminal |
-| `wisp <bolt>` | run a bolt of this project — any distinctive word of its label |
-| `wisp use <file> <bolt>` | run a bolt of a workspace file by path — for cron and scripts |
+| `wisp <bolt>` | run a bolt of this project by any distinctive word of its label |
+| `wisp use <file> <bolt>` | run a bolt of a workspace file by path, for cron and scripts |
 | `wisp use <workspace> <bolt>` | run a bolt of any known workspace |
 | `wisp init [--print] [--yes]` | write a `.wisp.json` from what the project has: package.json scripts, docker compose, Makefile, justfile, mise, Taskfile, Procfile |
 | `wisp check [path] [--json]` | validate a file, or the one in a folder: errors, warnings, what would run |
@@ -147,8 +147,8 @@ Run flags: `--dry-run` (show what would happen and where, change nothing), `--in
    without a file, `wisp init --yes` writes one from its scripts.
 2. Edit `.wisp.json`. Prefer inline steps; add shared assets only when several bolts
    need the same thing. Keep paths relative.
-3. `wisp check --json` — exit code 1 means errors. Fix them until `errors` is 0.
-4. `wisp <bolt> --dry-run --json` — confirm the plan and where each command would run.
+3. `wisp check --json`: exit code 1 means errors. Fix them until `errors` is 0.
+4. `wisp <bolt> --dry-run --json`: confirm the plan and where each command would run.
 5. If `check` shows commands waiting for trust, ask the user to run `wisp trust`.
 6. `wisp <bolt> --inline` to run and read the output directly, or `--detach` for
    servers and then `wisp logs <name>` / `wisp ps --json` / `wisp down <bolt>`.
@@ -163,7 +163,7 @@ JSON: a folder with no file is offered a setup; `e` edits the selected bolt thro
 workspace; `v` shows a bolt whole and read-only, its dependencies opened up; `p` (or `2`)
 shows what is running, grouped by the bolt that started it, with live output; `h` (or `3`)
 the history of every run; `/` searches. `x` on a bolt that needed others asks whether to
-stop those too — `wisp down <bolt> --deps` on the command line. Agents should use the
+stop those too (`wisp down <bolt> --deps` on the command line). Agents should use the
 CLI instead.
 
 ## Output and exit codes
