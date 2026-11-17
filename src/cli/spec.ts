@@ -130,7 +130,7 @@ under "Runs code" and ask them to approve it.**
 | \`specter use <file> <bolt>\` | run a bolt of a workspace file by path — for cron and scripts |
 | \`specter use <workspace> <bolt>\` | run a bolt of any known workspace |
 | \`specter init [--print] [--yes]\` | write a \`.specter.json\` from what the project has: package.json scripts, docker compose, Makefile, justfile, mise, Taskfile, Procfile |
-| \`specter check [file] [--json]\` | validate a file: errors, warnings, what would run |
+| \`specter check [path] [--json]\` | validate a file, or the one in a folder: errors, warnings, what would run |
 | \`specter show [workspace] [--json]\` | everything a workspace holds |
 | \`specter list [--json]\` | every known workspace |
 | \`specter trust\` | approve a file's commands (for the user, not an agent) |
@@ -165,8 +165,11 @@ Run flags: \`--dry-run\` (show what would happen and where, change nothing), \`-
 \`specter\` at a terminal opens it. Everything above can be done there without writing
 JSON: a folder with no file is offered a setup; \`e\` edits the selected bolt through forms
 (add, change, move, remove steps; rename; make it a job), \`a\` adds a bolt, \`N\` a personal
-workspace; \`p\` shows each running command and container in a pane with live output, \`h\`
-the history of every run. Agents should use the CLI instead.
+workspace; \`v\` shows a bolt whole and read-only, its dependencies opened up; \`p\` (or \`3\`)
+shows what is running, grouped by the bolt that started it, with live output; \`h\` (or \`4\`)
+the history of every run; \`/\` searches. \`x\` on a bolt that needed others asks whether to
+stop those too — \`specter down <bolt> --deps\` on the command line. Agents should use the
+CLI instead.
 
 ## Output and exit codes
 

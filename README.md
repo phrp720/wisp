@@ -57,40 +57,55 @@ scripts.
 your projects. It works the same at your desk, over SSH and inside tmux.
 
 ```
- 🔮 specter                                                              ~/dev/acme
+ 🔮 specter  ● 2 running                                                 ~/dev/acme
 ╭──────────────────────────╮╭─────────────────────────────────────────────────────╮
-│ Workspaces               ││ 🏢 Acme  2 bolts                                    │
-│ ❯ ● 🏢 Acme              ││ ~/dev/acme/.specter.json                            │
-│     🧱 infra             ││ ✓ trusted                                           │
-│     ☀️ Morning personal  ││                                                     │
-│                          ││ Bolts                                               │
-│                          ││ ❯ Work on api  5 steps                              │
-│                          ││   Work on web  2 steps                              │
+│ 1 Workspaces             ││ 🏢 Acme  3 bolts                                    │
+│ THIS FOLDER              ││ ~/dev/acme/.specter.json                            │
+│ ❯ 🏢 Acme                ││ ✓ Allowed to run its commands                       │
+│ PROJECTS                 ││                                                     │
+│   🧱 infra               ││ 2 ⚡ Bolts                                          │
+│ YOURS                    ││ ❯ Work on api ● running  5 steps                    │
+│   ☀️ Morning             ││   Work on web  ✓ 3m ago  2 steps                    │
+│                          ││   Check job  ✗ failed 1h ago  3 steps               │
 │                          ││                                                     │
-│                          ││   needs  infra › Database                           │
-│                          ││   folder apps/api                                   │
-│                          ││   run    api server                                 │
-│                          ││   wait   http://localhost:3000                      │
-│                          ││   link   http://localhost:3000                      │
+│                          ││   When you run it, it will:                         │
+│                          ││    1. first: infra › Database                       │
+│                          ││    2. start api server                              │
+│                          ││    3. wait until http://localhost:3000 answers      │
+│                          ││ Recent runs                                         │
+│                          ││ ✗ Check #7 · failed at test · 1h ago                │
 ╰──────────────────────────╯╰─────────────────────────────────────────────────────╯
- ⏎ run  n dry run  / search  e edit  c check  t trust  p processes  r reload  q quit
+ ⏎ run · v view · e edit · a add · p running · h history · x stop · / search · ? keys
 ```
 
 **You never have to write JSON.** Open Specter in a project that has no file and it offers
 to set one up from what it finds. `e` edits a bolt through simple forms — pick what a step
 should do ("Run a command", "Start Docker services", "Wait until a website answers"…), fill
-in a field or two, done. `a` adds a bolt, `N` a workspace of your own. (`E` still opens the
-file itself, for those who'd rather.)
+in a field or two, done. `a` adds a bolt, `D` deletes one, `N` makes a workspace of your
+own. (`E` still opens the file itself in your `$EDITOR`, for those who'd rather.)
 
-Containers your bolts start are right there with your commands: state, health, ports,
-CPU and memory, live logs — `r` restarts one, `x` stops it. And it's all live: when a
-server crashes or a database turns unhealthy, Specter tells you at the bottom of the screen.
+**Four screens, one key each** — `1` workspaces, `2` bolts, `3` (or `p`) what's running,
+`4` (or `h`) history:
 
-`⏎` runs the selected bolt and shows each step as it happens — a job's output streams in
-live. `x` takes a bolt down, `R` restarts it. `/` searches every workspace and bolt at
-once. `p` shows what's running, with live logs, and `h` the history of every
-run, opened on the output of whatever failed. `e` opens the file in your `$EDITOR` and
-picks up your changes when you close it. `?` lists the rest.
+- **Bolts.** `⏎` runs the selected one and shows each step as it happens; a job's output
+  streams in live. `v` shows it whole and read-only: every step in order, the bolts it needs
+  opened up beneath their own number, what each one runs and where, and what is up right
+  now. `x` takes it down — and when it needed other bolts (a database, say), asks whether
+  to stop those too, warning you if something else still uses them. `R` restarts it.
+- **Running.** What your bolts started, grouped under the bolt that started them, each
+  with the run that started it (`#4`): commands and Docker containers side by side, with
+  state, health, ports, CPU, memory and live logs. `x` stops, `r` restarts — one task, or
+  a whole bolt. `a` shows stopped ones too. An activity log underneath keeps what happened:
+  what you ran and stopped, what crashed, what came back.
+- **History.** Every run, like a CI: numbered per bolt, with the branch and commit it ran
+  on. Open one for its summary, a graph of the bolts it went through, and each step's time
+  and output — a failed step opens on its log. `r` retries only what failed.
+
+`/` searches wherever you are: every workspace and bolt from the main screen, what's running
+on Running, past runs on History (`cymph failed` finds Cymph's failed runs). Questions —
+trust a file, delete a bolt — are two buttons: `←→` picks, `⏎` confirms, `esc` backs out,
+and anything that deletes or allows starts on "no". It's all live: when a server crashes or
+a database turns unhealthy, Specter says so at the bottom of the screen. `?` lists every key.
 
 ## The file
 
