@@ -57,25 +57,23 @@ scripts.
 your projects. It works the same at your desk, over SSH and inside tmux.
 
 ```
- 🔮 specter  ● 2 running                                                 ~/dev/acme
+ 🔮 specter   1 Bolts   2 Running ● 2   3 History                     ~/dev/acme
 ╭──────────────────────────╮╭─────────────────────────────────────────────────────╮
-│ 1 Workspaces             ││ 🏢 Acme  3 bolts                                    │
+│ Workspaces               ││ 🏢 Acme  3 bolts                                    │
 │ THIS FOLDER              ││ ~/dev/acme/.specter.json                            │
 │ ❯ 🏢 Acme                ││ ✓ Allowed to run its commands                       │
 │ PROJECTS                 ││                                                     │
-│   🧱 infra               ││ 2 ⚡ Bolts                                          │
+│   🧱 infra               ││ ⚡ Bolts                                            │
 │ YOURS                    ││ ❯ Work on api ● running  5 steps                    │
 │   ☀️ Morning             ││   Work on web  ✓ 3m ago  2 steps                    │
 │                          ││   Check job  ✗ failed 1h ago  3 steps               │
 │                          ││                                                     │
 │                          ││   When you run it, it will:                         │
-│                          ││    1. first: infra › Database                       │
+│                          ││    1. ⚡ infra › Database first                     │
 │                          ││    2. start api server                              │
 │                          ││    3. wait until http://localhost:3000 answers      │
-│                          ││ Recent runs                                         │
-│                          ││ ✗ Check #7 · failed at test · 1h ago                │
 ╰──────────────────────────╯╰─────────────────────────────────────────────────────╯
- ⏎ run · v view · e edit · a add · p running · h history · x stop · / search · ? keys
+ ⏎ run · v view · e edit · a add · x stop · / search · 1 2 3 tabs · ? keys
 ```
 
 **You never have to write JSON.** Open Specter in a project that has no file and it offers
@@ -84,8 +82,8 @@ should do ("Run a command", "Start Docker services", "Wait until a website answe
 in a field or two, done. `a` adds a bolt, `D` deletes one, `N` makes a workspace of your
 own. (`E` still opens the file itself in your `$EDITOR`, for those who'd rather.)
 
-**Four screens, one key each** — `1` workspaces, `2` bolts, `3` (or `p`) what's running,
-`4` (or `h`) history:
+**Three tabs along the top, one key each** — `1` Bolts (workspaces and their bolts), `2`
+(or `p`) Running, `3` (or `h`) History:
 
 - **Bolts.** `⏎` runs the selected one and shows each step as it happens; a job's output
   streams in live. `v` shows it whole and read-only: every step in order, the bolts it needs

@@ -28,16 +28,19 @@ export interface RawBolt {
   [key: string]: unknown;
 }
 
-/** The kinds of step a form can make, in the order a person would look for them. */
+/**
+ * The kinds of step a form can make, grouped the way a person looks for them — something to
+ * start, something to wait for, something to open — each with an icon and a few examples.
+ */
 export const STEP_KINDS = [
-  { kind: "run", title: "Run a command", example: "pnpm dev, make test, ./deploy.sh" },
-  { kind: "compose", title: "Start Docker services", example: "from a docker compose file" },
-  { kind: "wait", title: "Wait until something is ready", example: "a website answers, a port opens, or a few seconds" },
-  { kind: "url", title: "Open a website", example: "http://localhost:3000, the staging dashboard" },
-  { kind: "folder", title: "Open a folder", example: "in your file manager, or your editor" },
-  { kind: "file", title: "Open a file", example: "README.md, docs/runbook.md" },
-  { kind: "app", title: "Open an app", example: "Slack, Figma, Postman" },
-  { kind: "bolt", title: "Run another bolt first", example: "start the database before the API" },
+  { kind: "run", group: "Start", icon: "💻", title: "Run a command", example: "pnpm dev, make test, ./deploy.sh" },
+  { kind: "compose", group: "Start", icon: "🐳", title: "Start Docker services", example: "a database, a cache — from a compose file" },
+  { kind: "bolt", group: "Start", icon: "⚡", title: "Run another bolt first", example: "start the database before the API" },
+  { kind: "wait", group: "Wait", icon: "⏳", title: "Wait until something is ready", example: "a website answers, a port opens, a few seconds" },
+  { kind: "url", group: "Open", icon: "🌐", title: "Open a website", example: "http://localhost:3000, the staging dashboard" },
+  { kind: "folder", group: "Open", icon: "📁", title: "Open a folder", example: "in your file manager, or your editor" },
+  { kind: "file", group: "Open", icon: "📄", title: "Open a file", example: "README.md, docs/runbook.md" },
+  { kind: "app", group: "Open", icon: "🧩", title: "Open an app", example: "Slack, Figma, Postman" },
 ] as const;
 
 export type StepKindName = (typeof STEP_KINDS)[number]["kind"];
@@ -48,6 +51,8 @@ export interface StepField {
   label: string;
   hint: string;
   required: boolean;
+  /** An example of what goes there, shown in grey while it is empty. */
+  placeholder?: string;
   /** A choice between a few options instead of text. */
   choices?: { value: string; label: string }[];
 }
@@ -55,45 +60,45 @@ export interface StepField {
 /** What each kind of step asks for. The first field is the one that matters. */
 export const STEP_FIELDS: Record<StepKindName, StepField[]> = {
   run: [
-    { key: "run", label: "Command", hint: "what you would type: pnpm dev", required: true },
-    { key: "label", label: "Name", hint: "how it is shown — leave empty to use the command", required: false },
-    { key: "cwd", label: "In folder", hint: "relative to the project — leave empty for its root", required: false },
+    { key: "run", label: "Command", hint: "what you would type in a terminal", placeholder: "pnpm dev", required: true },
+    { key: "label", label: "Name", hint: "how it is shown in Specter — short is best", placeholder: "the command itself", required: false },
+    { key: "cwd", label: "In folder", hint: "relative to the project", placeholder: "the project's folder", required: false },
     {
       key: "restart",
       label: "If it stops",
-      hint: "←/→ to choose. Brought back with a growing pause, up to 10 times in a row.",
+      hint: "brought back with a growing pause, up to 10 times in a row",
       required: false,
       choices: [
-        { value: "no", label: "leave it stopped" },
-        { value: "on-failure", label: "restart it if it crashed" },
-        { value: "always", label: "always restart it" },
+        { value: "no", label: "leave it" },
+        { value: "on-failure", label: "restart if it crashed" },
+        { value: "always", label: "always restart" },
       ],
     },
   ],
   compose: [
-    { key: "compose", label: "Compose file", hint: "relative to the project: compose.yaml", required: true },
-    { key: "services", label: "Services", hint: "comma separated — leave empty for all of them", required: false },
+    { key: "compose", label: "Compose file", hint: "relative to the project", placeholder: "compose.yaml", required: true },
+    { key: "services", label: "Services", hint: "comma separated", placeholder: "all of them", required: false },
   ],
-  wait: [{ key: "wait", label: "Wait for", hint: "http://localhost:3000, a port like 5432, or seconds like 5s", required: true }],
+  wait: [{ key: "wait", label: "Wait for", hint: "a website (http://…), a port (5432), or seconds (5s)", placeholder: "http://localhost:3000", required: true }],
   url: [
-    { key: "url", label: "Address", hint: "https://… — a bare host works too", required: true },
-    { key: "label", label: "Name", hint: "leave empty to use the address", required: false },
+    { key: "url", label: "Address", hint: "a bare host works too", placeholder: "http://localhost:3000", required: true },
+    { key: "label", label: "Name", hint: "how it is shown in Specter", placeholder: "the address", required: false },
   ],
   folder: [
-    { key: "folder", label: "Folder", hint: "relative to the project: apps/api", required: true },
-    { key: "label", label: "Name", hint: "leave empty to use the path", required: false },
+    { key: "folder", label: "Folder", hint: "relative to the project", placeholder: "apps/api", required: true },
+    { key: "label", label: "Name", hint: "how it is shown in Specter", placeholder: "the path", required: false },
   ],
   file: [
-    { key: "file", label: "File", hint: "relative to the project: README.md", required: true },
-    { key: "label", label: "Name", hint: "leave empty to use the path", required: false },
+    { key: "file", label: "File", hint: "relative to the project", placeholder: "README.md", required: true },
+    { key: "label", label: "Name", hint: "how it is shown in Specter", placeholder: "the path", required: false },
   ],
   app: [
-    { key: "app", label: "App", hint: "its name: Slack — or a command on Linux: code", required: true },
-    { key: "label", label: "Name", hint: "leave empty to use the app's name", required: false },
+    { key: "app", label: "App", hint: "its name — or a command on Linux, like code", placeholder: "Slack", required: true },
+    { key: "label", label: "Name", hint: "how it is shown in Specter", placeholder: "the app's name", required: false },
   ],
   bolt: [
-    { key: "bolt", label: "Bolt", hint: "the name of the bolt to run first", required: true },
-    { key: "workspace", label: "In workspace", hint: "leave empty for this one", required: false },
+    { key: "bolt", label: "Bolt", hint: "the bolt to run before this one's next step", placeholder: "Database", required: true },
+    { key: "workspace", label: "In workspace", hint: "another workspace's bolt", placeholder: "this one", required: false },
   ],
 };
 
@@ -190,7 +195,7 @@ export function describeRawStep(step: RawStep): string {
     case "app":
       return `open ${label ?? String(step["app"])}`;
     case "bolt":
-      return `first run "${String(step["bolt"])}"${typeof step["workspace"] === "string" ? ` from ${step["workspace"]}` : ""}`;
+      return `⚡ ${String(step["bolt"])} first${typeof step["workspace"] === "string" ? ` (from ${step["workspace"]})` : ""}`;
     default:
       return "…";
   }

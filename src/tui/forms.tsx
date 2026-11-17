@@ -10,6 +10,8 @@ export interface FieldSpec {
   label: string;
   hint?: string;
   required?: boolean;
+  /** Shown in grey while the field is empty: an example of what goes there. */
+  placeholder?: string;
   /** A choice rather than text: ←/→ or space to change it. */
   choices?: { value: string; label: string }[];
 }
@@ -20,7 +22,10 @@ export interface FormProps {
   intro?: string;
   fields: FieldSpec[];
   initial?: Record<string, string>;
+  /** What the button at the bottom says: "Add step", "Create bolt", "Save". */
   submitLabel?: string;
+  /** What it will do with the values as they are now — shown as they are typed. */
+  preview?: (values: Record<string, string>) => string | undefined;
   glyphs: Glyphs;
   height: number;
   /** Resolves with errors to show per field, or nothing when it worked. */
@@ -29,13 +34,12 @@ export interface FormProps {
 }
 
 /**
- * A form, for everything that would otherwise mean editing JSON.
- *
- * ↑↓ or tab move between fields, typing edits the one you are on, ⏎ moves on — and on the
- * last field, saves. Problems are said under the field they are about, in words that say
- * what to put there instead.
+ * A form, for everything that would otherwise mean editing JSON — laid out the way Charm's
+ * huh and Raycast lay theirs out: each field a label, an input line and a word of help, a bar
+ * beside the one you are on, examples in grey where nothing is typed yet, and a button at the
+ * bottom that does the thing. ↑↓ or tab move, ⏎ moves on and, on the button, saves.
  */
-export function Form({ title, intro, fields, initial = {}, submitLabel = "save", glyphs, height, onSubmit, onCancel }: FormProps) {
+export function Form({ title, intro, fields, initial = {}, submitLabel = "Save", preview, glyphs, height, onSubmit, onCancel }: FormProps) {
   // Kept in refs as well as state: keys arrive faster than React redraws — typing fast, or
   // pasting — and each must build on the one before, not on the last frame drawn.
   const start = () => {
@@ -60,6 +64,7 @@ export function Form({ title, intro, fields, initial = {}, submitLabel = "save",
     valuesRef.current = next;
     setValuesState(next);
   };
+  // The fields, then the button: `fields.length` is the button.
   const setIndex = (next: number | ((at: number) => number)) => {
     indexRef.current = typeof next === "function" ? next(indexRef.current) : next;
     setIndexState(indexRef.current);
@@ -67,7 +72,6 @@ export function Form({ title, intro, fields, initial = {}, submitLabel = "save",
 
   const submit = async () => {
     const values = valuesRef.current;
-    const field = fields[indexRef.current] as FieldSpec;
     const missing: Record<string, string> = {};
     for (const entry of fields) if (entry.required && !values[entry.key]?.trim()) missing[entry.key] = `${entry.label} is needed`;
     if (Object.keys(missing).length > 0) {
@@ -76,7 +80,8 @@ export function Form({ title, intro, fields, initial = {}, submitLabel = "save",
       return;
     }
     setSaving(true);
-    const problems = await onSubmit(values).catch((error: unknown) => ({ [field.key]: error instanceof Error ? error.message : String(error) }));
+    const last = fields[fields.length - 1] as FieldSpec;
+    const problems = await onSubmit(values).catch((error: unknown) => ({ [last.key]: error instanceof Error ? error.message : String(error) }));
     setSaving(false);
     if (problems && Object.keys(problems).length > 0) {
       setErrors(problems);
@@ -89,15 +94,16 @@ export function Form({ title, intro, fields, initial = {}, submitLabel = "save",
     if (saving) return;
     const values = valuesRef.current;
     const index = indexRef.current;
-    const field = fields[index] as FieldSpec;
     if (key.escape) return onCancel();
     if (key.upArrow || (key.shift && key.tab)) return setIndex((at) => Math.max(0, at - 1));
-    if (key.downArrow || key.tab) return setIndex((at) => Math.min(fields.length - 1, at + 1));
-    if (key.return) {
-      if (index < fields.length - 1) return setIndex(index + 1);
-      return void submit();
-    }
+    if (key.downArrow || key.tab) return setIndex((at) => Math.min(fields.length, at + 1));
     if (key.ctrl && input === "s") return void submit();
+    if (index === fields.length) {
+      if (key.return || input === " ") return void submit();
+      return;
+    }
+    if (key.return) return setIndex(index + 1);
+    const field = fields[index] as FieldSpec;
 
     if (field.choices) {
       const at = field.choices.findIndex((choice) => choice.value === values[field.key]);
@@ -120,43 +126,71 @@ export function Form({ title, intro, fields, initial = {}, submitLabel = "save",
     }
   });
 
+  const bar = glyphs.border === "round" ? "┃" : "|";
+  const said = preview?.(values);
+  const onButton = index === fields.length;
   return (
-    <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor={TONE.accent} paddingX={1}>
-      <Text bold>{title}</Text>
+    <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor={TONE.accent} paddingX={1} overflow="hidden">
+      <Text bold color={TONE.accent}>{title}</Text>
       {intro ? <Text dimColor wrap="wrap">{intro}</Text> : null}
-      <Text> </Text>
       {fields.map((entry, at) => {
         const active = at === index;
         const value = values[entry.key] ?? "";
+        const edge = <Text color={TONE.accent}>{active ? `${bar} ` : "  "}</Text>;
         return (
-          <Box key={entry.key} flexDirection="column" marginBottom={1}>
+          <Box key={entry.key} flexDirection="column" marginTop={1}>
             <Text>
-              <Text color={active ? TONE.accent : undefined} bold={active}>{`${active ? glyphs.pointer : " "} ${entry.label.padEnd(14)}`}</Text>
+              {edge}
+              <Text bold={active} color={active ? TONE.accent : undefined}>{entry.label}</Text>
+              {entry.required ? <Text color={TONE.failed}>{" *"}</Text> : null}
+            </Text>
+            <Text wrap="wrap">
+              {edge}
               {entry.choices ? (
-                <Text>
-                  {entry.choices.map((option) => (
-                    <Text key={option.value} inverse={option.value === value && active} bold={option.value === value} dimColor={option.value !== value}>
-                      {` ${option.label} `}
+                entry.choices.map((option, number) => {
+                  const chosen = option.value === value;
+                  return (
+                    <Text key={option.value}>
+                      {number > 0 ? "   " : ""}
+                      <Text color={chosen ? TONE.accent : undefined} dimColor={!chosen}>{`${chosen ? "●" : "○"} ${option.label}`}</Text>
                     </Text>
-                  ))}
-                </Text>
+                  );
+                })
               ) : (
-                active ? (
-                  <Cursor value={value} at={Math.min(cursors[entry.key] ?? value.length, value.length)} />
-                ) : (
-                  <Text>{value || <Text dimColor>—</Text>}</Text>
-                )
+                <Text>
+                  <Text dimColor>{"› "}</Text>
+                  {active ? (
+                    value ? <Cursor value={value} at={Math.min(cursors[entry.key] ?? value.length, value.length)} /> : <Text><Text inverse> </Text><Text dimColor>{entry.placeholder ?? ""}</Text></Text>
+                  ) : (
+                    value || <Text dimColor>{entry.placeholder ?? (entry.required ? "" : "optional")}</Text>
+                  )}
+                </Text>
               )}
             </Text>
             {errors[entry.key] ? (
-              <Text color="red">{`                 ${errors[entry.key]}`}</Text>
+              <Text color={TONE.failed}>{`${active ? bar : " "} ${errors[entry.key]}`}</Text>
             ) : active && entry.hint ? (
-              <Text dimColor>{`                 ${entry.hint}`}</Text>
+              <Text>
+                {edge}
+                <Text dimColor>{entry.choices ? `${entry.hint} — ←→ to change` : entry.hint}</Text>
+              </Text>
             ) : null}
           </Box>
         );
       })}
-      <Text dimColor>{saving ? "saving…" : `↑↓ fields · ←→ move in the text · ⏎ next · ⏎ on the last field to ${submitLabel} · esc cancel`}</Text>
+      <Box flexGrow={1} />
+      {said ? (
+        <Text wrap="truncate-end">
+          <Text dimColor>It will: </Text>
+          <Text>{said}</Text>
+        </Text>
+      ) : null}
+      <Box marginTop={1}>
+        <Text color={onButton ? "black" : TONE.accent} backgroundColor={onButton ? TONE.accent : undefined} bold>
+          {saving ? " saving… " : onButton ? ` ▸ ${submitLabel} ` : ` [ ${submitLabel} ] `}
+        </Text>
+        <Text dimColor>{"   ↑↓ fields · ⏎ next · ctrl+s or ⏎ on the button to save · esc cancel"}</Text>
+      </Box>
     </Box>
   );
 }
@@ -211,49 +245,84 @@ export function editText(value: string, input: string, key: Key): string | undef
   return input ? value + input.replace(/[\r\n]+/g, " ") : undefined;
 }
 
-/** A list to choose one thing from, each with a line saying what it is. */
+/**
+ * A list to choose one thing from — like the action list of Shortcuts or n8n: grouped under
+ * headings, each with an icon and examples, and typing narrows it down.
+ */
 export function Picker(props: {
   title: string;
   intro?: string;
-  options: { key: string; title: string; detail?: string }[];
+  options: { key: string; title: string; detail?: string; group?: string; icon?: string }[];
   glyphs: Glyphs;
   height: number;
   onPick: (key: string) => void;
   onCancel: () => void;
 }) {
   const { title, intro, options, glyphs, height, onPick, onCancel } = props;
-  const [index, setIndex] = useState(0);
+  const [index, setIndexState] = useState(0);
+  const [query, setQueryState] = useState("");
+  const indexRef = useRef(0);
+  const queryRef = useRef("");
+  const setIndex = (next: number) => {
+    indexRef.current = next;
+    setIndexState(next);
+  };
+  const setQuery = (next: string) => {
+    queryRef.current = next;
+    setQueryState(next);
+    setIndex(0);
+  };
+  const matching = (text: string) =>
+    options.filter((option) => text.split(/\s+/).every((word) => `${option.title} ${option.detail ?? ""} ${option.group ?? ""}`.toLowerCase().includes(word.toLowerCase())));
+  const shown = matching(query);
 
   useInput((input, key) => {
-    if (key.escape) return onCancel();
-    if (key.upArrow || input === "k") return setIndex((at) => Math.max(0, at - 1));
-    if (key.downArrow || input === "j") return setIndex((at) => Math.min(options.length - 1, at + 1));
+    const list = matching(queryRef.current);
+    if (key.escape) return queryRef.current ? setQuery("") : onCancel();
+    if (key.upArrow) return setIndex(Math.max(0, indexRef.current - 1));
+    if (key.downArrow || key.tab) return setIndex(Math.min(list.length - 1, indexRef.current + 1));
     if (key.return) {
-      const option = options[index];
+      const option = list[indexRef.current];
       if (option) onPick(option.key);
       return;
     }
-    // A number picks straight away.
+    if (key.backspace || key.delete) return setQuery(queryRef.current.slice(0, -1));
+    // With nothing typed, a number picks straight away; otherwise typing narrows the list.
     const number = Number.parseInt(input, 10);
-    if (number >= 1 && number <= options.length) onPick((options[number - 1] as { key: string }).key);
+    if (!queryRef.current && number >= 1 && number <= list.length) return onPick((list[number - 1] as { key: string }).key);
+    if (input && !key.ctrl && !key.meta && /^[\w\s.-]+$/.test(input)) setQuery(queryRef.current + input);
   });
 
+  let group: string | undefined;
+  // Titles padded to one width, so the examples beside them line up in a column.
+  const widest = Math.max(0, ...shown.map((option) => option.title.length));
   return (
-    <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor={TONE.accent} paddingX={1}>
-      <Text bold>{title}</Text>
+    <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor={TONE.accent} paddingX={1} overflow="hidden">
+      <Text bold color={TONE.accent}>{title}</Text>
       {intro ? <Text dimColor>{intro}</Text> : null}
-      <Text> </Text>
-      {options.map((option, at) => {
+      <Text>
+        <Text color={TONE.accent}>{"/ "}</Text>
+        {query ? <Text>{query}</Text> : <Text dimColor>type to find one</Text>}
+      </Text>
+      {shown.length === 0 ? <Text dimColor>{`Nothing matches “${query}” — esc clears it.`}</Text> : null}
+      {shown.map((option, at) => {
         const active = at === index;
+        const heading = option.group && option.group !== group ? option.group : undefined;
+        group = option.group;
         return (
-          <Text key={option.key} wrap="truncate-end">
-            <Text color={active ? TONE.accent : undefined} bold={active} inverse={active}>{` ${at + 1}. ${option.title} `}</Text>
-            {option.detail ? <Text dimColor>{`  ${option.detail}`}</Text> : null}
-          </Text>
+          <Box key={option.key} flexDirection="column">
+            {heading ? <Text bold dimColor>{`\n${heading.toUpperCase()}`}</Text> : null}
+            <Text wrap="truncate-end">
+              <Text color={TONE.accent}>{active ? `${glyphs.pointer} ` : "  "}</Text>
+              {option.icon && glyphs.border === "round" ? `${option.icon} ` : ""}
+              <Text bold={active} color={active ? TONE.accent : undefined}>{option.title.padEnd(widest)}</Text>
+              {option.detail ? <Text dimColor>{`   ${option.detail}`}</Text> : null}
+            </Text>
+          </Box>
         );
       })}
-      <Text> </Text>
-      <Text dimColor>↑↓ choose · ⏎ or its number to pick · esc cancel</Text>
+      <Box flexGrow={1} />
+      <Text dimColor>↑↓ choose · ⏎ pick · type to find · esc cancel</Text>
     </Box>
   );
 }

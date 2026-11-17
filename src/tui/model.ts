@@ -205,7 +205,7 @@ export function describeStep(target: SwitchTarget, doing = false, job = false): 
     case "app":
       return doing ? `Opening ${target.label}…` : `open ${target.label}`;
     case "bolt":
-      return `first: ${target.label}`;
+      return `${target.label} first`;
   }
 }
 

@@ -53,8 +53,8 @@ export function BoltView(props: BoltViewProps) {
     if (input === "e") return onEdit();
     if (key.upArrow || input === "k") return setScroll(Math.max(0, top - 1));
     if (key.downArrow || input === "j") return setScroll(Math.min(Math.max(0, lines.length - room), top + 1));
-    if (key.pageUp) return setScroll(Math.max(0, top - room));
-    if (key.pageDown) return setScroll(Math.min(Math.max(0, lines.length - room), top + room));
+    if (key.pageUp || input === "u") return setScroll(Math.max(0, top - room));
+    if (key.pageDown || input === "d") return setScroll(Math.min(Math.max(0, lines.length - room), top + room));
   });
 
   if (!bolt) {
@@ -112,7 +112,7 @@ export function BoltView(props: BoltViewProps) {
       ))}
       <Box flexGrow={1} />
       {lines.length > room ? <Text dimColor>{`${top + 1}–${Math.min(lines.length, top + room)} of ${lines.length} lines`}</Text> : null}
-      <Text dimColor>{`read-only · ⏎ run it · e edit it · ↑↓ scroll · esc back`}</Text>
+      <Text dimColor>{`read-only · ⏎ run it · e edit it · ↑↓ or u d scroll · esc back`}</Text>
     </Box>
   );
 }
@@ -162,7 +162,7 @@ function layout(context: { read: WorkspaceRead; bolt: Bolt; reads: WorkspaceRead
               <Text dimColor>{`${indent}${number.padEnd(5)}`}</Text>
               <Text color={found?.bolt.color ?? TONE.accent} bold>{`${glyphs.bolt}${target.label}`}</Text>
               <Text dimColor>{where}</Text>
-              <Text dimColor>{!found ? "  — no bolt by that name" : twice ? "  — already run above, not again" : found.bolt.job ? "  — a job, runs first" : "  — runs first"}</Text>
+              <Text dimColor>{!found ? "  — no bolt by that name" : twice ? "  — already run above, not again" : found.bolt.job ? " first — a job" : " first"}</Text>
             </Text>
           ),
         });

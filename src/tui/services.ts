@@ -86,7 +86,8 @@ export function realServices(hooks: { suspend: () => void; resume: () => void })
       downBolt(read.workspace, bolt, options.deps ? { deps: true } : {}, { findWorkspace: async (ref) => resolveWorkspace(ref, await everything()).workspace }),
 
     history: () => listHistory(),
-    readLog: (path) => readFile(path, "utf8").catch(() => ""),
+    // A log that is gone rejects, so it is not shown as "printed nothing".
+    readLog: (path) => readFile(path, "utf8"),
 
     check: (file) => checkProject(file),
 
@@ -197,7 +198,7 @@ export function realServices(hooks: { suspend: () => void; resume: () => void })
 function describeDraftStep(step: Record<string, unknown>): string {
   if (typeof step["compose"] === "string") return describeStep(composeTarget({ file: step["compose"] }, "up"));
   if (typeof step["run"] === "string") return `start ${typeof step["label"] === "string" ? step["label"] : step["run"]}`;
-  if (typeof step["bolt"] === "string") return `first: ${step["bolt"]}`;
+  if (typeof step["bolt"] === "string") return `${step["bolt"]} first`;
   if (typeof step["folder"] === "string") return `open the ${step["folder"]} folder`;
   if (typeof step["url"] === "string") return `open ${step["url"]}`;
   if (step["wait"] !== undefined) return `wait until ${String(step["wait"])} answers`;

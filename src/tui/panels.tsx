@@ -17,7 +17,7 @@ export function RunPanel({ view, glyphs, height, tick }: { view: RunState; glyph
   const retryable = view.done && view.result ? retryPlan(view.result).length : 0;
   const hint = !view.done
     ? "x stop this run · p watch it next to what's running · esc back (it keeps going)"
-    : `${retryable > 0 ? `r retry the ${retryable === 1 ? "step" : `${retryable} steps`} that didn't work · ` : ""}${view.steps.some((step) => step.result?.run && step.result.ok) ? "⏎ watch what it started · esc back" : "⏎ back"}`;
+    : `${retryable > 0 ? `r retry from ${view.steps.find((step) => step.result && !step.result.ok && !step.result.skipped)?.target.label ?? "where it stopped"} · ` : ""}${view.steps.some((step) => step.result?.run && step.result.ok) ? "⏎ watch what it started · esc back" : "⏎ back"}`;
   const failed = view.steps.filter((step) => step.result && !step.result.ok && !step.result.skipped).length;
   const links = view.steps.filter((step) => step.result?.kind === "link" && step.result.note?.startsWith("no display"));
   const background = view.steps.filter((step) => step.result?.run).length;
@@ -48,6 +48,7 @@ export function RunPanel({ view, glyphs, height, tick }: { view: RunState; glyph
           <Text key={`${index}:${step.target.id}`} wrap="truncate-end">
             {mark} {step.state === "running" ? <Text bold>{describeStep(step.target, true, view.job)}</Text> : describeStep(step.target, false, view.job)}
             {step.target.workspace ? <Text dimColor>{` (from ${step.target.workspace})`}</Text> : null}
+            {result && !result.skipped && result.durationMs !== undefined && step.state !== "running" ? <Text dimColor>{`  ${result.durationMs >= 1000 ? `${(result.durationMs / 1000).toFixed(1)}s` : `${result.durationMs}ms`}`}</Text> : null}
             {result?.error ? <Text color="red">{`  ${result.error}`}</Text> : result?.note ? <Text dimColor>{`  ${result.note}`}</Text> : null}
           </Text>
         );
@@ -69,7 +70,7 @@ export function RunPanel({ view, glyphs, height, tick }: { view: RunState; glyph
           ))}
           <Text>
             {view.stopped ? <Text color="yellow">{`Stopped — ${view.stopped}. `}</Text> : null}
-            {failed > 0 ? <Text color="red">{`${failed === 1 ? "A step" : `${failed} steps`} failed — the reason is next to it`}</Text> : view.error || view.stopped ? null : <Text color="green">{view.dryRun ? "That's what it would do. Nothing was changed." : "All done."}</Text>}
+            {failed > 0 ? <Text color="red">{`${glyphs.fail} Failed — h shows this run in History`}</Text> : view.error || view.stopped ? null : <Text color="green">{view.dryRun ? "That's what it would do. Nothing was changed." : "All done."}</Text>}
             {background > 0 ? <Text>{`  ${background === 1 ? "It's" : `${background} things are`} running now — press ⏎ to watch.`}</Text> : null}
           </Text>
         </>
@@ -169,7 +170,7 @@ export function HelpPanel({ glyphs, height }: { glyphs: Glyphs; height: number }
       "Move",
       [
         ["↑↓  j k", "move"],
-        ["1 2 3 4", "workspaces · bolts · running · history"],
+        ["1 2 3", "the tabs: bolts · running · history"],
         ["←→  tab", "between workspaces and bolts"],
         ["t", "review and allow what a file would run"],
         ["r  q", "reload · quit"],
@@ -193,7 +194,7 @@ export function HelpPanel({ glyphs, height }: { glyphs: Glyphs; height: number }
         ))}
       </Box>
       <Box flexGrow={1} />
-      <Text dimColor>`specter --help` for the command line, `specter spec` for the file format · any key to go back</Text>
+      <Text dimColor>`specter --help` for the command line · `specter spec` for the file format</Text>
     </Box>
   );
 }

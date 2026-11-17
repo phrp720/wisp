@@ -253,25 +253,25 @@ describe("the TUI", () => {
     expect(app.lastFrame()).not.toContain("read-only");
   });
 
-  it("jumps between panels with 1–4, and keeps a log of what happened under Running", async () => {
+  it("has three tabs along the top, 1–3, and keeps a log of what happened under Running", async () => {
     const app = await open(services({ history: async () => [] }));
     await tick();
-    app.stdin.write("4");
-    await tick();
-    expect(app.lastFrame()).toContain("4 History");
+    expect(app.lastFrame()).toMatch(/1 Bolts +2 Running +3 History/);
     app.stdin.write("3");
     await tick();
-    expect(app.lastFrame()).toContain("3 Running");
-    app.stdin.write("1");
     await tick();
-    expect(app.lastFrame()).toContain("1 Workspaces");
-    // A run started here shows up in the activity log.
+    expect(app.lastFrame()).toContain("Nothing has run yet");
     app.stdin.write("2");
     await tick();
+    expect(app.lastFrame()).toContain("Nothing is running");
+    app.stdin.write("1");
+    await tick();
+    expect(app.lastFrame()).toContain("Workspaces");
+    // A run started here shows up in the activity log.
     app.stdin.write("\r");
     await tick();
     await tick();
-    app.stdin.write("3");
+    app.stdin.write("2");
     await tick();
     expect(app.lastFrame()).toMatch(/ACTIVITY[\s\S]*\d\d:\d\d Work on api is up/);
   });
@@ -511,10 +511,11 @@ describe("doing everything without JSON", () => {
     const app = await open(services({ editing }));
     app.stdin.write("e");
     await tick();
-    expect(app.lastFrame()).toContain('Edit "Work on api"');
+    expect(app.lastFrame()).toContain("⚡ Work on api");
     app.stdin.write("a");
     await tick();
-    expect(app.lastFrame()).toContain("Run a command");
+    // Grouped, as an action list is: what to start, what to wait for, what to open.
+    expect(app.lastFrame()).toMatch(/START[\s\S]*Run a command[\s\S]*WAIT[\s\S]*OPEN/);
     app.stdin.write("1"); // pick "Run a command"
     await tick();
     expect(app.lastFrame()).toContain("Command");
@@ -523,10 +524,36 @@ describe("doing everything without JSON", () => {
     app.stdin.write("\r"); // to Name
     app.stdin.write("\r"); // to In folder
     app.stdin.write("\r"); // to If it stops
-    app.stdin.write("\r"); // add it
+    await tick();
+    // What it will do, said before it is saved.
+    expect(app.lastFrame()).toContain("It will: run pnpm test");
+    app.stdin.write("\r"); // to the button
+    app.stdin.write("\r"); // Add step
     await tick();
     await tick();
     expect(addStep).toHaveBeenCalledWith(acme.workspace.file, "Work on api", { run: "pnpm test" }, 0);
+  });
+
+  it("picks the bolt to run first from a list — this workspace's and others' — instead of typing it", async () => {
+    const addStep = vi.fn(async () => undefined);
+    const app = await open(services({ editing: { ...services().editing, addStep } }));
+    app.stdin.write("e");
+    await tick();
+    app.stdin.write("a");
+    await tick();
+    app.stdin.write("3"); // "Run another bolt first"
+    await tick();
+    expect(app.lastFrame()).toContain("infra › Database");
+    // → moves to the next bolt; the last one in the list is another workspace's.
+    for (let at = 0; at < 6; at += 1) app.stdin.write("\u001B[D");
+    await tick();
+    app.stdin.write("\r");
+    app.stdin.write("\r");
+    await tick();
+    await tick();
+    expect(addStep).toHaveBeenCalled();
+    const step = (addStep.mock.calls[0] as unknown[])[2] as Record<string, string>;
+    expect(typeof step["bolt"]).toBe("string");
   });
 
   it("says what is wrong with a field, in words", async () => {
@@ -535,10 +562,11 @@ describe("doing everything without JSON", () => {
     await tick();
     app.stdin.write("a");
     await tick();
-    app.stdin.write("3"); // "Wait until something is ready"
+    app.stdin.write("4"); // "Wait until something is ready"
     await tick();
     for (const char of "soon") app.stdin.write(char);
-    app.stdin.write("\r");
+    app.stdin.write("\r"); // to the button
+    app.stdin.write("\r"); // Add step
     await tick();
     expect(app.lastFrame()).toContain("Not something Specter can wait for");
   });
@@ -553,11 +581,13 @@ describe("doing everything without JSON", () => {
     app.stdin.write("\r");
     await tick();
     app.stdin.write("\u001B[C"); // → : a job
-    app.stdin.write("\r");
+    app.stdin.write("\r"); // to the button
+    app.stdin.write("\r"); // Create bolt
     await tick();
     await tick();
     expect(addBolt).toHaveBeenCalledWith(acme.workspace.file, "Run the tests", { job: true });
-    expect(app.lastFrame()).toContain('Edit "Run the tests"');
+    // Straight on to its first step.
+    expect(app.lastFrame()).toContain("The first step of ⚡ Run the tests");
   });
 
   it("shows containers next to commands, with how they are doing", async () => {
@@ -589,8 +619,8 @@ describe("doing everything without JSON", () => {
     await tick();
     const frame = app2.lastFrame() ?? "";
     // Under the bolt whose compose step starts it, in its workspace.
-    expect(frame).toMatch(/SHOP[\s\S]*Services[\s\S]*postgres container/);
-    expect(frame).toContain("healthy · 5432 · up 3m");
+    expect(frame).toMatch(/SHOP[\s\S]*Services[\s\S]*● postgres +healthy/);
+    expect(frame).toContain("on localhost:5432");
     expect(frame).toContain("ready to accept connections");
   });
 
@@ -606,7 +636,7 @@ describe("doing everything without JSON", () => {
     await tick();
     await tick();
     let frame = app.lastFrame() ?? "";
-    expect(frame).toMatch(/ACME[\s\S]*Work on web[\s\S]*all up[\s\S]*api #3[\s\S]*web #5[\s\S]*Not from a bolt[\s\S]*notes/);
+    expect(frame).toMatch(/ACME[\s\S]*Work on web[\s\S]*● up[\s\S]*api[\s\S]*web[\s\S]*Not from a bolt[\s\S]*notes/);
 
     for (const key of ["/", "m", "d", "b"]) {
       app.stdin.write(key);
@@ -710,7 +740,7 @@ describe("a run in progress", () => {
     );
     app.stdin.write("\r");
     await tick();
-    expect(app.lastFrame()).toContain("r retry the step that didn't work");
+    expect(app.lastFrame()).toContain(`r retry from ${plan[1]!.target.label}`);
     app.stdin.write("r");
     await tick();
     expect(retry).toHaveBeenCalledWith(acme, [plan[1]], "Work on api", false, expect.anything());
@@ -734,7 +764,7 @@ describe("a run in progress", () => {
     await tick();
     const frame = app.lastFrame() ?? "";
     expect(frame).toContain("RUNNING NOW");
-    expect(frame).toContain("Starting lint…");
+    expect(frame).toContain("Starting l");
     expect(frame).toContain("Creating an optimized production build");
   });
 });
@@ -745,7 +775,7 @@ describe("running and history", () => {
     app.stdin.write("p");
     await tick();
     expect(app.lastFrame()).toContain("Nothing is running");
-    expect(app.lastFrame()).not.toContain("History");
+    expect(app.lastFrame()).not.toContain("Nothing has run yet");
     app.stdin.write("h");
     await tick();
     await tick();

@@ -5,12 +5,12 @@ import type { ReactNode } from "react";
 
 import { cleanOutput } from "../core/ansi.js";
 import { type Container, containerMood, type ContainerStats, shortStatus } from "../core/docker.js";
-import type { HistoryEntry } from "../core/history.js";
+import { baseLabel, type HistoryEntry, type HistoryStep } from "../core/history.js";
 import type { RunStatus } from "../core/processes.js";
 import { RESTART_MARK } from "../core/shell.js";
 import type { WorkspaceRead } from "../core/types.js";
 import type { Glyphs } from "./glyphs.js";
-import { SearchLine } from "./history.js";
+import { describeHistoryStep, SearchLine } from "./history.js";
 import { describeStep, matchesAll, windowed } from "./model.js";
 import { type Activity, clock, type PaneGroup, type PaneItem, type RunState, since } from "./state.js";
 import { TONE } from "./tones.js";
@@ -57,14 +57,36 @@ export function PanesPanel(props: {
   const end = Math.max(room, lines.length - scroll);
   const shown = lines.slice(Math.max(0, end - room), end);
 
-  // Rows for the list: section headings, then two lines per item.
+  // Rows for the list: workspace headings, each bolt, then its pipeline — one line a step,
+  // in the order its run went, with how each one is doing on the right.
   type Row = { key: string; node: ReactNode };
   const rows: Row[] = [];
   let section = "";
+  const width = listWidth - 4;
+  /** One line: the left part truncates; the right part is always shown. */
+  const line = (key: string, selected: boolean, depth: number, mark: ReactNode, label: ReactNode, right: string, rightColor?: string | undefined) =>
+    rows.push({
+      key,
+      node: (
+        <Box width={width}>
+          <Box flexGrow={1} minWidth={0}>
+            <Text wrap="truncate-end">
+              <Text color={TONE.accent}>{selected ? glyphs.pointer : " "}</Text>
+              {" ".repeat(depth * 2 + 1)}
+              {mark}
+              {mark ? " " : ""}
+              <Text bold={selected} color={selected ? TONE.accent : undefined}>{label}</Text>
+            </Text>
+          </Box>
+          {right ? <Text color={rightColor} dimColor={!rightColor} wrap="truncate-end">{` ${clip(right, Math.floor(width * 0.45))}`}</Text> : null}
+        </Box>
+      ),
+    });
   items.forEach((entry, at) => {
     if (entry.type === "current" || entry.type === "group") {
       const heading = entry.type === "current" ? (active?.done ? "Just finished" : "Running now") : entry.group.workspaceName;
       if (heading !== section) {
+        if (section) rows.push({ key: `gap:${heading}`, node: <Text> </Text> });
         section = heading;
         rows.push({ key: `h:${heading}`, node: <Text bold dimColor>{heading.toUpperCase()}</Text> });
       }
@@ -72,20 +94,31 @@ export function PanesPanel(props: {
     const selected = at === index;
     if (entry.type === "group") {
       const tally = groupTally(items, entry.group.key);
-      const color = tally.bad > 0 ? "red" : tally.up === tally.total ? "green" : tally.up > 0 ? "yellow" : "gray";
-      rows.push({
-        key: `group:${entry.group.key}`,
-        node: (
-          <Box flexGrow={1}>
-            <Box flexGrow={1} minWidth={0}>
-              <Text wrap="truncate-end" inverse={selected} bold={Boolean(entry.group.bolt)} dimColor={!entry.group.bolt}>
-                {`${selected ? glyphs.pointer : " "} ${entry.group.bolt ? glyphs.bolt : ""}${entry.group.title}`}
-              </Text>
-            </Box>
-            <Text color={color}>{` ${glyphs.dot} ${tally.up === tally.total ? "all up" : `${tally.up} of ${tally.total}`}`}</Text>
-          </Box>
-        ),
-      });
+      const state =
+        tally.bad > 0
+          ? { text: `${glyphs.dot} ${tally.bad} in trouble`, color: TONE.failed }
+          : tally.total === 0
+            ? { text: "", color: TONE.stopped }
+            : tally.up === tally.total
+              ? { text: `${glyphs.dot} up`, color: TONE.up }
+              : tally.up > 0
+                ? { text: `${glyphs.dot} ${tally.up} of ${tally.total} up`, color: TONE.busy }
+                : { text: `${glyphs.dot} stopped`, color: TONE.stopped };
+      // The run the pipeline below comes from, as History numbers it.
+      const from = allMembers(items, entry.group.key).find((member) => member.type === "step");
+      const number = from?.type === "step" && baseLabel(from.entry.bolt) === entry.group.bolt ? from.entry.number : undefined;
+      line(
+        `group:${entry.group.key}`,
+        selected,
+        0,
+        null,
+        <Text>
+          {entry.group.bolt ? `${glyphs.bolt}${entry.group.title}` : entry.group.title}
+          {number ? <Text dimColor bold={false}>{` #${number}`}</Text> : null}
+        </Text>,
+        state.text,
+        state.color,
+      );
       return;
     }
     if (entry.type === "current") {
@@ -95,59 +128,35 @@ export function PanesPanel(props: {
       const mark = !active.done ? (
         <Text color={TONE.accent}>{glyphs.running[tick % glyphs.running.length]}</Text>
       ) : failed || active.error || active.stopped ? (
-        <Text color="red">{glyphs.fail}</Text>
+        <Text color={TONE.failed}>{glyphs.fail}</Text>
       ) : (
-        <Text color="green">{glyphs.ok}</Text>
+        <Text color={TONE.up}>{glyphs.ok}</Text>
       );
-      rows.push({
-        key: "current",
-        node: (
-          <Box flexDirection="column">
-            <Text wrap="truncate-end" inverse={selected} bold={selected}>
-              {mark} {active.bolt}
-              <Text dimColor>{` ${active.read.workspace.name}`}</Text>
-            </Text>
-            <Text wrap="truncate-end" dimColor>{`  ${active.stopped ? `stopped — ${active.stopped}` : now ? describeStep(now.target, true, active.job) : active.done ? (failed ? "a step failed" : "done") : "starting…"}`}</Text>
-          </Box>
-        ),
-      });
+      line("current", selected, 0, mark, `${glyphs.bolt}${active.bolt}`, active.stopped ? "stopped" : now ? describeStep(now.target, true, active.job) : active.done ? (failed ? "failed" : "done") : "starting…", failed || active.stopped ? TONE.failed : undefined);
+      return;
+    }
+    if (entry.type === "step") {
+      const step = entry.step;
+      const mark = step.skipped ? <Text dimColor>{glyphs.skip}</Text> : step.ok ? <Text color={TONE.up}>{glyphs.ok}</Text> : <Text color={TONE.failed}>{glyphs.fail}</Text>;
+      const label = step.kind === "bolt" ? `${glyphs.bolt}${step.label}` : shortStep(step, entry.entry.job ?? false);
+      line(`${paneKey(entry)}`, selected, 1, mark, label, step.skipped ? "" : !step.ok ? "failed" : step.durationMs >= 1000 ? `${(step.durationMs / 1000).toFixed(1)}s` : "", !step.ok && !step.skipped ? TONE.failed : undefined);
       return;
     }
     if (entry.type === "run") {
       const run = entry.run;
-      rows.push({
-        key: run.id,
-        node: (
-          <Box flexDirection="column">
-            <Text wrap="truncate-end" inverse={selected} bold={selected}>
-              {"   "}<Text color={run.alive ? TONE.up : TONE.stopped}>{glyphs.dot}</Text> {run.label}
-              <Text dimColor>{startedBy(run, history, entry.type === "run" ? groupBolt(items, entry.group) : undefined).replace(/^ from .* #/, " #")}</Text>
-            </Text>
-            <Text wrap="truncate-end" dimColor={!(selected && restartsOf(lines).gaveUp)} color={selected && restartsOf(lines).gaveUp ? "red" : undefined}>
-              {`     ${run.alive ? [`up ${since(run.startedAt).replace(" ago", "").replace("just now", "<1m")}`, run.kind === "window" ? `in ${run.where ?? "a window"}` : "", selected && restartsOf(lines).count > 0 ? `restarted ${restartsOf(lines).count}×` : ""].filter(Boolean).join(" · ") : selected && restartsOf(lines).gaveUp ? "stopped — gave up restarting" : "stopped"}`}
-            </Text>
-          </Box>
-        ),
-      });
-    } else {
-      const container = entry.container;
-      const mood = containerMood(container);
-      const usage = stats.get(container.name);
-      const color = mood.tone === "good" ? "green" : mood.tone === "busy" ? "yellow" : mood.tone === "bad" ? "red" : "gray";
-      const details = [mood.word, container.ports.length > 0 ? container.ports.join(", ") : "", shortStatus(container.status), usage ? `${usage.cpu} ${usage.memory}` : ""].filter(Boolean);
-      rows.push({
-        key: container.name,
-        node: (
-          <Box flexDirection="column">
-            <Text wrap="truncate-end" inverse={selected} bold={selected}>
-              {"   "}<Text color={color}>{glyphs.dot}</Text> {container.service}
-              <Text dimColor>{" container"}</Text>
-            </Text>
-            <Text wrap="truncate-end" color={mood.tone === "bad" ? "red" : undefined} dimColor={mood.tone !== "bad"}>{`     ${details.join(" · ")}`}</Text>
-          </Box>
-        ),
-      });
+      const restarts = selected ? restartsOf(lines) : { count: 0, gaveUp: false };
+      const right = run.alive
+        ? [`up ${since(run.startedAt).replace(" ago", "").replace("just now", "<1m")}`, restarts.count > 0 ? `${restarts.count}× restarted` : ""].filter(Boolean).join(" · ")
+        : restarts.gaveUp
+          ? "gave up"
+          : "stopped";
+      line(run.id, selected, 1, <Text color={run.alive ? TONE.up : restarts.gaveUp ? TONE.failed : TONE.stopped}>{glyphs.dot}</Text>, run.label, right, restarts.gaveUp ? TONE.failed : undefined);
+      return;
     }
+    const container = entry.container;
+    const mood = containerMood(container);
+    const color = mood.tone === "good" ? TONE.up : mood.tone === "busy" ? TONE.busy : mood.tone === "bad" ? TONE.failed : TONE.stopped;
+    line(`container:${container.name}`, selected, 1, <Text color={color}>{glyphs.dot}</Text>, container.service, mood.word, mood.tone === "bad" ? TONE.failed : undefined);
   });
 
   const header =
@@ -172,9 +181,16 @@ export function PanesPanel(props: {
     ) : item?.type === "run" ? (
       <Text wrap="truncate-end">
         <Text bold>{item.run.label}</Text>
-        <Text dimColor>{`${startedBy(item.run, history, undefined, true)}  ${item.run.command}  `}</Text>
-        {item.run.alive ? <Text color="green">{`${glyphs.dot} running`}</Text> : <Text color={TONE.stopped}>{`${glyphs.dot} stopped`}</Text>}
-        {restartsOf(lines).count > 0 ? <Text color="yellow">{`  restarted ${restartsOf(lines).count}×`}</Text> : null}
+        {item.run.command !== item.run.label ? <Text dimColor>{`  ${item.run.command}`}</Text> : null}
+        {item.run.alive ? <Text color={TONE.up}>{`  ${glyphs.dot} running`}</Text> : <Text color={TONE.stopped}>{`  ${glyphs.dot} stopped`}</Text>}
+        <Text dimColor>{startedBy(item.run, history, undefined, true).replace(" from ", "  started by ")}</Text>
+        {restartsOf(lines).count > 0 ? <Text color={TONE.busy}>{`  restarted ${restartsOf(lines).count}×`}</Text> : null}
+      </Text>
+    ) : item?.type === "step" ? (
+      <Text wrap="truncate-end">
+        <Text bold>{item.step.kind === "bolt" ? item.step.label : describeHistoryStep(item.step, item.entry.job ?? false)}</Text>
+        {item.step.skipped ? <Text dimColor>{"  not reached"}</Text> : item.step.ok ? <Text color={TONE.up}>{`  ${glyphs.ok} done`}</Text> : <Text color={TONE.failed}>{`  ${glyphs.fail} failed`}</Text>}
+        <Text dimColor>{`  in ${baseLabel(item.entry.bolt)} #${item.entry.number ?? ""} · ${since(item.entry.startedAt)}`}</Text>
       </Text>
     ) : (
       <Text bold>Output</Text>
@@ -185,7 +201,6 @@ export function PanesPanel(props: {
       {full ? null : (
         <Box flexDirection="column" width={listWidth} flexShrink={0} borderStyle={glyphs.border} borderColor={TONE.accent} paddingX={1} overflow="hidden">
           <Text bold>
-            <Text dimColor>3 </Text>
             {all ? "Running and stopped" : "Running"}
           </Text>
           {typing || query ? <SearchLine query={query} typing={typing} /> : null}
@@ -220,7 +235,9 @@ export function PanesPanel(props: {
             ? active && !active.done ? TONE.accent : "gray"
             : item?.type === "group"
               ? groupTally(items, item.group.key).bad > 0 ? "red" : TONE.accent
-              : item && (item.type === "run" ? item.run.alive : containerMood(item.container).tone === "good") ? "green" : "gray"
+              : item?.type === "step"
+                ? item.step.ok || item.step.skipped ? "gray" : TONE.failed
+                : item && (item.type === "run" ? item.run.alive : containerMood(item.container).tone === "good") ? TONE.up : "gray"
         }
         paddingX={1}
       >
@@ -231,6 +248,14 @@ export function PanesPanel(props: {
         {item?.type === "run" && !item.run.log ? <Text dimColor>{`It runs in ${item.run.where ?? "a terminal window"} — its output is there.`}</Text> : null}
         {item?.type === "group" ? (
           <GroupSummary items={items} group={item.group} history={history} stats={stats} glyphs={glyphs} />
+        ) : item?.type === "step" && shown.length === 0 ? (
+          <Text dimColor wrap="wrap">
+            {item.step.kind === "bolt"
+              ? `${item.step.label} ran first and printed nothing.`
+              : item.step.skipped
+                ? item.step.note ?? "It was not reached."
+                : item.step.error ?? `It printed nothing${item.step.durationMs ? ` and took ${item.step.durationMs >= 1000 ? `${(item.step.durationMs / 1000).toFixed(1)}s` : `${item.step.durationMs}ms`}` : ""}.`}
+          </Text>
         ) : (
           shown.map((line, at) => (
             <Text key={at} wrap="truncate-end">{line || " "}</Text>
@@ -242,10 +267,11 @@ export function PanesPanel(props: {
 }
 
 /**
- * The Running list, structured: the run in progress first, then each workspace's bolts
- * with what they started under them.
+ * The Running list, structured: the run in progress first, then each workspace's bolts with
+ * their pipeline under them — in the order the bolt's last run went: what it waited for and
+ * opened, the bolts it needed, and what it started, which shows live.
  */
-export function groupPanes(head: PaneItem[], runs: RunStatus[], containers: Container[], reads: WorkspaceRead[]): PaneItem[] {
+export function groupPanes(head: PaneItem[], runs: RunStatus[], containers: Container[], reads: WorkspaceRead[], history: HistoryEntry[] = []): PaneItem[] {
   const groups = new Map<string, { group: PaneGroup; members: PaneItem[] }>();
   const add = (group: PaneGroup, member: PaneItem) => {
     const found = groups.get(group.key) ?? { group, members: [] };
@@ -276,6 +302,8 @@ export function groupPanes(head: PaneItem[], runs: RunStatus[], containers: Cont
     );
   }
 
+  for (const found of groups.values()) found.members = pipeline(found.group, found.members, history);
+
   // Within a workspace, its bolts by name, and what no bolt started last.
   const ordered = [...groups.values()].sort(
     (left, right) =>
@@ -284,6 +312,61 @@ export function groupPanes(head: PaneItem[], runs: RunStatus[], containers: Cont
       left.group.title.localeCompare(right.group.title),
   );
   return [...head, ...ordered.flatMap(({ group, members }) => [{ type: "group" as const, group }, ...members])];
+}
+
+/**
+ * A bolt's members in pipeline order. Its last run in History gives the order and the
+ * finished steps; what is running takes the place of the step that started it. A bolt it
+ * needed is one line, however many steps it had — it has its own place in the list.
+ */
+function pipeline(group: PaneGroup, members: PaneItem[], history: HistoryEntry[]): PaneItem[] {
+  if (!group.bolt || !group.workspace) return members;
+  const owns = (entry: HistoryEntry, step: HistoryStep) => (step.bolt ?? baseLabel(entry.bolt)) === group.bolt;
+  const entry = history.find((candidate) => candidate.workspace === group.workspace && !candidate.bolt.endsWith(" (down)") && candidate.steps.some((step) => owns(candidate, step)));
+  if (!entry) return members;
+
+  const left = [...members];
+  const take = (match: (member: PaneItem) => boolean): PaneItem[] => {
+    const hits = left.filter(match);
+    for (const hit of hits) left.splice(left.indexOf(hit), 1);
+    return hits;
+  };
+  const ordered: PaneItem[] = [];
+  const needed = new Set<string>();
+  // The run was this bolt's own, or it came up as another bolt's dependency: only then are
+  // the other bolts in that run ones it needed, rather than its siblings.
+  const own = baseLabel(entry.bolt) === group.bolt;
+  entry.steps.forEach((step, index) => {
+    if (!owns(entry, step)) {
+      if (!own) return;
+      // A step of a bolt this one needed: one line for that bolt, where it ran — its output
+      // the last thing it printed.
+      const name = step.bolt ?? "";
+      if (!name || needed.has(name)) return;
+      needed.add(name);
+      const its = entry.steps.filter((candidate) => candidate.bolt === name);
+      const printed = [...its].reverse().find((candidate) => candidate.log)?.log;
+      ordered.push({
+        type: "step",
+        entry,
+        index,
+        group: group.key,
+        step: { kind: "bolt", label: name, value: name, ok: its.every((candidate) => candidate.ok), ...(its.every((candidate) => candidate.skipped) ? { skipped: true } : {}), durationMs: its.reduce((sum, candidate) => sum + candidate.durationMs, 0), ...(printed ? { log: printed } : {}) },
+      });
+      return;
+    }
+    if (step.kind === "command" && !entry.job) {
+      const live = take((member) => member.type === "run" && member.run.label === step.label);
+      if (live.length > 0) return void ordered.push(...live);
+    }
+    if (step.kind === "compose") {
+      const live = take((member) => member.type === "container");
+      if (live.length > 0) return void ordered.push(...live);
+    }
+    ordered.push({ type: "step", step, entry, index, group: group.key });
+  });
+  // Anything running that the last run did not start — an older run's, say — goes last.
+  return [...ordered, ...left];
 }
 
 /**
@@ -299,11 +382,13 @@ export function filterPanes(items: PaneItem[], query: string): PaneItem[] {
         ? [item.run.label, item.run.command, item.run.workspaceName, item.run.alive ? "running" : "stopped"]
         : item.type === "container"
           ? [item.container.service, item.container.name, item.container.image, item.container.project, containerMood(item.container).word, "container"]
-          : [];
+          : item.type === "step"
+            ? [item.step.label, item.step.value, item.step.ok ? "done" : "failed"]
+            : [];
   const groups = items.filter((item): item is PaneItem & { type: "group" } => item.type === "group");
   const keep = new Set<PaneItem>();
   for (const group of groups) {
-    const members = groupMembers(items, group.group.key);
+    const members = allMembers(items, group.group.key);
     if (matchesAll(query, ...textOf(group))) {
       keep.add(group);
       for (const member of members) keep.add(member);
@@ -337,6 +422,11 @@ export function startedBy(run: RunStatus, history: HistoryEntry[], bolt: string 
 }
 
 /** The tasks under a bolt in the Running list. */
+/** Everything under a bolt in the Running list: its pipeline's steps and what is running. */
+export function allMembers(items: PaneItem[], key: string): PaneItem[] {
+  return items.filter((item) => (item.type === "run" || item.type === "container" || item.type === "step") && item.group === key);
+}
+
 export function groupMembers(items: PaneItem[], key: string): (PaneItem & { type: "run" | "container" })[] {
   return items.filter((item): item is PaneItem & { type: "run" | "container" } => (item.type === "run" || item.type === "container") && item.group === key);
 }
@@ -349,34 +439,31 @@ export function groupTally(items: PaneItem[], key: string): { up: number; bad: n
   return { up, bad, total: members.length };
 }
 
-/** A bolt selected in the Running list: what it started, at a glance, and what keys do. */
-export function GroupSummary({ items, group, history, stats, glyphs }: { items: PaneItem[]; group: PaneGroup; history: HistoryEntry[]; stats: Map<string, ContainerStats>; glyphs: Glyphs }) {
+/**
+ * A bolt selected in the Running list. The list beside it already says how each step is
+ * doing; this says what each of its commands and containers actually is, and what keys do.
+ */
+export function GroupSummary({ items, group }: { items: PaneItem[]; group: PaneGroup; history: HistoryEntry[]; stats: Map<string, ContainerStats>; glyphs: Glyphs }) {
   const members = groupMembers(items, group.key);
   return (
     <Box flexDirection="column" marginTop={1}>
-      {members.map((member) => {
-        if (member.type === "run") {
-          const run = member.run;
-          return (
-            <Text key={run.id} wrap="truncate-end">
-              <Text color={run.alive ? TONE.up : TONE.stopped}>{glyphs.dot}</Text> <Text bold>{run.label.padEnd(16)}</Text>
-              <Text dimColor>{`${(run.alive ? `up ${since(run.startedAt).replace(" ago", "").replace("just now", "<1m")}` : "stopped").padEnd(10)}  ${(startedBy(run, history, group.bolt, true).trim() || "").padEnd(18)}  ${run.command}`}</Text>
-            </Text>
-          );
-        }
-        const container = member.container;
-        const mood = containerMood(container);
-        const usage = stats.get(container.name);
-        return (
-          <Text key={container.name} wrap="truncate-end">
-            <Text color={mood.tone === "good" ? "green" : mood.tone === "bad" ? "red" : "yellow"}>{glyphs.dot}</Text> <Text bold>{container.service.padEnd(16)}</Text>
-            <Text dimColor>{`${mood.word.padEnd(10)}  ${[container.ports.join(", "), usage ? `${usage.cpu} ${usage.memory}` : ""].filter(Boolean).join(" · ")}`}</Text>
+      {members.map((member) =>
+        member.type === "run" ? (
+          <Text key={member.run.id} wrap="truncate-end">
+            <Text bold>{member.run.label.padEnd(14)}</Text>
+            <Text dimColor>{member.run.command}</Text>
+            {member.run.cwd && member.run.cwd !== member.run.workspace.replace(/\/[^/]+$/, "") ? <Text dimColor>{`  in ${member.run.cwd.replace(/^.*\//, "")}`}</Text> : null}
           </Text>
-        );
-      })}
+        ) : (
+          <Text key={member.container.name} wrap="truncate-end">
+            <Text bold>{member.container.service.padEnd(14)}</Text>
+            <Text dimColor>{`${member.container.image}${member.container.ports.length > 0 ? `  on localhost:${member.container.ports.map((port) => port.split("→")[0]).join(", ")}` : ""}`}</Text>
+          </Text>
+        ),
+      )}
       <Text> </Text>
       <Text dimColor>
-        {group.bolt ? "x stops all of it · r restarts it · ⏎ or ↓ to a task for its output" : "Not started by a bolt — choose one to stop it or see its output."}
+        {group.bolt ? `x stops all of ${group.bolt} · r restarts it · ↓ to a step for its output` : "Not started by a bolt — choose one to stop it or see its output."}
       </Text>
     </Box>
   );
@@ -386,6 +473,7 @@ export function GroupSummary({ items, group, history, stats, glyphs }: { items: 
 export function paneKey(item: PaneItem): string {
   if (item.type === "current") return "current";
   if (item.type === "group") return `group:${item.group.key}`;
+  if (item.type === "step") return `step:${item.group}:${item.index}`;
   return item.type === "run" ? item.run.id : `container:${item.container.name}`;
 }
 
@@ -411,4 +499,18 @@ export function lastLine(lines: string[]): string | undefined {
     if (line) return line;
   }
   return undefined;
+}
+
+/** At most `max` characters, with an ellipsis when cut — the right side of a row never wraps. */
+function clip(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, Math.max(1, max - 1))}…` : text;
+}
+
+/** A finished step in a few words, to fit the list: "wait for port 5050", "open Cymph". */
+function shortStep(step: HistoryStep, job: boolean): string {
+  if (step.kind === "wait") {
+    if (/^\d+(\.\d+)?s$/.test(step.label)) return `wait ${step.label}`;
+    return `wait for ${step.label.replace(/^https?:\/\//, "").replace(/\/$/, "")}`;
+  }
+  return describeHistoryStep(step, job);
 }

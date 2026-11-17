@@ -154,7 +154,7 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
       ? filterPanes(
           // Running shows what runs. The run in progress sits at the top while it goes; once
           // it is done it is History's — kept here only while you are reading its output.
-          groupPanes(active && (!active.done || watchingDone.current) ? [{ type: "current" }] : [], visibleRuns(runs, view.all), containers.filter((container) => view.all || container.state === "running" || container.state === "restarting" || container.exitCode !== 0), reads),
+          groupPanes(active && (!active.done || watchingDone.current) ? [{ type: "current" }] : [], visibleRuns(runs, view.all), containers.filter((container) => view.all || container.state === "running" || container.state === "restarting" || container.exitCode !== 0), reads, recent),
           view.query ?? "",
         )
       : [];
@@ -164,7 +164,10 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
           const focused = view.focus ? paneItems.findIndex((item) => paneKey(item) === view.focus) : -1;
           if (focused >= 0) return focused;
           // Opening the screen lands on the first task, whose output is what you came for.
-          if (view.index < 0) return Math.max(0, paneItems.findIndex((item) => item.type !== "group"));
+          if (view.index < 0) {
+            const live = paneItems.findIndex((item) => item.type === "current" || item.type === "run" || item.type === "container");
+            return Math.max(0, live >= 0 ? live : paneItems.findIndex((item) => item.type !== "group"));
+          }
           return Math.max(0, Math.min(view.index, paneItems.length - 1));
         })()
       : 0;
@@ -173,6 +176,21 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
   const watchingActive = selectedItem?.type === "current";
   watchingDone.current = view.kind === "processes" && watchingActive;
   const selectedContainer = selectedItem?.type === "container" ? selectedItem.container : undefined;
+  // A finished step of the pipeline: what it printed in that run, as History keeps it.
+  const selectedStepLog = selectedItem?.type === "step" ? selectedItem.step.log : undefined;
+  useEffect(() => {
+    if (selectedItem?.type !== "step") return;
+    let alive = true;
+    if (!selectedStepLog) setLog("");
+    else
+      void services
+        .readLog(selectedStepLog)
+        .then((text) => alive && setLog(text))
+        .catch(() => alive && setLog(""));
+    return () => {
+      alive = false;
+    };
+  }, [selectedItem?.type, selectedStepLog, services]);
   useEffect(() => {
     if (!selectedContainer) return;
     let alive = true;
@@ -299,7 +317,7 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
 
   useEffect(() => {
     if (!selectedRun) {
-      if (!selectedContainer) setLog("");
+      if (!selectedContainer && selectedItem?.type !== "step") setLog("");
       return;
     }
     let alive = true;
@@ -460,13 +478,9 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
 
   /** 1–4 go straight to a panel, as lazygit's numbers do: workspaces, bolts, running, history. */
   const jump = (input: string): boolean => {
-    if (input === "1" || input === "2") {
-      setView({ kind: "browse" });
-      setFocus(input === "1" ? "workspaces" : "bolts");
-      return true;
-    }
-    if (input === "3") return setView(activity()), true;
-    if (input === "4") return setView(history_()), true;
+    if (input === "1") return setView({ kind: "browse" }), true;
+    if (input === "2") return setView(activity()), true;
+    if (input === "3") return setView(history_()), true;
     return false;
   };
   const activity = (focus?: string): View => ({
@@ -755,6 +769,7 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
         here={hereLabel}
         running={runs.filter((run) => run.alive).length + containers.filter((container) => container.state === "running").length}
         failing={containers.filter((container) => container.health === "unhealthy" || ((container.state === "exited" || container.state === "dead") && container.exitCode !== 0)).map((container) => `${container.service} ${containerMood(container).word}`)}
+        tab={view.kind === "processes" ? "running" : view.kind === "history" ? "history" : "bolts"}
       />
 
       {loadError ? (
@@ -798,6 +813,8 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
           file={view.file}
           bolt={view.bolt}
           others={(reads.find((read) => read.workspace.file === view.file)?.workspace.bolts ?? []).map((entry) => entry.label).filter((label) => label !== view.bolt)}
+          elsewhere={reads.filter((read) => read.workspace.file !== view.file).flatMap((read) => read.workspace.bolts.map((entry) => ({ workspace: read.workspace.name, bolt: entry.label })))}
+          adding={Boolean(view.adding)}
           editing={services.editing}
           glyphs={glyphs}
           height={bodyHeight}
@@ -818,18 +835,19 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
           title={`A new bolt in ${view.workspace}`}
           intro="A bolt is one thing you do — 'Work on the API', 'Run the tests'. You'll add its steps next."
           fields={[
-            { key: "label", label: "Name", hint: "what you're doing: Work on the API", required: true },
+            { key: "label", label: "Name", hint: "what you're doing — any word of it runs it: specter api", placeholder: "Work on the API", required: true },
             {
               key: "kind",
-              label: "It…",
-              hint: "←/→ to choose. A job is for tests, builds and releases: it stops at the first failure.",
+              label: "Kind",
+              hint: "a job is for tests, builds and releases: it stops at the first failure",
               choices: [
-                { value: "start", label: "starts things (servers, apps)" },
-                { value: "job", label: "runs to completion (a job)" },
+                { value: "start", label: "starts things — servers, apps" },
+                { value: "job", label: "a job — runs to the end" },
               ],
             },
           ]}
-          submitLabel="create it"
+          preview={(values) => (values["label"]?.trim() ? `make ⚡ ${values["label"].trim()}${values["kind"] === "job" ? ", a job" : ""}, then ask for its first step` : undefined)}
+          submitLabel="Create bolt"
           glyphs={glyphs}
           height={bodyHeight}
           onCancel={() => setView({ kind: "browse" })}
@@ -845,7 +863,7 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
             const read = next ? ordered(next).find((entry) => entry.workspace.file === view.file) : undefined;
             setBoltIndex(Math.max(0, read?.workspace.bolts.findIndex((entry) => entry.label === label) ?? 0));
             setFocus("bolts");
-            setView({ kind: "editor", file: view.file, bolt: label });
+            setView({ kind: "editor", file: view.file, bolt: label, adding: true });
             return undefined;
           }}
         />
@@ -853,8 +871,8 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
         <Form
           title="A workspace of your own"
           intro="For things that belong to no project: 'Morning', 'On call', 'University'. It lives in Specter's own folder, and its commands run without asking — it's yours."
-          fields={[{ key: "name", label: "Name", hint: "Morning", required: true }]}
-          submitLabel="create it"
+          fields={[{ key: "name", label: "Name", hint: "what it's for", placeholder: "Morning", required: true }]}
+          submitLabel="Create workspace"
           glyphs={glyphs}
           height={bodyHeight}
           onCancel={() => setView({ kind: "browse" })}

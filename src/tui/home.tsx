@@ -35,7 +35,7 @@ export function WorkspaceList(props: { reads: WorkspaceRead[]; index: number; he
   return (
     <Box flexDirection="column" width={width} flexShrink={0} borderStyle={glyphs.border} borderColor={focused ? TONE.accent : "gray"} paddingX={1} overflow="hidden">
       <Text bold dimColor={!focused}>
-        <Text dimColor>1 </Text>Workspaces
+        Workspaces
       </Text>
       {items.map((row) => {
         if ("heading" in row) {
@@ -82,14 +82,13 @@ export function WorkspacePanel(props: { read: WorkspaceRead; boltIndex: number; 
 
   // Lines above and between the lists, so the lists take what is left.
   // Room kept at the bottom for the workspace's recent runs, when it has any.
-  const recentShown = history.slice(0, Math.max(0, Math.min(4, Math.floor((height - 14) / 2))));
-  const fixed = 7 + (recentShown.length > 0 ? recentShown.length + 2 : 0);
+  const fixed = 7;
   const listRoom = Math.max(2, height - 2 - fixed);
   const boltRoom = Math.max(1, Math.min(bolts.length, Math.ceil(listRoom / 2)));
   const stepRoom = Math.max(1, listRoom - boltRoom);
   const { items: shownBolts, offset } = windowed(bolts, boltIndex, boltRoom);
   const stepLines = [
-    ...steps.map((step) => ({ key: `${step.kind}:${step.id}:${step.label}`, label: describeStep(step, false, selected?.job ?? false).replace("›", glyphs.arrow), note: step.workspace ? ` (from ${step.workspace})` : "", waiting: false })),
+    ...steps.map((step) => ({ key: `${step.kind}:${step.id}:${step.label}`, label: `${step.kind === "bolt" ? glyphs.bolt : ""}${describeStep(step, false, selected?.job ?? false).replace("›", glyphs.arrow)}`, note: step.workspace ? ` (from ${step.workspace})` : "", waiting: false })),
     ...waiting.map((item) => ({ key: `held:${item.id}`, label: item.kind === "command" ? `start ${item.label}` : `start ${item.label}`, note: "", waiting: true })),
   ];
 
@@ -115,7 +114,6 @@ export function WorkspacePanel(props: { read: WorkspaceRead; boltIndex: number; 
       </Text>
       <Text> </Text>
       <Text bold dimColor={!focused}>
-        <Text dimColor>2 </Text>
         {`${glyphs.bolt}Bolts`}
       </Text>
       {bolts.length === 0 ? (
@@ -169,21 +167,6 @@ export function WorkspacePanel(props: { read: WorkspaceRead; boltIndex: number; 
             </Text>
           ))}
           {stepLines.length > stepRoom ? <Text dimColor>{`  … ${stepLines.length - stepRoom} more`}</Text> : null}
-        </>
-      ) : null}
-      {recentShown.length > 0 ? (
-        <>
-          <Box flexGrow={1} />
-          <Text bold dimColor>Recent runs</Text>
-          {recentShown.map((entry) => {
-            const failedAt = entry.steps.find((step) => !step.ok && !step.skipped);
-            return (
-              <Text key={entry.id} wrap="truncate-end">
-                {entry.ok ? <Text color="green">{glyphs.ok}</Text> : <Text color="red">{glyphs.fail}</Text>} {entry.bolt}
-                <Text dimColor>{` #${entry.number ?? "?"} · ${failedAt ? `failed at ${failedAt.label} · ` : ""}${since(entry.startedAt)} · h for details`}</Text>
-              </Text>
-            );
-          })}
         </>
       ) : null}
     </Box>

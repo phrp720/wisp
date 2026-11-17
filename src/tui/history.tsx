@@ -1,5 +1,5 @@
 import { Box, Text, useInput } from "ink";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { cleanOutput } from "../core/ansi.js";
 import { baseLabel, type HistoryEntry, type HistoryStep } from "../core/history.js";
@@ -15,7 +15,7 @@ export interface HistoryScreenProps {
   onClose: () => void;
   /** Go to what is running instead. */
   onRunning: () => void;
-  /** 1–3 jump to another panel; 4 is this one. */
+  /** 1 and 2 go to the other tabs; 3 is this one. */
   onJump?: (input: string) => void;
   /** Run the failed part of this run again. */
   onRetry: (entry: HistoryEntry) => void;
@@ -108,7 +108,7 @@ export function HistoryScreen(props: HistoryScreenProps) {
         return setRunIndex(0);
       }
       if (input === "p") return onRunning();
-      if (onJump && (input === "1" || input === "2" || input === "3")) return onJump(input);
+      if (onJump && (input === "1" || input === "2")) return onJump(input);
       if (run && input === "r" && !run.ok) return onRetry(run);
       if (run && input === "R") return onRerun(run);
       if (key.escape || input === "q" || input === "h") return onClose();
@@ -160,7 +160,7 @@ export function HistoryScreen(props: HistoryScreenProps) {
     return (
       <Box flexDirection="column" height={height} borderStyle={glyphs.border} paddingX={1}>
         <Text bold>
-          <Text dimColor>4 </Text>History
+          History
         </Text>
         <Text> </Text>
         <Text>Nothing has run yet. Every run of a bolt shows up here — whether it worked, how long each step took, and what it printed — the way a CI shows its runs.</Text>
@@ -180,7 +180,7 @@ export function HistoryScreen(props: HistoryScreenProps) {
     <Box height={height}>
       <Box flexDirection="column" width={sideWidth} flexShrink={0} borderStyle={glyphs.border} borderColor={focus === "bolts" ? TONE.accent : "gray"} paddingX={1} overflow="hidden">
         <Text bold>
-          <Text dimColor>4 </Text>History
+          Bolts
         </Text>
         {filterRows.map((entry, position) => {
           const at = filterOffset + position;
@@ -271,7 +271,14 @@ function RunDetail(props: {
 }) {
   const { entry, services, glyphs, height, columns, onBack, onRetry, onRerun } = props;
   const firstFailed = Math.max(0, entry.steps.findIndex((step) => !step.ok && !step.skipped));
-  const [selected, setSelected] = useState(firstFailed);
+  const [selected, setSelectedState] = useState(firstFailed);
+  // Keys can arrive together ("↓⏎" typed fast): each must see the step the one before chose,
+  // not the one on screen when they arrived.
+  const selectedRef = useRef(firstFailed);
+  const setSelected = (next: number | ((prior: number) => number)) => {
+    selectedRef.current = typeof next === "function" ? next(selectedRef.current) : next;
+    setSelectedState(selectedRef.current);
+  };
   // The failed step opens with its log showing, as a CI opens the failing job.
   const [expanded, setExpanded] = useState<Set<number>>(() => new Set(entry.ok ? [] : [firstFailed]));
   const [logs, setLogs] = useState<Map<number, string[]>>(new Map());
@@ -281,9 +288,12 @@ function RunDetail(props: {
     for (const at of expanded) {
       const step = entry.steps[at];
       if (!step?.log || logs.has(at)) continue;
-      void services.readLog(step.log).then((text) => {
-        setLogs((prior) => new Map(prior).set(at, cleanOutput(text).split("\n").filter((line, index, all) => line !== "" || index < all.length - 1)));
-      });
+      void services
+        .readLog(step.log)
+        .then((text) => {
+          setLogs((prior) => new Map(prior).set(at, cleanOutput(text).split("\n").filter((line, index, all) => line !== "" || index < all.length - 1)));
+        })
+        .catch(() => setLogs((prior) => new Map(prior).set(at, GONE)));
     }
   }, [expanded, entry, services, logs]);
 
@@ -301,7 +311,7 @@ function RunDetail(props: {
       step: at,
       node: (
         <Text wrap="truncate-end">
-          <Text color={TONE.accent}>{isSelected ? glyphs.pointer : " "}</Text> {step.log ? (isOpen ? "▾" : "▸") : " "} <Mark ok={step.ok} skipped={step.skipped} glyphs={glyphs} />{" "}
+          <Text color={TONE.accent}>{isSelected ? glyphs.pointer : " "}</Text> {isOpen ? "▾" : "▸"} <Mark ok={step.ok} skipped={step.skipped} glyphs={glyphs} />{" "}
           <Text bold={isSelected} color={isSelected ? TONE.accent : undefined}>{fit(describeHistoryStep(step, entry.job), labelWidth)}</Text>
           <Text dimColor>{` ${formatDuration(step.durationMs).padStart(6)}  `}</Text>
           <Text color={step.ok ? TONE.accent : "red"}>{bar.padEnd(12)}</Text>
@@ -312,8 +322,12 @@ function RunDetail(props: {
     });
     if (isOpen) {
       const lines = logs.get(at);
-      if (!lines) rows.push({ key: `l${at}`, node: <Text dimColor>{"        reading…"}</Text> });
-      else if (lines.length === 0) rows.push({ key: `l${at}`, node: <Text dimColor>{"        it printed nothing"}</Text> });
+      const say = (text: string) => rows.push({ key: `l${at}`, node: <Text dimColor wrap="wrap">{`        ${text}`}</Text> });
+      // Every step opens: one without output says why there is none, rather than nothing.
+      if (!step.log) say(noOutput(step, entry.job ?? false));
+      else if (!lines) say("reading…");
+      else if (lines === GONE) say("Its output is no longer kept — it was cleared along with the finished run.");
+      else if (lines.length === 0) say("It printed nothing.");
       else {
         const width = String(lines.length).length;
         lines.forEach((line, index) =>
@@ -355,12 +369,12 @@ function RunDetail(props: {
     if (key.pageDown || input === "d") return setTop(Math.min(most, first + room));
     if (key.pageUp || input === "u") return setTop(Math.max(0, first - room));
     if (key.return || input === " ") {
-      if (!entry.steps[selected]?.log) return;
+      const at = selectedRef.current;
       setTop(first);
       setExpanded((prior) => {
         const next = new Set(prior);
-        if (next.has(selected)) next.delete(selected);
-        else next.add(selected);
+        if (next.has(at)) next.delete(at);
+        else next.add(at);
         return next;
       });
     }
@@ -396,7 +410,7 @@ function RunDetail(props: {
       ))}
       <Box flexGrow={1} />
       <Text dimColor wrap="truncate-end">
-        {["↑↓ steps", "⏎ show or hide its log", "pgup/pgdn scroll", entry.ok ? "" : "r retry what failed", "R run again", "esc back to the runs"].filter(Boolean).join(" · ")}
+        {["↑↓ steps", "⏎ show or hide its log", "u d scroll", entry.ok ? "" : "r retry what failed", "R run again", "esc back to the runs"].filter(Boolean).join(" · ")}
       </Text>
     </Box>
   );
@@ -561,4 +575,27 @@ function searchText(entry: HistoryEntry): (string | undefined)[] {
     triggerWords(entry.trigger),
     entry.id,
   ];
+}
+
+/** Marks a step's log as gone, which is not the same as empty. */
+const GONE: string[] = [];
+
+/** Why a step has no output to show, in words. */
+function noOutput(step: HistoryStep, job: boolean): string {
+  switch (step.kind) {
+    case "command":
+      return job || step.skipped
+        ? step.skipped
+          ? "It did not run."
+          : "It printed nothing."
+        : "No output was kept for it — it ran in a window of its own, or before History kept what background commands print. While it runs, Running (p) shows it live.";
+    case "wait":
+      return step.ok ? `It was ready after ${formatDuration(step.durationMs) || "a moment"}.` : (step.error ?? "It gave up waiting.");
+    case "bolt":
+      return "Its steps are listed above.";
+    case "compose":
+      return "Docker started the containers — Running (p) shows their logs.";
+    default:
+      return step.skipped ? "It did not run." : `It opened ${step.label} — there is nothing to show for that.`;
+  }
 }

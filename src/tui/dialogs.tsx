@@ -22,7 +22,7 @@ export function TrustPanel({ read, glyphs, height, onAnswer }: { read: Workspace
         <Text key={item.id} wrap="truncate-end">
           <Text dimColor>{`  ${KIND[item.kind].padEnd(6)} `}</Text>
           <Text color="cyan">{tildify(item.value)}</Text>
-          {item.cwd ? <Text dimColor>{` in ${tildify(item.cwd)}`}</Text> : null}
+          {item.cwd && item.cwd !== read.workspace.file.replace(/\/[^/]+$/, "") ? <Text dimColor>{` in ${tildify(item.cwd)}`}</Text> : null}
           {item.reason ? <Text dimColor>{` (${item.reason})`}</Text> : null}
         </Text>
       ))}
@@ -50,10 +50,10 @@ export function SetupPanel({ suggestion, glyphs, height, onAnswer }: { suggestio
       {suggestion.bolts.map((bolt) => (
         <Box key={bolt.label} flexDirection="column">
           <Text wrap="truncate-end">
-            <Text bold color={TONE.accent}>{`  ${glyphs.pointer} ${bolt.label}`}</Text>
+            <Text bold color={TONE.accent}>{`  ${glyphs.bolt}${bolt.label}`}</Text>
             {bolt.job ? <Text color="cyan"> — a job: stops at the first failure</Text> : null}
           </Text>
-          <Text wrap="truncate-end" dimColor>{`      ${bolt.steps.join(", then ")}`}</Text>
+          <Text wrap="truncate-end" dimColor>{`     ${(bolt.job ? bolt.steps.map((step) => step.replace(/^start /, "run ")) : bolt.steps).join(", then ")}`}</Text>
         </Box>
       ))}
       <Box flexGrow={1} />

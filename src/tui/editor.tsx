@@ -20,6 +20,10 @@ export interface BoltEditorProps {
   bolt: string;
   /** Other bolts of this workspace, for "run another bolt first". */
   others: string[];
+  /** Bolts of other workspaces, which can be run first too. */
+  elsewhere?: { workspace: string; bolt: string }[];
+  /** Open on choosing the first step — the bolt was just made. */
+  adding?: boolean;
   editing: Editing;
   glyphs: Glyphs;
   height: number;
@@ -35,11 +39,11 @@ export interface BoltEditorProps {
  * A bolt, edited without its JSON: its steps in plain words, in order, and keys to add,
  * change, move and remove them. Every change is saved as it is made.
  */
-export function BoltEditor({ file, bolt, others, editing, glyphs, height, onClose, onChanged, onMessage, onSaving }: BoltEditorProps) {
+export function BoltEditor({ file, bolt, others, elsewhere = [], adding = false, editing, glyphs, height, onClose, onChanged, onMessage, onSaving }: BoltEditorProps) {
   const [label, setLabel] = useState(bolt);
   const [raw, setRaw] = useState<RawBolt>();
   const [index, setIndex] = useState(0);
-  const [mode, setMode] = useState<Mode>({ kind: "list" });
+  const [mode, setMode] = useState<Mode>(adding ? { kind: "pick", at: 0 } : { kind: "list" });
   const [error, setError] = useState<string>();
 
   const load = useCallback(
@@ -100,9 +104,9 @@ export function BoltEditor({ file, bolt, others, editing, glyphs, height, onClos
   if (mode.kind === "pick") {
     return (
       <Picker
-        title={`Add a step to "${label}"`}
-        intro="What should happen at this point?"
-        options={STEP_KINDS.map((entry) => ({ key: entry.kind, title: entry.title, detail: entry.example }))}
+        title={`${steps.length === 0 ? "The first step" : `Step ${mode.at + 1}`} of ⚡ ${label}`}
+        intro={steps.length === 0 ? "What should happen first when it runs?" : `What should happen ${mode.at === steps.length ? "next" : `after "${describeRawStep(steps[mode.at - 1] as RawBolt["targets"][number])}"`}?`}
+        options={STEP_KINDS.map((entry) => ({ key: entry.kind, title: entry.title, detail: entry.example, group: entry.group, icon: entry.icon }))}
         glyphs={glyphs}
         height={height}
         onCancel={() => setMode({ kind: "list" })}
@@ -112,21 +116,36 @@ export function BoltEditor({ file, bolt, others, editing, glyphs, height, onClos
   }
 
   if (mode.kind === "form") {
-    const title = STEP_KINDS.find((entry) => entry.kind === mode.step)?.title ?? "Step";
-    const fields = STEP_FIELDS[mode.step].map((field) =>
-      field.key === "bolt" && others.length > 0 ? { ...field, hint: `one of: ${others.join(", ")}` } : field,
-    );
+    const kind = STEP_KINDS.find((entry) => entry.kind === mode.step);
+    // Running another bolt first: chosen from the bolts there are, not typed — this
+    // workspace's, then other workspaces' ("infra › Database").
+    const choosable = [...others.map((name) => ({ value: name, label: name })), ...elsewhere.map((entry) => ({ value: `${entry.workspace} › ${entry.bolt}`, label: `${entry.workspace} › ${entry.bolt}` }))];
+    const picking = mode.step === "bolt" && choosable.length > 0;
+    const fields = picking
+      ? [{ key: "bolt", label: "Bolt", hint: "it runs to its end — or until what it starts is up — before the next step", required: true, choices: choosable }]
+      : STEP_FIELDS[mode.step];
+    const initial = picking && mode.initial["workspace"] ? { bolt: `${mode.initial["workspace"]} › ${mode.initial["bolt"] ?? ""}` } : mode.initial;
+    const valuesOf = (values: Record<string, string>) => {
+      if (!picking) return values;
+      const [where, name] = (values["bolt"] ?? "").includes(" › ") ? (values["bolt"] ?? "").split(" › ") : [undefined, values["bolt"]];
+      return { bolt: name ?? "", ...(where ? { workspace: where } : {}) };
+    };
     return (
       <Form
-        title={`${mode.replace ? "Change" : "Add"}: ${title}`}
-        intro={`In "${label}", as step ${mode.at + 1}.`}
+        title={`${kind && glyphs.border === "round" ? `${kind.icon} ` : ""}${kind?.title ?? "Step"}`}
+        intro={`${mode.replace ? "Changing" : "Adding"} step ${mode.at + 1} of ⚡ ${label}.`}
         fields={fields}
-        initial={mode.initial}
-        submitLabel={mode.replace ? "save" : "add it"}
+        initial={initial}
+        preview={(values) => {
+          const { step } = buildStep(mode.step, valuesOf(values));
+          return step ? describeRawStep(step) : undefined;
+        }}
+        submitLabel={mode.replace ? "Save step" : "Add step"}
         glyphs={glyphs}
         height={height}
         onCancel={() => setMode({ kind: "list" })}
-        onSubmit={async (values) => {
+        onSubmit={async (given) => {
+          const values = valuesOf(given);
           const { step, errors } = buildStep(mode.step, values);
           if (!step) return errors;
           await change(
@@ -146,8 +165,9 @@ export function BoltEditor({ file, bolt, others, editing, glyphs, height, onClos
       <Form
         title={`Rename "${label}"`}
         intro="Name it after the job it does. Any word of it runs it: `specter api`."
-        fields={[{ key: "label", label: "Name", required: true }]}
+        fields={[{ key: "label", label: "Name", required: true, placeholder: "Work on the API" }]}
         initial={{ label }}
+        submitLabel="Rename"
         glyphs={glyphs}
         height={height}
         onCancel={() => setMode({ kind: "list" })}
@@ -186,39 +206,48 @@ export function BoltEditor({ file, bolt, others, editing, glyphs, height, onClos
     );
   }
 
-  const room = Math.max(1, height - 10);
-  const listRows = [...steps.map((step, at) => ({ at, text: describeRawStep(step) })), { at: steps.length, text: "add a step" }];
+  const room = Math.max(1, height - 9);
+  const listRows = [...steps.map((step, at) => ({ at, text: describeRawStep(step), kind: stepKindOf(step) })), { at: steps.length, text: steps.length === 0 ? "add the first step" : "add a step", kind: "add" }];
   const { items } = windowed(listRows, index, room);
+  // A bolt to run first already starts with ⚡ in its words.
+  const icon = (kind: string) => (glyphs.border !== "round" || kind === "bolt" ? "" : (STEP_KINDS.find((entry) => entry.kind === kind)?.icon ?? "🔗") + " ");
+  // Steps as one pipeline, top to bottom — the way Shortcuts and n8n show a flow.
+  const joint = (at: number) => (glyphs.border !== "round" ? "|" : steps.length === 1 ? "─" : at === 0 ? "┌" : at === steps.length - 1 ? "└" : "│");
 
   return (
     <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor={TONE.accent} paddingX={1}>
-      <Text wrap="truncate-end">
-        <Text bold>{`Edit "${label}"`}</Text>
-        <Text dimColor>{`   ${tildify(file)}`}</Text>
-      </Text>
-      <Text>
-        {raw?.job ? (
-          <Text color="cyan">A job: runs to completion, and stops at the first step that fails.</Text>
-        ) : (
-          <Text>Starts things and leaves them running.</Text>
-        )}
-        <Text dimColor>{raw?.job ? "  t: make it start things instead" : "  t: make it a job (tests, builds, releases)"}</Text>
-      </Text>
-      {error ? <Text color="red">{error}</Text> : null}
+      <Box>
+        <Box flexGrow={1}>
+          <Text wrap="truncate-end">
+            <Text bold color={TONE.accent}>{`${glyphs.bolt}${label}`}</Text>
+            <Text dimColor>{`   ${tildify(file)}`}</Text>
+          </Text>
+        </Box>
+        {raw?.job ? <Text color={TONE.job}>a job — stops at the first failure</Text> : <Text dimColor>starts things and leaves them running</Text>}
+      </Box>
+      {error ? <Text color={TONE.failed}>{error}</Text> : null}
       <Text> </Text>
-      <Text bold>Steps, in the order they happen</Text>
-      {steps.length === 0 ? <Text dimColor>Nothing yet — press a, or ⏎ below, to add the first step.</Text> : null}
       {items.map((row) => {
         const active = row.at === index;
-        const adding = row.at === steps.length;
+        const adding = row.kind === "add";
         return (
-          <Text key={row.at} wrap="truncate-end" inverse={active} color={adding ? TONE.accent : undefined}>
-            {active ? glyphs.pointer : " "} {adding ? " + " : `${String(row.at + 1).padStart(2)} `} {row.text}
+          <Text key={row.at} wrap="truncate-end">
+            <Text color={TONE.accent}>{active ? `${glyphs.pointer} ` : "  "}</Text>
+            {adding ? (
+              <Text color={TONE.accent} bold={active}>{`${steps.length > 0 ? "  " : ""}+  ${row.text}`}</Text>
+            ) : (
+              <Text>
+                <Text dimColor>{`${joint(row.at)} ${String(row.at + 1).padStart(2)}  `}</Text>
+                {icon(row.kind)}
+                <Text bold={active} color={active ? TONE.accent : undefined}>{row.text}</Text>
+              </Text>
+            )}
           </Text>
         );
       })}
+      {steps.length === 0 ? <Text dimColor>{"\n  No steps yet. A bolt does its steps in order: start a server, wait for it, open it."}</Text> : null}
       <Box flexGrow={1} />
-      <Text dimColor>↑↓ choose · ⏎ change · a add · d remove · K/J move up/down · n rename · t job or not · esc done</Text>
+      <Text dimColor>{`⏎ ${index === steps.length ? "add" : "change"} · a add after this one · d remove · K J move · n rename · t ${raw?.job ? "make it start things" : "make it a job"} · esc done`}</Text>
     </Box>
   );
 }

@@ -569,9 +569,12 @@ async function runCommand(step: PlannedStep, index: number, context: Context): P
   if (route.kind === "background") {
     const started = await startRun({ ...info, invocation: supervised(shellInvocation(request), target) });
     const note = [route.reason, `logs: specter logs ${started.run.id}`].filter(Boolean).join(" · ");
+    // Its log goes into History with the step, so a past run can show what it printed — for
+    // as long as the log is kept (`specter ps --clear` deletes finished runs' logs).
+    const log = started.run.log ? { log: started.run.log } : {};
     return started.ok
-      ? { ...target, ok: true, run: started.run.id, note }
-      : { ...target, ok: false, run: started.run.id, error: started.error ?? "failed" };
+      ? { ...target, ok: true, run: started.run.id, note, ...log }
+      : { ...target, ok: false, run: started.run.id, error: started.error ?? "failed", ...log };
   }
 
   // A window: it reports its PID as it starts, so it can be found again, and stays open on

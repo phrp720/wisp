@@ -12,16 +12,10 @@
 
   "bolts": [
     {
-      "label": "Work on core",
-      "targets": [{ "folder": "src/core" }, { "run": "pnpm test:watch" }, "Repository"]
-    },
-    {
-      "label": "Work on the CLI",
-      "targets": [{ "folder": "src/cli" }, { "run": "pnpm typecheck && pnpm test" }]
-    },
-    {
       "label": "Check everything",
-      "targets": [{ "run": "pnpm typecheck && pnpm test && pnpm build" }]
+      "targets": [
+        { "run": "pnpm typecheck && pnpm test && pnpm build" }
+      ]
     }
   ]
 }
