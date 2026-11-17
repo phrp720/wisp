@@ -6,7 +6,7 @@ import { maybeProject } from "../lib/context.js";
 import { diagnosticSummary, printBolts, shortest, trustLine } from "../lib/render.js";
 
 /**
- * What bare `specter` shows when it is not opening the TUI.
+ * What bare `wisp` shows when it is not opening the TUI.
  *
  * Standing in a project: what that project can run. Anywhere else: every workspace you
  * have, since "what can I run" has an answer wherever you are.
@@ -23,10 +23,10 @@ export async function status(): Promise<void> {
       console.log();
       printBolts(workspace, false, here.withheld, await listRuns());
       console.log();
-      console.log(dim(`Run one with \`specter ${shortest(workspace.bolts[0]!, workspace.bolts)}\`, or \`specter use\` to pick.`));
+      console.log(dim(`Run one with \`wisp ${shortest(workspace.bolts[0]!, workspace.bolts)}\`, or \`wisp use\` to pick.`));
     } else {
       console.log();
-      console.log(dim("No bolts in this file yet — add some, then `specter use`."));
+      console.log(dim("No bolts in this file yet — add some, then `wisp use`."));
     }
 
     const trust = trustLine(here);
@@ -41,8 +41,8 @@ export async function status(): Promise<void> {
 
   if (reads.length === 0 && unreadable.length === 0) {
     console.log(dim("No workspaces yet."));
-    console.log(dim("  `specter init`   a .specter.json for the project you are in"));
-    console.log(dim("  `specter scan ~/dev`   find the ones you already have"));
+    console.log(dim("  `wisp init`   a .wisp.json for the project you are in"));
+    console.log(dim("  `wisp scan ~/dev`   find the ones you already have"));
     return;
   }
 
@@ -53,5 +53,5 @@ export async function status(): Promise<void> {
   }
   for (const failure of unreadable) console.log(`${red("✗")} ${dim(tildify(failure.file))} ${failure.error}`);
   console.log();
-  console.log(dim("Run one with `specter use <workspace> <bolt>`."));
+  console.log(dim("Run one with `wisp use <workspace> <bolt>`."));
 }

@@ -29,7 +29,7 @@ export interface ScanOptions {
 }
 
 /**
- * Every `.specter.json` under a directory.
+ * Every `.wisp.json` under a directory.
  *
  * Shallow by default — projects live a level or three below where you keep them — and it
  * stops descending once it finds one, since a project's own subdirectories belong to it.

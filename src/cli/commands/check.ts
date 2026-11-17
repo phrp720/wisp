@@ -1,6 +1,6 @@
 import { dirname } from "node:path";
 
-import { SpecterError } from "../../core/errors.js";
+import { WispError } from "../../core/errors.js";
 import { tildify } from "../../core/paths.js";
 import { PROJECT_FILE, checkProject, findProjectFile } from "../../core/project.js";
 import { bold, counts, cyan, dim, green, kindLabel, plural, title, yellow } from "../format.js";
@@ -14,12 +14,12 @@ export const check: CommandDef<{ json?: boolean }> = {
   summary: `Check a ${PROJECT_FILE}: what it declares, what would run, and what it does not mean`,
   args: [["[path]", `a ${PROJECT_FILE}, or the folder with one; omitted walks up from here`]],
   options: [["--json", "print the findings as JSON"]],
-  examples: ["specter check", "specter check ../other/.specter.json"],
+  examples: ["wisp check", "wisp check ../other/.wisp.json"],
 
   async run([given], options) {
-    // A folder means the file in it: `specter check ../shop` as well as `../shop/.specter.json`.
+    // A folder means the file in it: `wisp check ../shop` as well as `../shop/.wisp.json`.
     const file = given ? await fileIn(given) : await findProjectFile();
-    if (!file) throw new SpecterError(`No ${PROJECT_FILE} above this directory`, "NO_PROJECT");
+    if (!file) throw new WispError(`No ${PROJECT_FILE} above this directory`, "NO_PROJECT");
 
     const read = await checkProject(file);
     const { errors, warnings } = countDiagnostics(read.diagnostics);
@@ -51,7 +51,7 @@ export const check: CommandDef<{ json?: boolean }> = {
     // always. You cannot decide about something you have to open another window to see.
     if (read.declaredCommands.length > 0 || read.withheld.length > 0) {
       console.log();
-      console.log(`${bold("Runs code")} ${dim(read.workspace.trusted ? "— allowed" : "— waiting for `specter trust`")}`);
+      console.log(`${bold("Runs code")} ${dim(read.workspace.trusted ? "— allowed" : "— waiting for `wisp trust`")}`);
       for (const command of read.declaredCommands) {
         const where = whereLine(command.cwd, dirname(read.workspace.file));
         const env = command.env ? dim(` with ${Object.keys(command.env).join(", ")}`) : "";

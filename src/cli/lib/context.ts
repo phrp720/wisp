@@ -1,7 +1,7 @@
 import { stat } from "node:fs/promises";
 import { resolve } from "node:path";
 
-import { SpecterError } from "../../core/errors.js";
+import { WispError } from "../../core/errors.js";
 import { expandHome } from "../../core/paths.js";
 import { PROJECT_FILE, findProjectFile, readProjectFile } from "../../core/project.js";
 import { matchBolt } from "../../core/switch.js";
@@ -9,7 +9,7 @@ import type { TargetKind, Workspace, WorkspaceRead } from "../../core/types.js";
 import { discoverWorkspaces, matchWorkspace, resolveWorkspace } from "../../core/workspaces.js";
 
 /**
- * Every workspace Specter knows, plus the project you are standing in if it is not known
+ * Every workspace Wisp knows, plus the project you are standing in if it is not known
  * yet — a fresh clone is the obvious one to want, and it has never been run.
  */
 export async function everything(): Promise<WorkspaceRead[]> {
@@ -43,7 +43,7 @@ export async function currentProject(): Promise<WorkspaceRead> {
   if (file) return readProjectFile(file);
 
   const names = (await everything()).map((read) => read.workspace.name);
-  throw new SpecterError(
+  throw new WispError(
     names.length > 0
       ? `Nothing here to run — name a workspace: ${names.join(", ")}`
       : `Name a workspace, or run this inside a project with a ${PROJECT_FILE}`,
@@ -62,11 +62,11 @@ export async function findWorkspaceForDependency(ref: string): Promise<Workspace
 }
 
 /**
- * What `specter use <a> [b]` means.
+ * What `wisp use <a> [b]` means.
  *
  * Two words are a workspace and a bolt. One word is a workspace if one answers to it,
  * and otherwise — only otherwise — a bolt of the project you are standing in. So the
- * documented form keeps working, and `specter api` inside a repository means the obvious
+ * documented form keeps working, and `wisp api` inside a repository means the obvious
  * thing; the fallback can only fire where the first reading was impossible anyway.
  */
 export async function resolveRun(
@@ -83,13 +83,13 @@ export async function resolveRun(
   if (first && !flag) {
     const here = await maybeProject();
 
-    // Standing in a project, its own bolts come first: `specter api` in a repository that
+    // Standing in a project, its own bolts come first: `wisp api` in a repository that
     // has an "API" bolt means that bolt, even if some other workspace is called "api".
     if (here) {
       const { bolt: match, candidates } = matchBolt(here.workspace, first);
       if (match) return { read: here, bolt: first };
       if (candidates.length > 1) {
-        throw new SpecterError(
+        throw new WispError(
           `"${first}" matches several bolts: ${candidates.map((candidate) => candidate.label).join(", ")}`,
           "AMBIGUOUS",
         );
@@ -102,7 +102,7 @@ export async function resolveRun(
 
     if (here) {
       const bolts = here.workspace.bolts;
-      throw new SpecterError(
+      throw new WispError(
         bolts.length > 0
           ? `No bolt or workspace called "${first}". ${here.workspace.name} has ${bolts.map((entry) => entry.label).join(", ")}`
           : `No workspace called "${first}", and ${here.workspace.name} has no bolts yet`,
@@ -146,7 +146,7 @@ export function parseKinds(value?: string): TargetKind[] | undefined {
     .map((part) => {
       const kind = aliases[part];
       if (!kind) {
-        throw new SpecterError(
+        throw new WispError(
           `Unknown target kind "${part}" — expected links, folders, files, apps or commands`,
           "INVALID_INPUT",
         );

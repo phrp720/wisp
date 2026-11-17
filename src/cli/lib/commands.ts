@@ -36,7 +36,7 @@ export const COMMANDS: CommandDef<never>[] = [
   spec,
 ] as CommandDef<never>[];
 
-/** Every word that means a command, aliases included — what `specter <word>` must not shadow. */
+/** Every word that means a command, aliases included — what `wisp <word>` must not shadow. */
 export function verbs(commands: CommandDef<never>[] = COMMANDS): Set<string> {
   const names = new Set<string>(["help", "status"]);
   for (const command of commands) {

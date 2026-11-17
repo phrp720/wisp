@@ -1,4 +1,4 @@
-import { SpecterError } from "./errors.js";
+import { WispError } from "./errors.js";
 import { currentOS, expandHome } from "./paths.js";
 import type { Invocation, OS, ShellKind } from "./types.js";
 import { which } from "./which.js";
@@ -9,8 +9,8 @@ export interface ShellRequest {
   cwd?: string;
   env?: Record<string, string>;
   /**
-   * Where the shell writes its own PID before running the command — how Specter finds a
-   * command again that it handed to a terminal window, so `specter down` can stop it.
+   * Where the shell writes its own PID before running the command — how Wisp finds a
+   * command again that it handed to a terminal window, so `wisp down` can stop it.
    */
   pidFile?: string;
 }
@@ -43,7 +43,7 @@ export function shellInvocation(request: ShellRequest, os: OS = currentOS(), env
       // Git for Windows, MSYS or Cygwin. A `sh` command has nowhere else to run here.
       const sh = which("bash", env) ?? which("sh", env);
       if (!sh) {
-        throw new SpecterError(
+        throw new WispError(
           `"${request.command}" is written for sh, and there is no bash or sh on this PATH`,
           "NO_SHELL",
         );
@@ -64,13 +64,13 @@ export function shellInvocation(request: ShellRequest, os: OS = currentOS(), env
 
     const pwsh = which("pwsh", env) ?? (os === "win32" ? which("powershell", env) ?? "powershell.exe" : undefined);
     if (!pwsh) {
-      throw new SpecterError(`"${request.command}" is written for PowerShell, and pwsh is not installed`, "NO_SHELL");
+      throw new WispError(`"${request.command}" is written for PowerShell, and pwsh is not installed`, "NO_SHELL");
     }
     return { file: pwsh, args: ["-NoLogo", "-Command", script] };
   }
 
   if (os !== "win32") {
-    throw new SpecterError(`"${request.command}" is written for cmd, which only exists on Windows`, "NO_SHELL");
+    throw new WispError(`"${request.command}" is written for cmd, which only exists on Windows`, "NO_SHELL");
   }
 
   const script = [
@@ -110,7 +110,7 @@ export function windowInvocation(inner: Invocation, pidFile: string, label: stri
     `echo $$ > ${posixQuote(pidFile)}`,
     posixCommandLine(inner),
     "status=$?",
-    `if [ "$status" -ne 0 ]; then printf '\\n[specter] %s exited with %s — press enter to close\\n' ${posixQuote(label)} "$status"; read _; fi`,
+    `if [ "$status" -ne 0 ]; then printf '\\n[wisp] %s exited with %s — press enter to close\\n' ${posixQuote(label)} "$status"; read _; fi`,
     'exit "$status"',
   ].join("\n");
   return { file: "/bin/sh", args: ["-c", script] };
@@ -122,7 +122,7 @@ export function windowInvocation(inner: Invocation, pidFile: string, label: stri
  *
  * A command whose output goes to a file decides nobody is watching: colours go, progress
  * bars go, some tools buffer everything. Under a terminal it behaves as it does in yours —
- * and Specter, keeping its output, can show it that way. Sized wide, so a log is not
+ * and Wisp, keeping its output, can show it that way. Sized wide, so a log is not
  * wrapped to some default eighty columns. Nothing to wrap it in on Windows, or without
  * `script`: then the command runs as it is.
  */
@@ -138,18 +138,18 @@ export function underTerminal(inner: Invocation, os: OS = currentOS(), env: Node
   return { file: script, args: ["-qfec", posixCommandLine(sized), "/dev/null"] };
 }
 
-/** How many times in a row a command is brought back before Specter gives up on it. */
+/** How many times in a row a command is brought back before Wisp gives up on it. */
 export const MAX_RESTARTS = 10;
 
 /** The line a restart leaves in the log — read back by the panes to count restarts. */
-export const RESTART_MARK = "[specter] restarting";
+export const RESTART_MARK = "[wisp] restarting";
 
 /**
  * An invocation that comes back when it stops, by its policy.
  *
- * A small loop in `/bin/sh` around the command, rather than Specter watching from outside:
+ * A small loop in `/bin/sh` around the command, rather than Wisp watching from outside:
  * a background command outlives the TUI that started it, and must keep its policy when
- * nothing of Specter's is running. Waits 1s, 2s, 4s… up to 30s between tries, so a server
+ * nothing of Wisp's is running. Waits 1s, 2s, 4s… up to 30s between tries, so a server
  * that dies at once does not spin; stops after ten restarts in a row, saying so; and a run
  * that stayed up a minute counts as healthy again, so tomorrow's crash starts the count anew.
  */
@@ -163,7 +163,7 @@ export function restartLoop(inner: Invocation, policy: "on-failure" | "always", 
     policy === "on-failure" ? '  [ "$code" -eq 0 ] && exit 0' : "  :",
     '  [ $(( $(date +%s) - began )) -ge 60 ] && { tries=0; pause=1; }',
     "  tries=$((tries + 1))",
-    `  if [ "$tries" -gt ${MAX_RESTARTS} ]; then printf '\\n[specter] %s exited with %s — gave up after ${MAX_RESTARTS} restarts\\n' ${posixQuote(label)} "$code"; exit "$code"; fi`,
+    `  if [ "$tries" -gt ${MAX_RESTARTS} ]; then printf '\\n[wisp] %s exited with %s — gave up after ${MAX_RESTARTS} restarts\\n' ${posixQuote(label)} "$code"; exit "$code"; fi`,
     `  printf '\\n${RESTART_MARK} %s (exited with %s) — try %s of ${MAX_RESTARTS}, in %ss\\n' ${posixQuote(label)} "$code" "$tries" "$pause"`,
     '  sleep "$pause"',
     '  pause=$((pause * 2)); [ "$pause" -gt 30 ] && pause=30',

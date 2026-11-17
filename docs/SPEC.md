@@ -1,18 +1,18 @@
-# Specter reference
+# Wisp reference
 
-Specter starts a project's working context with one word. A `.specter.json` in a project
+Wisp starts a project's working context with one word. A `.wisp.json` in a project
 lists **bolts**; running a bolt opens or runs what it lists, in order: folders, files,
 links, apps and shell commands, with optional waits and dependencies between them.
 
 ## Files
 
-- `.specter.json` — committed in a project. Specter finds it by walking up from the
+- `.wisp.json` — committed in a project. Wisp finds it by walking up from the
   current directory, like git finds `.git`. Paths in it are relative to the file.
-- `.specter.local.json` — optional, beside it, usually gitignored. Same format. Its lists
+- `.wisp.local.json` — optional, beside it, usually gitignored. Same format. Its lists
   are added to the project's, its name/icon/color win, and a bolt with the same label
   replaces the project's bolt.
 - Personal workspaces — the same format, in the `workspaces` directory that
-  `specter doctor` prints. Trusted automatically, since they are yours.
+  `wisp doctor` prints. Trusted automatically, since they are yours.
 
 ## The smallest file
 
@@ -37,7 +37,7 @@ links, apps and shell commands, with optional waits and dependencies between the
 | command | `{ "run": "pnpm dev", "cwd": "apps/api", "env": { "PORT": 3000 } }` | runs a shell command |
 | wait | `{ "wait": 3 }`, `{ "wait": "localhost:5432" }`, `{ "wait": "http://localhost:3000" }` | pauses until seconds pass, a port accepts, or a url answers (60s timeout; object form `{ "wait": { "port": 5432, "timeout": 120 } }`) |
 | dependency | `{ "bolt": "Database" }`, `{ "bolt": "Database", "workspace": "infra" }` | runs another bolt first, once per run; skips commands already running |
-| docker | `{ "compose": "compose.yaml", "services": ["postgres"] }` | `docker compose up --wait`: done when the services are healthy; `specter down` stops them; shown with state, health and logs |
+| docker | `{ "compose": "compose.yaml", "services": ["postgres"] }` | `docker compose up --wait`: done when the services are healthy; `wisp down` stops them; shown with state, health and logs |
 | shared asset | `"Repository"` | names an asset from a top-level section by its label |
 
 Any inline step may also carry `"label"` and `"os"`.
@@ -56,14 +56,14 @@ Release:
   on stops it too.
 - Bolts it depends on that are not jobs (a database) start the way they always do, and
   stay up.
-- Every run is in `specter history`, with each step's duration and output.
-- `specter hook pre-push Check` runs it before every push and blocks the push if it fails.
+- Every run is in `wisp history`, with each step's duration and output.
+- `wisp hook pre-push Check` runs it before every push and blocks the push if it fails.
 
 ## Up and down
 
-Specter tracks every command it starts — in a terminal window, a tmux window or the
+Wisp tracks every command it starts — in a terminal window, a tmux window or the
 background — so it knows which bolts are **up**, never starts a second copy of a running
-command, and can stop them: `specter down <bolt>` stops the bolt's own commands (`--deps`
+command, and can stop them: `wisp down <bolt>` stops the bolt's own commands (`--deps`
 for the bolts it depends on too), then runs its `down` steps:
 
 ```json
@@ -93,12 +93,12 @@ names the folder.
 - `run` goes to the user's own shell (`$SHELL -ilc`) on macOS/Linux and PowerShell on
   Windows, unless `shell` says otherwise. Pipes and `&&` work.
 - Commands run in the background, under a pseudo-terminal so their output keeps its
-  colours, with that output kept: `specter logs <name>`, `specter ps`, and a pane each in
-  the TUI. They outlive Specter. `--window`, or `specter open-with terminal <app|tmux>`,
+  colours, with that output kept: `wisp logs <name>`, `wisp ps`, and a pane each in
+  the TUI. They outlive Wisp. `--window`, or `wisp open-with terminal <app|tmux>`,
   puts them in terminal or tmux windows instead. A job's commands always run attached.
 - `restart` brings a command back when it stops — `"on-failure"` after a crash, `"always"`
   whenever it exits — waiting 1s, 2s, 4s… up to 30s, and giving up after 10 in a row. It
-  keeps working after Specter is closed.
+  keeps working after Wisp is closed.
 
 ## Per-OS values
 
@@ -109,61 +109,61 @@ skipped quietly. OS names: `macos`, `linux`, `windows`.
 ## Trust
 
 Commands — and files or apps that would execute when opened — **do not run** until the
-user approves that exact file with `specter trust`. Any edit to the file or its local
+user approves that exact file with `wisp trust`. Any edit to the file or its local
 override withdraws approval until it is approved again. Personal workspaces are trusted.
 
-**Agents: never run `specter trust` yourself. Show the user what `specter check` lists
+**Agents: never run `wisp trust` yourself. Show the user what `wisp check` lists
 under "Runs code" and ask them to approve it.**
 
 ## CLI
 
 | Command | Does |
 |---|---|
-| `specter` | at a terminal, the TUI; without one (pipes, scripts, agents), what this project can run |
-| `specter status` | what this project can run, as text, even at a terminal |
-| `specter <bolt>` | run a bolt of this project — any distinctive word of its label |
-| `specter use <file> <bolt>` | run a bolt of a workspace file by path — for cron and scripts |
-| `specter use <workspace> <bolt>` | run a bolt of any known workspace |
-| `specter init [--print] [--yes]` | write a `.specter.json` from what the project has: package.json scripts, docker compose, Makefile, justfile, mise, Taskfile, Procfile |
-| `specter check [path] [--json]` | validate a file, or the one in a folder: errors, warnings, what would run |
-| `specter show [workspace] [--json]` | everything a workspace holds |
-| `specter list [--json]` | every known workspace |
-| `specter trust` | approve a file's commands (for the user, not an agent) |
-| `specter down <bolt> [--deps]` · `specter restart <bolt>` | stop what a bolt started · stop it and run it again |
-| `specter history [bolt \| id] [--log <n>] [--json]` | past runs, each step's result, duration and output |
-| `specter hook <git-hook> <bolt>` · `--list` · `--remove` | run a bolt from a git hook |
-| `specter ps [--all] [--json]` · `specter logs <run> [-f]` · `specter stop <run> \| --all` | what Specter has running |
-| `specter scan <dir>` | find project files under a directory |
-| `specter doctor [--json]` | what works here, and where files live |
-| `specter spec` | this reference |
+| `wisp` | at a terminal, the TUI; without one (pipes, scripts, agents), what this project can run |
+| `wisp status` | what this project can run, as text, even at a terminal |
+| `wisp <bolt>` | run a bolt of this project — any distinctive word of its label |
+| `wisp use <file> <bolt>` | run a bolt of a workspace file by path — for cron and scripts |
+| `wisp use <workspace> <bolt>` | run a bolt of any known workspace |
+| `wisp init [--print] [--yes]` | write a `.wisp.json` from what the project has: package.json scripts, docker compose, Makefile, justfile, mise, Taskfile, Procfile |
+| `wisp check [path] [--json]` | validate a file, or the one in a folder: errors, warnings, what would run |
+| `wisp show [workspace] [--json]` | everything a workspace holds |
+| `wisp list [--json]` | every known workspace |
+| `wisp trust` | approve a file's commands (for the user, not an agent) |
+| `wisp down <bolt> [--deps]` · `wisp restart <bolt>` | stop what a bolt started · stop it and run it again |
+| `wisp history [bolt \| id] [--log <n>] [--json]` | past runs, each step's result, duration and output |
+| `wisp hook <git-hook> <bolt>` · `--list` · `--remove` | run a bolt from a git hook |
+| `wisp ps [--all] [--json]` · `wisp logs <run> [-f]` · `wisp stop <run> \| --all` | what Wisp has running |
+| `wisp scan <dir>` | find project files under a directory |
+| `wisp doctor [--json]` | what works here, and where files live |
+| `wisp spec` | this reference |
 
 Run flags: `--dry-run` (show what would happen and where, change nothing), `--inline`
 (run commands attached, output here), `--detach` (run commands in the background),
 `--all` (everything, not one bolt), `--json`.
 
-## Working with Specter as an agent
+## Working with Wisp as an agent
 
-1. `specter spec` (this), then `specter show --json` to see what exists. In a project
-   without a file, `specter init --yes` writes one from its scripts.
-2. Edit `.specter.json`. Prefer inline steps; add shared assets only when several bolts
+1. `wisp spec` (this), then `wisp show --json` to see what exists. In a project
+   without a file, `wisp init --yes` writes one from its scripts.
+2. Edit `.wisp.json`. Prefer inline steps; add shared assets only when several bolts
    need the same thing. Keep paths relative.
-3. `specter check --json` — exit code 1 means errors. Fix them until `errors` is 0.
-4. `specter <bolt> --dry-run --json` — confirm the plan and where each command would run.
-5. If `check` shows commands waiting for trust, ask the user to run `specter trust`.
-6. `specter <bolt> --inline` to run and read the output directly, or `--detach` for
-   servers and then `specter logs <name>` / `specter ps --json` / `specter down <bolt>`.
-7. For checks, write a job (`"job": true`): `specter Check --json` gives `ok` and a
-   `history` id; `specter history <id> --log <n>` prints the failing step's output.
+3. `wisp check --json` — exit code 1 means errors. Fix them until `errors` is 0.
+4. `wisp <bolt> --dry-run --json` — confirm the plan and where each command would run.
+5. If `check` shows commands waiting for trust, ask the user to run `wisp trust`.
+6. `wisp <bolt> --inline` to run and read the output directly, or `--detach` for
+   servers and then `wisp logs <name>` / `wisp ps --json` / `wisp down <bolt>`.
+7. For checks, write a job (`"job": true`): `wisp Check --json` gives `ok` and a
+   `history` id; `wisp history <id> --log <n>` prints the failing step's output.
 
 ## The TUI
 
-`specter` at a terminal opens it. Everything above can be done there without writing
+`wisp` at a terminal opens it. Everything above can be done there without writing
 JSON: a folder with no file is offered a setup; `e` edits the selected bolt through forms
 (add, change, move, remove steps; rename; make it a job), `a` adds a bolt, `N` a personal
 workspace; `v` shows a bolt whole and read-only, its dependencies opened up; `p` (or `2`)
 shows what is running, grouped by the bolt that started it, with live output; `h` (or `3`)
 the history of every run; `/` searches. `x` on a bolt that needed others asks whether to
-stop those too — `specter down <bolt> --deps` on the command line. Agents should use the
+stop those too — `wisp down <bolt> --deps` on the command line. Agents should use the
 CLI instead.
 
 ## Output and exit codes
@@ -171,4 +171,4 @@ CLI instead.
 - `--json` prints one JSON document to stdout. Errors go to stderr.
 - Exit 0: everything ran. Exit 1: a step failed, `check` found errors, or the command
   was refused (the message says why, and usually what to run instead).
-- Without a terminal Specter never prompts: `specter` with no bolt lists the bolts.
+- Without a terminal Wisp never prompts: `wisp` with no bolt lists the bolts.

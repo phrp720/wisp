@@ -15,11 +15,11 @@ async function load(path: string): Promise<Record<string, unknown>> {
 
 /**
  * The schema is a second description of the format, so it can disagree with the first.
- * These tests make that fail loudly: an editor that accepts what Specter ignores, or flags
- * what Specter reads, is worse than no schema at all.
+ * These tests make that fail loudly: an editor that accepts what Wisp ignores, or flags
+ * what Wisp reads, is worse than no schema at all.
  */
 describe("the published schema", async () => {
-  const schema = await load("schema/specter.schema.json");
+  const schema = await load("schema/wisp.schema.json");
   const ajv = new (Ajv2020 as unknown as typeof Ajv2020.default)({ strict: false, allErrors: true });
   const validate = ajv.compile(schema);
 
@@ -71,7 +71,7 @@ describe("the published schema", async () => {
     };
 
     expect(valid(file)).toBe(true);
-    const read = interpret({ main: file }, { file: "/w/.specter.json", personal: false, trust: "trusted", os: "darwin" });
+    const read = interpret({ main: file }, { file: "/w/.wisp.json", personal: false, trust: "trusted", os: "darwin" });
     expect(read.diagnostics.filter((entry) => entry.level === "error")).toEqual([]);
   });
 
@@ -83,7 +83,7 @@ describe("the published schema", async () => {
     expect(valid({ bolts: [{ label: "x", targets: [{ folder: "a", run: "b" }] }] })).not.toBe(true);
   });
 
-  it("validates Specter's own project file", async () => {
-    expect(valid(await load(".specter.json"))).toBe(true);
+  it("validates Wisp's own project file", async () => {
+    expect(valid(await load(".wisp.json"))).toBe(true);
   });
 });

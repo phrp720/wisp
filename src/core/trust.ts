@@ -3,7 +3,7 @@ import { realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 
-import { SpecterError, describe, isNotFound } from "./errors.js";
+import { WispError, describe, isNotFound } from "./errors.js";
 import { expandHome, readJson, trustPath, withLock, writeJson } from "./paths.js";
 import type { TrustFile, TrustState, TrustedProject } from "./types.js";
 
@@ -17,7 +17,7 @@ import type { TrustFile, TrustState, TrustedProject } from "./types.js";
 
 const TRUST_VERSION = 1;
 
-/** The personal override that sits beside a project file: `.specter.local.json`. */
+/** The personal override that sits beside a project file: `.wisp.local.json`. */
 export function localFileFor(file: string): string {
   const name = basename(file).replace(/\.json$/i, "");
   return join(dirname(file), `${name}.local.json`);
@@ -35,14 +35,14 @@ export async function readTrustedBytes(file: string): Promise<{ main: Buffer; lo
   try {
     main = await readFile(path);
   } catch (error) {
-    throw new SpecterError(`Could not read ${path}: ${describe(error)}`, "PROJECT_READ_FAILED");
+    throw new WispError(`Could not read ${path}: ${describe(error)}`, "PROJECT_READ_FAILED");
   }
 
   try {
     return { main, local: await readFile(localFileFor(path)) };
   } catch (error) {
     if (isNotFound(error)) return { main };
-    throw new SpecterError(`Could not read ${localFileFor(path)}: ${describe(error)}`, "PROJECT_READ_FAILED");
+    throw new WispError(`Could not read ${localFileFor(path)}: ${describe(error)}`, "PROJECT_READ_FAILED");
   }
 }
 
@@ -60,7 +60,7 @@ export function hashContents(main: Buffer | string, local?: Buffer | string): st
   const hash = createHash("sha256").update(main);
   // A separator no JSON file can contain, so moving bytes between the two files changes
   // the hash.
-  if (local !== undefined) hash.update("\u0000specter-local\u0000").update(local);
+  if (local !== undefined) hash.update("\u0000wisp-local\u0000").update(local);
   return hash.digest("hex");
 }
 
@@ -89,8 +89,8 @@ export async function trustProject(file: string, expectedHash?: string): Promise
   const path = absolutePath(file);
   const hash = await hashProjectFile(path);
   if (expectedHash && expectedHash !== hash) {
-    throw new SpecterError(
-      `${path} changed while you were reading it — nothing was trusted. Look again and re-run \`specter trust\``,
+    throw new WispError(
+      `${path} changed while you were reading it — nothing was trusted. Look again and re-run \`wisp trust\``,
       "CHANGED",
     );
   }

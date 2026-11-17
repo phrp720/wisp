@@ -19,8 +19,8 @@ let dir: string;
 let previousShell: string | undefined;
 
 beforeEach(async () => {
-  dir = await realpath(await mkdtemp(join(tmpdir(), "specter-jobs-")));
-  process.env["SPECTER_HOME"] = join(dir, "home");
+  dir = await realpath(await mkdtemp(join(tmpdir(), "wisp-jobs-")));
+  process.env["WISP_HOME"] = join(dir, "home");
   // A plain shell: the user's own would read their whole profile on every command.
   previousShell = process.env["SHELL"];
   process.env["SHELL"] = "/bin/sh";
@@ -28,13 +28,13 @@ beforeEach(async () => {
 
 afterEach(async () => {
   for (const run of await listRuns()) if (run.alive) stopRun(run);
-  delete process.env["SPECTER_HOME"];
+  delete process.env["WISP_HOME"];
   if (previousShell === undefined) delete process.env["SHELL"];
   else process.env["SHELL"] = previousShell;
   await rm(dir, { recursive: true, force: true });
 });
 
-function workspace(main: Record<string, unknown>, file = join(dir, ".specter.json")): Workspace {
+function workspace(main: Record<string, unknown>, file = join(dir, ".wisp.json")): Workspace {
   return interpret({ main }, { file, personal: false, trust: "trusted", os: "darwin" }).workspace;
 }
 
@@ -147,7 +147,7 @@ describe("waits", () => {
     const began = Date.now();
     const result = await switchToWorkspace(ws, { bolt: "api" }, { platform: recorder(), environment: desktop, defaults: {} });
     expect(Date.now() - began).toBeLessThan(10_000);
-    expect(result.targets[1]!.error).toMatch(/^server stopped before it was ready — `specter logs \w+`$/);
+    expect(result.targets[1]!.error).toMatch(/^server stopped before it was ready — `wisp logs \w+`$/);
   }, 15_000);
 });
 
@@ -237,7 +237,7 @@ describe("compose steps", () => {
     const { parseComposePs, containerMood, shortStatus } = await import("./docker.js");
     const untrusted = interpret(
       { main: { bolts: [{ label: "Services", targets: [{ compose: "deploy/compose.yml", services: ["db"] }] }] } },
-      { file: join(dir, ".specter.json"), personal: false, trust: "untrusted", os: "darwin" },
+      { file: join(dir, ".wisp.json"), personal: false, trust: "untrusted", os: "darwin" },
     );
     expect(untrusted.withheld).toEqual([expect.objectContaining({ kind: "compose", reason: "starts containers" })]);
     expect(await planBolt(untrusted.workspace, resolveBolt(untrusted.workspace, "services"))).toEqual([]);
@@ -315,7 +315,7 @@ describe("restart policies", () => {
     expect(starts).toBeGreaterThanOrEqual(2);
     const [run] = await listRuns();
     const { tail } = await import("./processes.js");
-    expect(await tail(run!.log, 50)).toContain("[specter] restarting server (exited with 1) — try 1 of 10");
+    expect(await tail(run!.log, 50)).toContain("[wisp] restarting server (exited with 1) — try 1 of 10");
     stopRun(run!);
   }, 10_000);
 
@@ -331,7 +331,7 @@ describe("restart policies", () => {
   it("are read from the file, and a wrong one is said", () => {
     const read = interpret(
       { main: { commands: [{ label: "a", run: "x", restart: "on-failure" }, { label: "b", run: "y", restart: "sometimes" }] } },
-      { file: "/w/.specter.json", personal: false, trust: "trusted", os: "darwin" },
+      { file: "/w/.wisp.json", personal: false, trust: "trusted", os: "darwin" },
     );
     expect(read.declaredCommands.map((command) => command.restart)).toEqual(["on-failure", undefined]);
     expect(read.diagnostics).toContainEqual(expect.objectContaining({ at: "commands[1].restart", level: "warning" }));

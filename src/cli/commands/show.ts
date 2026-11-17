@@ -13,7 +13,7 @@ export const show: CommandDef<{ json?: boolean }> = {
   summary: "Show everything a workspace holds, and what each bolt does",
   args: [["[workspace]", "workspace name; omitted uses this directory's project"]],
   options: [["--json", "print the resolved workspace as JSON"]],
-  examples: ["specter show", "specter show acme", "specter show --json"],
+  examples: ["wisp show", "wisp show acme", "wisp show --json"],
 
   async run([query], options) {
     const read = await workspaceFor(query);

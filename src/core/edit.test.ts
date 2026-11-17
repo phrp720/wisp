@@ -27,14 +27,14 @@ let dir: string;
 let file: string;
 
 beforeEach(async () => {
-  dir = await realpath(await mkdtemp(join(tmpdir(), "specter-edit-")));
-  process.env["SPECTER_HOME"] = join(dir, "home");
+  dir = await realpath(await mkdtemp(join(tmpdir(), "wisp-edit-")));
+  process.env["WISP_HOME"] = join(dir, "home");
   file = join(dir, PROJECT_FILE);
   await writeFile(file, JSON.stringify({ name: "Shop", bolts: [{ label: "Work on api", color: "#4a9dff", targets: [{ folder: "apps/api" }] }] }));
 });
 
 afterEach(async () => {
-  delete process.env["SPECTER_HOME"];
+  delete process.env["WISP_HOME"];
   await rm(dir, { recursive: true, force: true });
 });
 

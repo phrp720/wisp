@@ -2,7 +2,7 @@ import { posixCommandLine } from "../core/shell.js";
 import type { Invocation } from "../core/types.js";
 
 /**
- * A terminal Specter knows how to hand a command to.
+ * A terminal Wisp knows how to hand a command to.
  *
  * `args` builds what goes after the terminal's own program name — or after `open -na App
  * --args` on macOS, which is the same thing. Each terminal has its own way of being told
@@ -104,7 +104,7 @@ export const LINUX_TERMINALS: TerminalSpec[] = [
 export const MULTIPLEXERS = ["tmux", "zellij"] as const;
 
 /**
- * The terminal a reference means: its name, an alias, or — as everywhere in Specter — a
+ * The terminal a reference means: its name, an alias, or — as everywhere in Wisp — a
  * prefix only one of them has. `ghost` is only ever Ghostty.
  */
 export function findIn(specs: { name: string; aliases: string[] }[], ref: string): string | undefined {

@@ -15,7 +15,7 @@ export const init: CommandDef<{ force?: boolean; yes?: boolean; print?: boolean 
     ["-y, --yes", "write it without showing it first"],
     ["--print", "print the draft to stdout and write nothing"],
   ],
-  examples: ["specter init", "specter init --print", "specter init --force"],
+  examples: ["wisp init", "wisp init --print", "wisp init --force"],
 
   async run(_args, options) {
     const draft = await draftProject();
@@ -59,7 +59,7 @@ export const init: CommandDef<{ force?: boolean; yes?: boolean; print?: boolean 
     await writeProjectDraft(draft, options.force ?? false);
 
     console.log(`${green("✓")} wrote ${cyan(relative(process.cwd(), draft.file) || draft.file)}`);
-    console.log(dim("Run it with `specter`. Check it any time with `specter check`."));
+    console.log(dim("Run it with `wisp`. Check it any time with `wisp check`."));
     console.log(dim("Commit it — that is the point: the repository carries its own context."));
   },
 };

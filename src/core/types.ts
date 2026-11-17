@@ -1,4 +1,4 @@
-/** The operating systems Specter knows, by Node's own names for them. */
+/** The operating systems Wisp knows, by Node's own names for them. */
 export type OS = "darwin" | "linux" | "win32";
 
 export const OPERATING_SYSTEMS: readonly OS[] = ["darwin", "linux", "win32"];
@@ -102,7 +102,7 @@ export type WaitSpec =
  * One step of a bolt: open an asset, wait for something, or first run another bolt —
  * this workspace's, or another workspace's when `workspace` names one. A dependency runs
  * once per run however many bolts need it, and a command it would start is skipped when
- * Specter already has it running.
+ * Wisp already has it running.
  */
 export type BoltStep =
   | { kind: "asset"; id: string }
@@ -110,7 +110,7 @@ export type BoltStep =
   | { kind: "bolt"; bolt: string; workspace?: string }
   /**
    * Services of a compose file: started with `up --wait`, so the step is done when they are
-   * healthy; stopped by `specter down`; shown with their state, health and logs.
+   * healthy; stopped by `wisp down`; shown with their state, health and logs.
    */
   | { kind: "compose"; file: string; services?: string[] };
 
@@ -130,15 +130,15 @@ export interface Bolt {
    * first failure stops it, and every run is kept in history. "Test", "Build", "Release".
    */
   job?: boolean;
-  /** Run by `specter down` after stopping what the bolt started: `docker compose stop`. */
+  /** Run by `wisp down` after stopping what the bolt started: `docker compose stop`. */
   down?: BoltStep[];
 }
 
 /**
- * A workspace: what one `.specter.json` describes.
+ * A workspace: what one `.wisp.json` describes.
  *
  * There is exactly one format. A project commits its file next to its code; a personal
- * workspace is the same format kept in Specter's own directory. The only difference is
+ * workspace is the same format kept in Wisp's own directory. The only difference is
  * trust — a file you keep in your own config is yours, and its commands run.
  */
 export interface Workspace {
@@ -148,13 +148,13 @@ export interface Workspace {
   color?: string;
   icon?: string;
   notes?: string;
-  /** The `.specter.json` this was read from. */
+  /** The `.wisp.json` this was read from. */
   file: string;
-  /** Kept in Specter's own workspaces directory, rather than committed in a project. */
+  /** Kept in Wisp's own workspaces directory, rather than committed in a project. */
   personal: boolean;
   /** Whether this file may run code: its commands, and anything that executes when opened. */
   trusted: boolean;
-  /** The `.specter.local.json` merged in beside the file, when there is one. */
+  /** The `.wisp.local.json` merged in beside the file, when there is one. */
   local?: string;
   links: Link[];
   folders: Folder[];
@@ -168,7 +168,7 @@ export interface Workspace {
 /**
  * Which app opens a project's folders and files, and which terminal runs its commands.
  *
- * A committed `.specter.json` must not name an editor — that is a fight in code review,
+ * A committed `.wisp.json` must not name an editor — that is a fight in code review,
  * not a shared fact — so the file says which folder and this says what opens it.
  */
 export interface OpenWithDefaults {
@@ -177,9 +177,9 @@ export interface OpenWithDefaults {
   terminal?: string;
 }
 
-/** A project file Specter has seen you use, so it can be listed from anywhere. */
+/** A project file Wisp has seen you use, so it can be listed from anywhere. */
 export interface KnownProject {
-  /** Absolute path to the `.specter.json`. */
+  /** Absolute path to the `.wisp.json`. */
   path: string;
   /** ISO timestamp of the last time it was run or looked at. */
   lastUsed: string;
@@ -195,7 +195,7 @@ export interface Config {
 }
 
 /**
- * A `.specter.json` you have allowed to run commands.
+ * A `.wisp.json` you have allowed to run commands.
  *
  * The hash is the point: trust is granted to the file you read, not to the path. A pulled
  * change rewrites the hash, the grant stops matching, and the commands are refused again
@@ -225,7 +225,7 @@ export type TrustState =
 /**
  * Something worth saying about a workspace file that is not worth refusing it over.
  *
- * A committed `.specter.json` is read by people who did not write it, so a bolt naming an
+ * A committed `.wisp.json` is read by people who did not write it, so a bolt naming an
  * asset that is not there has to be reported rather than quietly dropped.
  */
 export interface Diagnostic {
@@ -252,7 +252,7 @@ export interface Withheld {
   reason?: string;
 }
 
-/** A workspace file as read: what it declared, and everything Specter had to say about it. */
+/** A workspace file as read: what it declared, and everything Wisp had to say about it. */
 export interface WorkspaceRead {
   workspace: Workspace;
   diagnostics: Diagnostic[];
@@ -313,7 +313,7 @@ export interface SwitchResult {
   targets: TargetResult[];
   dryRun: boolean;
   bolt?: Bolt;
-  /** The run's entry in history, for `specter history <id>`. */
+  /** The run's entry in history, for `wisp history <id>`. */
   historyId?: string;
   ok: boolean;
   /** What it set out to do, step by step — so the failed part can be run again. */
@@ -344,7 +344,7 @@ export interface SwitchOptions {
   onResult?: (result: TargetResult) => void;
   /**
    * Runs an attached command for the caller instead, resolving with its exit code. Without
-   * one, Specter runs it, keeps its output in history, and passes it to `onOutput`.
+   * one, Wisp runs it, keeps its output in history, and passes it to `onOutput`.
    */
   runInline?: (target: SwitchTarget, invocation: Invocation) => Promise<number>;
   /** Also print attached commands' output here, and give them this terminal's input. */

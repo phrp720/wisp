@@ -2,7 +2,7 @@ import { realpath, stat } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { getOpenWithDefaults } from "./config.js";
-import { SpecterError, describe } from "./errors.js";
+import { WispError, describe } from "./errors.js";
 import { currentOS, expandHome, workspacesDir } from "./paths.js";
 import { hashContents, localFileFor, readTrustedBytes, trustStateOf } from "./trust.js";
 import type {
@@ -26,10 +26,10 @@ import type {
 } from "./types.js";
 
 /** What a project file is called, wherever it sits. */
-export const PROJECT_FILE = ".specter.json";
+export const PROJECT_FILE = ".wisp.json";
 
 /** The personal override beside it, meant to be gitignored. */
-export const LOCAL_FILE = ".specter.local.json";
+export const LOCAL_FILE = ".wisp.local.json";
 
 /**
  * Where the schema lives, so a file can point an editor at it.
@@ -38,7 +38,7 @@ export const LOCAL_FILE = ".specter.local.json";
  * last year's copy would start complaining about a key that works.
  */
 export const PROJECT_SCHEMA_URL =
-  "https://raw.githubusercontent.com/phrp720/specter/main/schema/specter.schema.json";
+  "https://raw.githubusercontent.com/phrp720/wisp/main/schema/wisp.schema.json";
 
 const OS_NAMES: Record<OS, string> = { darwin: "macOS", linux: "Linux", win32: "Windows" };
 
@@ -69,7 +69,7 @@ const KNOWN_OS_KEYS = "macos, linux, windows";
 
 /** Keys a workspace file may set. Anything else is a typo worth reporting. */
 const KNOWN_KEYS = new Set([
-  // Not read by Specter — it is there so editors validate the file as you type.
+  // Not read by Wisp — it is there so editors validate the file as you type.
   "$schema",
   "name",
   "icon",
@@ -126,7 +126,7 @@ export async function findProjectFile(from: string = process.cwd()): Promise<str
 }
 
 /**
- * Whether a file really lives in Specter's own workspaces directory, and so is yours.
+ * Whether a file really lives in Wisp's own workspaces directory, and so is yours.
  *
  * By real path, both sides: a personal workspace runs its commands without asking, so a
  * symlink in that directory pointing at some repository's file must not borrow the trust.
@@ -140,13 +140,13 @@ export async function isPersonalFile(file: string): Promise<boolean> {
 }
 
 export interface ReadOptions {
-  /** Read as if on this OS. Defaults to the one Specter is running on. */
+  /** Read as if on this OS. Defaults to the one Wisp is running on. */
   os?: OS;
 }
 
 /**
  * Read a workspace file — and its local override, when it has one — with everything
- * Specter had to say about it.
+ * Wisp had to say about it.
  *
  * Paths are relative to the file, since a committed file cannot know where anyone cloned
  * it. Bolts name their assets by label — ids are derived here, because a hand-written,
@@ -157,7 +157,7 @@ export async function readProjectFile(file: string, options: ReadOptions = {}): 
   // The real path is the identity, so trust and the personal check cannot be fooled by a
   // link, and a project reached through two different symlinks is one project.
   const path = await realpath(given).catch((error: unknown) => {
-    throw new SpecterError(`Could not read ${given}: ${describe(error)}`, "PROJECT_READ_FAILED");
+    throw new WispError(`Could not read ${given}: ${describe(error)}`, "PROJECT_READ_FAILED");
   });
 
   const personal = await isPersonalFile(path);
@@ -183,9 +183,9 @@ function parseObject(bytes: Buffer, file: string): Record<string, unknown> {
   try {
     parsed = JSON.parse(bytes.toString("utf8"));
   } catch (error) {
-    throw new SpecterError(`${file} is not valid JSON: ${describe(error)}`, "PROJECT_INVALID");
+    throw new WispError(`${file} is not valid JSON: ${describe(error)}`, "PROJECT_INVALID");
   }
-  if (!isRecord(parsed)) throw new SpecterError(`${file} does not contain an object`, "PROJECT_INVALID");
+  if (!isRecord(parsed)) throw new WispError(`${file} does not contain an object`, "PROJECT_INVALID");
   return parsed;
 }
 
@@ -322,8 +322,8 @@ export function interpret(
           : `${parts.join(" and ")} declared but will not run`,
       hint:
         input.trust === "stale"
-          ? "Read what changed with `specter check`, then `specter trust` again"
-          : "Read them with `specter check`, then allow them with `specter trust`",
+          ? "Read what changed with `wisp check`, then `wisp trust` again"
+          : "Read them with `wisp check`, then allow them with `wisp trust`",
     });
   }
 
@@ -355,10 +355,10 @@ export function runsCode(kind: TargetKind, value: string): string | undefined {
   return undefined;
 }
 
-/** `acme` for `~/dev/acme/.specter.json`, `Morning` for `workspaces/Morning.specter.json`. */
+/** `acme` for `~/dev/acme/.wisp.json`, `Morning` for `workspaces/Morning.wisp.json`. */
 function defaultName(file: string, personal: boolean): string {
   if (personal) {
-    const name = basename(file).replace(/(\.specter)?\.json$/i, "");
+    const name = basename(file).replace(/(\.wisp)?\.json$/i, "");
     if (name) return name;
   }
   return basename(dirname(file)) || "Project";
@@ -503,7 +503,7 @@ function assets<T>(entries: Entry[], spec: AssetSpec<T>, ctx: Context): T[] {
         level: "warning",
         at: `${at}.openWith`,
         message: "a shared workspace file does not choose anyone's editor — this is ignored",
-        hint: 'Set your own with `specter open-with folder "Visual Studio Code"`',
+        hint: 'Set your own with `wisp open-with folder "Visual Studio Code"`',
       });
     }
 
@@ -603,7 +603,7 @@ function commands(entries: Entry[], ctx: Context): Command[] {
         ctx.found.push({
           level: "warning",
           at: `${at}.shell`,
-          message: `"${String(shell)}" is not a shell Specter knows — the platform's usual one is used`,
+          message: `"${String(shell)}" is not a shell Wisp knows — the platform's usual one is used`,
           hint: `Known shells: ${SHELLS.join(", ")}`,
         });
       }
@@ -713,8 +713,8 @@ function bolts(entries: Entry[], declared: { id: string; label: string }[], ctx:
       }
     }
 
-    // What `specter down` runs after stopping what the bolt started: the teardown that is
-    // not a process Specter can stop, like `docker compose stop`.
+    // What `wisp down` runs after stopping what the bolt started: the teardown that is
+    // not a process Wisp can stop, like `docker compose stop`.
     if (entry["down"] !== undefined) {
       if (Array.isArray(entry["down"])) {
         const down = parseSteps(entry["down"] as unknown[], `${at}.down`, label, byName, declared, ctx).steps;
@@ -1002,7 +1002,7 @@ export async function checkProject(file: string, options: ReadOptions = {}): Pro
 
   for (const link of read.workspace.links) {
     if (!isUrlish(link.url)) {
-      found.push({ level: "error", at: `links`, message: `"${link.url}" is not a url Specter can open` });
+      found.push({ level: "error", at: `links`, message: `"${link.url}" is not a url Wisp can open` });
     }
   }
 
@@ -1033,7 +1033,7 @@ function perOS(value: unknown, at: string, ctx: Context): Picked {
       ctx.found.push({
         level: "warning",
         at: `${at}.${key}`,
-        message: `"${key}" is not an OS Specter knows — it is ignored`,
+        message: `"${key}" is not an OS Wisp knows — it is ignored`,
         hint: `Known: ${KNOWN_OS_KEYS}`,
       });
       continue;
@@ -1069,7 +1069,7 @@ function allowedHere(value: unknown, at: string, ctx: Context): boolean {
     ctx.found.push({
       level: "warning",
       at,
-      message: "some of these are not operating systems Specter knows",
+      message: "some of these are not operating systems Wisp knows",
       hint: `Known: ${KNOWN_OS_KEYS}`,
     });
   }

@@ -64,7 +64,7 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
   const savedAt = useRef(0);
 
   /** Say what changed, in a line that stays a few seconds. */
-  // What Specter did and what happened, newest first — like lazygit's command log: notices
+  // What Wisp did and what happened, newest first — like lazygit's command log: notices
   // flash by, this keeps them. Shown under the Running list.
   const [events, setEvents] = useState<Activity[]>([]);
   const record = useCallback((text: string, tone: Notice["tone"] = "info") => {
@@ -126,7 +126,7 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
   );
 
   // First load: start on the project you are standing in, with its bolts in focus — the
-  // same answer bare `specter` gives on the command line, one keypress from running.
+  // same answer bare `wisp` gives on the command line, one keypress from running.
   useEffect(() => {
     void reload().then(async (next) => {
       const first = next ? ordered(next)[0] : undefined;
@@ -537,7 +537,7 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
 
     if (input === "q" && view.kind === "browse") {
       // Nothing left running attached and unseen.
-      stopActive("Specter was closed");
+      stopActive("Wisp was closed");
       return exit();
     }
 
@@ -758,7 +758,7 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
   }, { isActive: !SELF_DRIVEN.has(view.kind) });
 
   const bodyHeight = Math.max(4, rows - 2);
-  const hereLabel = library?.here ? tildify(library.here.replace(/[\\/]\.specter\.json$/, "")) : undefined;
+  const hereLabel = library?.here ? tildify(library.here.replace(/[\\/]\.wisp\.json$/, "")) : undefined;
 
   return (
     <Box flexDirection="column" width={columns} height={rows}>
@@ -788,7 +788,7 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
           onAnswer={async (yes) => {
             if (!yes) {
               setView({ kind: "browse" });
-              setMessage("Not now — press a in a workspace to add bolts by hand, or run `specter init` later");
+              setMessage("Not now — press a in a workspace to add bolts by hand, or run `wisp init` later");
               return;
             }
             try {
@@ -835,7 +835,7 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
           title={`A new bolt in ${view.workspace}`}
           intro="A bolt is one thing you do — 'Work on the API', 'Run the tests'. You'll add its steps next."
           fields={[
-            { key: "label", label: "Name", hint: "what you're doing — any word of it runs it: specter api", placeholder: "Work on the API", required: true },
+            { key: "label", label: "Name", hint: "what you're doing — any word of it runs it: wisp api", placeholder: "Work on the API", required: true },
             {
               key: "kind",
               label: "Kind",
@@ -870,7 +870,7 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
       ) : view.kind === "new-workspace" ? (
         <Form
           title="A workspace of your own"
-          intro="For things that belong to no project: 'Morning', 'On call', 'University'. It lives in Specter's own folder, and its commands run without asking — it's yours."
+          intro="For things that belong to no project: 'Morning', 'On call', 'University'. It lives in Wisp's own folder, and its commands run without asking — it's yours."
           fields={[{ key: "name", label: "Name", hint: "what it's for", placeholder: "Morning", required: true }]}
           submitLabel="Create workspace"
           glyphs={glyphs}
@@ -1023,7 +1023,7 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
         </Box>
       )}
 
-      <Footer view={view} notice={notice} message={message ?? (library?.unreadable.length ? `${library.unreadable.length} workspace file(s) could not be read — \`specter list\`` : undefined)} />
+      <Footer view={view} notice={notice} message={message ?? (library?.unreadable.length ? `${library.unreadable.length} workspace file(s) could not be read — \`wisp list\`` : undefined)} />
     </Box>
   );
 }

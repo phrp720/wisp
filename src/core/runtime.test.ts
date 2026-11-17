@@ -15,12 +15,12 @@ import type { Workspace } from "./types.js";
 let dir: string;
 
 beforeEach(async () => {
-  dir = await realpath(await mkdtemp(join(tmpdir(), "specter-runtime-")));
-  process.env["SPECTER_HOME"] = join(dir, "home");
+  dir = await realpath(await mkdtemp(join(tmpdir(), "wisp-runtime-")));
+  process.env["WISP_HOME"] = join(dir, "home");
 });
 
 afterEach(async () => {
-  delete process.env["SPECTER_HOME"];
+  delete process.env["WISP_HOME"];
   await rm(dir, { recursive: true, force: true });
 });
 
@@ -38,7 +38,7 @@ describe("detectEnvironment", () => {
   it("notices tmux and zellij, and can be told outright", () => {
     expect(detectEnvironment({ TMUX: "/tmp/tmux-1/default,1,0" }, "linux").multiplexer).toBe("tmux");
     expect(detectEnvironment({ ZELLIJ: "0" }, "linux").multiplexer).toBe("zellij");
-    expect(detectEnvironment({ SPECTER_HEADLESS: "1" }, "darwin").gui).toBe(false);
+    expect(detectEnvironment({ WISP_HEADLESS: "1" }, "darwin").gui).toBe(false);
   });
 });
 
@@ -73,17 +73,17 @@ describe("shellInvocation", () => {
 
 describe("config", () => {
   it("remembers projects most recent first, and forgets them", async () => {
-    await recordProject("/a/.specter.json", new Date("2026-01-01"));
-    await recordProject("/b/.specter.json", new Date("2026-01-02"));
-    await recordProject("/a/.specter.json", new Date("2026-01-03"));
-    expect((await knownProjects()).map((project) => project.path)).toEqual(["/a/.specter.json", "/b/.specter.json"]);
+    await recordProject("/a/.wisp.json", new Date("2026-01-01"));
+    await recordProject("/b/.wisp.json", new Date("2026-01-02"));
+    await recordProject("/a/.wisp.json", new Date("2026-01-03"));
+    expect((await knownProjects()).map((project) => project.path)).toEqual(["/a/.wisp.json", "/b/.wisp.json"]);
 
-    expect(await forgetProject("/a/.specter.json")).toBe(true);
-    expect((await knownProjects()).map((project) => project.path)).toEqual(["/b/.specter.json"]);
+    expect(await forgetProject("/a/.wisp.json")).toBe(true);
+    expect((await knownProjects()).map((project) => project.path)).toEqual(["/b/.wisp.json"]);
   });
 
   it("does not lose writes when several runs record at once", async () => {
-    await Promise.all(Array.from({ length: 12 }, (_, index) => recordProject(`/p${index}/.specter.json`)));
+    await Promise.all(Array.from({ length: 12 }, (_, index) => recordProject(`/p${index}/.wisp.json`)));
     expect(await knownProjects()).toHaveLength(12);
   });
 
@@ -99,7 +99,7 @@ describe("background runs", () => {
     const started = await startRun({
       label: "server",
       command: "echo ready; sleep 30",
-      workspace: "/w/.specter.json",
+      workspace: "/w/.wisp.json",
       workspaceName: "w",
       asset: "command:server",
       invocation: { file: "/bin/sh", args: ["-c", "echo ready; sleep 30"] },
@@ -120,7 +120,7 @@ describe("background runs", () => {
     const started = await startRun({
       label: "broken",
       command: "nope",
-      workspace: "/w/.specter.json",
+      workspace: "/w/.wisp.json",
       workspaceName: "w",
       asset: "command:broken",
       invocation: { file: "/bin/sh", args: ["-c", "echo missing thing >&2; exit 2"] },

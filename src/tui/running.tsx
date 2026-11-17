@@ -16,11 +16,11 @@ import { type Activity, clock, type PaneGroup, type PaneItem, type RunState, sin
 import { TONE } from "./tones.js";
 
 /**
- * What Specter is running, each in a pane of its own: the list on the left, each with its
+ * What Wisp is running, each in a pane of its own: the list on the left, each with its
  * last line, and the selected one's live output filling the rest — colours and all.
  */
 /**
- * What is running, each in a pane of its own: Specter's commands and Docker's containers
+ * What is running, each in a pane of its own: Wisp's commands and Docker's containers
  * together, in a list on the left with how each is doing, and the selected one's live
  * output filling the rest — colours and all.
  */
@@ -483,7 +483,7 @@ export function restartsOf(lines: string[]): { count: number; gaveUp: boolean } 
   let gaveUp = false;
   for (const line of lines) {
     if (line.includes(RESTART_MARK)) count += 1;
-    if (line.includes("[specter]") && line.includes("gave up after")) gaveUp = true;
+    if (line.includes("[wisp]") && line.includes("gave up after")) gaveUp = true;
   }
   return { count, gaveUp };
 }

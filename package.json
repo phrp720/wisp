@@ -1,20 +1,20 @@
 {
-  "name": "@squaredasher/specter",
+  "name": "@squaredasher/wisp",
   "version": "0.1.0",
   "description": "Run a project's bolts from the terminal: its links, folders, files, apps and commands, started together. macOS, Linux and Windows.",
   "keywords": [
-    "specter",
+    "wisp",
     "cli",
     "tui",
     "workspace",
     "launcher",
     "productivity"
   ],
-  "homepage": "https://github.com/phrp720/specter#readme",
-  "bugs": "https://github.com/phrp720/specter/issues",
+  "homepage": "https://github.com/phrp720/wisp#readme",
+  "bugs": "https://github.com/phrp720/wisp/issues",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/phrp720/specter.git"
+    "url": "git+https://github.com/phrp720/wisp.git"
   },
   "license": "MIT",
   "author": "phrp720",
@@ -24,7 +24,7 @@
     "node": ">=20"
   },
   "bin": {
-    "specter": "./dist/cli/index.js"
+    "wisp": "./dist/cli/index.js"
   },
   "main": "./dist/core/index.js",
   "types": "./dist/core/index.d.ts",

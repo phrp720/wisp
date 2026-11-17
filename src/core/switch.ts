@@ -9,7 +9,7 @@ import { MULTIPLEXERS } from "../platform/terminals.js";
 import { getOpenWithDefaults } from "./config.js";
 import { composeStopArgs, composeUpArgs, type Container } from "./docker.js";
 import { detectEnvironment, type Environment } from "./environment.js";
-import { SpecterError, describe } from "./errors.js";
+import { WispError, describe } from "./errors.js";
 import { gitState, newHistoryId, recordHistory, stepLogPath, type HistoryEntry, type HistoryStep } from "./history.js";
 import { currentOS, expandHome } from "./paths.js";
 import { listRuns, newRunId, pidFileFor, recordWindowRun, runningFor, startRun, stopRun, type RunStatus } from "./processes.js";
@@ -92,7 +92,7 @@ export async function planRetry(
   entry: HistoryEntry,
   deps: Pick<RunDeps, "findWorkspace"> = {},
 ): Promise<PlannedStep[]> {
-  if (entry.ok) throw new SpecterError(`That run of "${entry.bolt}" passed — there is nothing to retry`, "NOTHING_TO_RETRY");
+  if (entry.ok) throw new WispError(`That run of "${entry.bolt}" passed — there is nothing to retry`, "NOTHING_TO_RETRY");
   const label = entry.bolt.replace(/ \((retry|down)\)$/, "");
   const plan = await planBolt(workspace, resolveBolt(workspace, label), deps.findWorkspace ? { findWorkspace: deps.findWorkspace } : {});
   // A retry's own history holds only the steps it retried: match those by label instead.
@@ -106,7 +106,7 @@ export async function planRetry(
     });
   }
   const again = plan.filter((step) => failedLabels.has(step.target.label));
-  if (again.length === 0) throw new SpecterError(`"${label}" has changed since that run — run it whole`, "NOTHING_TO_RETRY");
+  if (again.length === 0) throw new WispError(`"${label}" has changed since that run — run it whole`, "NOTHING_TO_RETRY");
   return again;
 }
 
@@ -241,7 +241,7 @@ async function deadBefore(context: Context): Promise<string | undefined> {
     const run = runs.find((entry) => entry.id === started.id);
     if (!run || run.alive) continue;
     return run.log
-      ? `${run.label} stopped before it was ready — \`specter logs ${run.id}\``
+      ? `${run.label} stopped before it was ready — \`wisp logs ${run.id}\``
       : `${run.label} stopped before it was ready — its ${run.where ?? "terminal"} window shows why`;
   }
   return undefined;
@@ -275,7 +275,7 @@ export async function planBolt(
     const key = `${owner.file}#${current.id}`;
     if (stack.includes(key)) {
       const names = [...stack.slice(stack.indexOf(key)), key].map((entry) => entry.split("#bolt:")[1] ?? entry);
-      throw new SpecterError(`These bolts need each other: ${names.join(" → ")}`, "CYCLE");
+      throw new WispError(`These bolts need each other: ${names.join(" → ")}`, "CYCLE");
     }
     if (expanded.has(key)) return;
     expanded.add(key);
@@ -343,7 +343,7 @@ export function composeTarget(step: { file: string; services?: string[] }, actio
 
 async function otherWorkspace(ref: string, find: ((ref: string) => Promise<Workspace>) | undefined): Promise<Workspace> {
   if (!find) {
-    throw new SpecterError(`A dependency names the workspace "${ref}", which cannot be looked up here`, "NOT_FOUND");
+    throw new WispError(`A dependency names the workspace "${ref}", which cannot be looked up here`, "NOT_FOUND");
   }
   return find(ref);
 }
@@ -432,7 +432,7 @@ async function openPath(target: SwitchTarget, workspace: Workspace, context: Con
   // The parser withholds what runs by its extension; this catches the rest — a script with
   // no extension but an execute bit, which a file manager would happily run.
   if (!workspace.trusted && !wantsFolder && currentOS() !== "win32" && (stats.mode & 0o111) !== 0) {
-    throw new Error("this file is executable, so it waits until you trust the workspace — `specter trust`");
+    throw new Error("this file is executable, so it waits until you trust the workspace — `wisp trust`");
   }
 
   if (!context.environment.gui) return { ...target, ok: true, skipped: true, note: "no display — skipped" };
@@ -459,7 +459,7 @@ export function routeFor(
   job = false,
 ): Route {
   // A job runs to completion where you can see it, and its result is the point: it is
-  // attached however Specter was asked to run, unless the command itself says background.
+  // attached however Wisp was asked to run, unless the command itself says background.
   const mode = target.background ? "background" : job ? "inline" : (context.options.mode ?? "auto");
   if (mode === "background") return { kind: "background" };
   if (mode === "inline") return { kind: "inline" };
@@ -468,7 +468,7 @@ export function routeFor(
   const preference = target.openWith?.trim() || context.defaults.terminal?.trim();
   const multiplexer = (MULTIPLEXERS as readonly string[]).find((name) => name === preference?.toLowerCase());
 
-  // Nothing chosen: Specter keeps it. The command runs in the background with its output
+  // Nothing chosen: Wisp keeps it. The command runs in the background with its output
   // kept, and the TUI shows it in a pane of its own — no window appears, and it carries
   // on after you close everything. Asked for a window, you get one.
   if (!preference && mode !== "terminal") return { kind: "background" };
@@ -480,8 +480,8 @@ export function routeFor(
   if (preference && !multiplexer && environment.gui) {
     const terminal = platform.findTerminal(preference);
     if (!terminal) {
-      throw new SpecterError(
-        `Specter cannot drive "${preference}". Known terminals: ${[...platform.knownTerminals(), ...MULTIPLEXERS].join(", ")}`,
+      throw new WispError(
+        `Wisp cannot drive "${preference}". Known terminals: ${[...platform.knownTerminals(), ...MULTIPLEXERS].join(", ")}`,
         "UNKNOWN_TERMINAL",
       );
     }
@@ -497,7 +497,7 @@ export function routeFor(
     if (terminal) return { kind: "terminal", terminal };
   }
   if (mode === "terminal") {
-    throw new SpecterError("There is no display to open a terminal window on, and you are not in tmux", "NO_DISPLAY");
+    throw new WispError("There is no display to open a terminal window on, and you are not in tmux", "NO_DISPLAY");
   }
   return { kind: "background", reason: "no display for a window — running in the background" };
 }
@@ -528,7 +528,7 @@ async function runCommand(step: PlannedStep, index: number, context: Context): P
   const { target, workspace } = step;
   const route = routeFor(target, context, step.job);
 
-  // A service that is already up stays up: starting "Database" again while Specter's own
+  // A service that is already up stays up: starting "Database" again while Wisp's own
   // run of it is going would start a second one fighting the first for its port. A job's
   // commands always run — running them is the whole point.
   if (route.kind !== "inline") {
@@ -568,9 +568,9 @@ async function runCommand(step: PlannedStep, index: number, context: Context): P
 
   if (route.kind === "background") {
     const started = await startRun({ ...info, invocation: supervised(shellInvocation(request), target) });
-    const note = [route.reason, `logs: specter logs ${started.run.id}`].filter(Boolean).join(" · ");
+    const note = [route.reason, `logs: wisp logs ${started.run.id}`].filter(Boolean).join(" · ");
     // Its log goes into History with the step, so a past run can show what it printed — for
-    // as long as the log is kept (`specter ps --clear` deletes finished runs' logs).
+    // as long as the log is kept (`wisp ps --clear` deletes finished runs' logs).
     const log = started.run.log ? { log: started.run.log } : {};
     return started.ok
       ? { ...target, ok: true, run: started.run.id, note, ...log }
@@ -589,7 +589,7 @@ async function runCommand(step: PlannedStep, index: number, context: Context): P
 
   if (route.kind === "tmux") {
     const inside = context.environment.multiplexer === "tmux";
-    await recordWindowRun(id, pidFile, { ...info, where: inside ? `tmux window "${title}"` : "tmux session specter" });
+    await recordWindowRun(id, pidFile, { ...info, where: inside ? `tmux window "${title}"` : "tmux session wisp" });
     const result = await runInTmux(invocation, title, inside);
     return { ...target, ok: true, run: id, ...(result.note ? { note: result.note } : {}) };
   }
@@ -686,7 +686,7 @@ function runAttached(invocation: Invocation, target: SwitchTarget, context: Cont
     child.stdout?.on("data", forward(process.stdout));
     child.stderr?.on("data", forward(process.stderr));
 
-    // Owned by this run: stopped with it, and with Specter — never left behind unknown.
+    // Owned by this run: stopped with it, and with Wisp — never left behind unknown.
     attachedChildren.add(child);
     const stop = () => killTree(child, !echo);
     context.options.signal?.addEventListener("abort", stop, { once: true });
@@ -705,7 +705,7 @@ function runAttached(invocation: Invocation, target: SwitchTarget, context: Cont
   });
 }
 
-/** Commands running attached right now, to stop if Specter itself goes. */
+/** Commands running attached right now, to stop if Wisp itself goes. */
 const attachedChildren = new Set<ReturnType<typeof spawn>>();
 
 function killTree(child: ReturnType<typeof spawn>, ownGroup: boolean): void {
@@ -720,7 +720,7 @@ function killTree(child: ReturnType<typeof spawn>, ownGroup: boolean): void {
 }
 
 /**
- * Stop every attached command — what Specter does on its way out, so that quitting in the
+ * Stop every attached command — what Wisp does on its way out, so that quitting in the
  * middle of a build does not leave the build running where nobody can see it.
  */
 export function stopAttached(): void {
@@ -792,7 +792,7 @@ function uniqueBolts(plan: PlannedStep[]): { workspace: Workspace; bolt: string 
   return [...seen.values()];
 }
 
-/** How much of a bolt is up: its own commands, against what Specter has running. */
+/** How much of a bolt is up: its own commands, against what Wisp has running. */
 export function boltStatus(
   workspace: Workspace,
   bolt: Bolt,
@@ -867,15 +867,15 @@ export function resolveBolt(workspace: Workspace, ref: string): Bolt {
   if (bolt) return bolt;
 
   if (candidates.length > 1) {
-    throw new SpecterError(
+    throw new WispError(
       `"${ref}" matches several bolts: ${candidates.map((match) => match.label).join(", ")}`,
       "AMBIGUOUS",
     );
   }
 
-  if (workspace.bolts.length === 0) throw new SpecterError(`${workspace.name} has no bolts yet`, "NOT_FOUND");
+  if (workspace.bolts.length === 0) throw new WispError(`${workspace.name} has no bolts yet`, "NOT_FOUND");
 
-  throw new SpecterError(
+  throw new WispError(
     `${workspace.name} has no bolt called "${ref}" — it has ${workspace.bolts.map((match) => match.label).join(", ")}`,
     "NOT_FOUND",
   );

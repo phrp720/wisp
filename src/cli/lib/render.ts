@@ -83,7 +83,7 @@ export function suggestBolts(workspace: Workspace, workspaceRef?: string): void 
   printBolts(workspace);
 
   const example = shortest(bolts[0] as Bolt, bolts);
-  const line = workspaceRef ? `specter use ${workspaceRef} ${example}` : `specter ${example}`;
+  const line = workspaceRef ? `wisp use ${workspaceRef} ${example}` : `wisp ${example}`;
   console.log(dim(`  e.g. \`${line}\``));
 }
 
@@ -140,7 +140,7 @@ export function diagnosticSummary(read: WorkspaceRead): string | undefined {
   const parts: string[] = [];
   if (errors > 0) parts.push(red(plural(errors, "problem")));
   if (warnings > 0) parts.push(yellow(plural(warnings, "warning")));
-  return `${parts.join(" · ")} ${dim("— `specter check` for detail")}`;
+  return `${parts.join(" · ")} ${dim("— `wisp check` for detail")}`;
 }
 
 /** How the file's code-running parts stand, in the words the trust states mean. */
@@ -155,9 +155,9 @@ export function trustLine(read: WorkspaceRead): string | undefined {
 
   const count = plural(read.withheld.length, "item");
   if (read.trust === "stale") {
-    return `${yellow("!")} ${count} withheld ${dim("— the file changed since you trusted it; `specter check`, then `specter trust`")}`;
+    return `${yellow("!")} ${count} withheld ${dim("— the file changed since you trusted it; `wisp check`, then `wisp trust`")}`;
   }
-  return `${yellow("!")} ${count} withheld ${dim("— not trusted; read them with `specter check`, allow with `specter trust`")}`;
+  return `${yellow("!")} ${count} withheld ${dim("— not trusted; read them with `wisp check`, allow with `wisp trust`")}`;
 }
 
 /** What a run did to one step, as a line. */

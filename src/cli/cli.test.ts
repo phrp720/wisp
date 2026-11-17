@@ -10,7 +10,7 @@ import { shortest } from "./lib/render.js";
 import { SPEC } from "./spec.js";
 import { VERSION } from "./version.js";
 
-const argv = (...args: string[]) => ["node", "specter", ...args];
+const argv = (...args: string[]) => ["node", "wisp", ...args];
 
 describe("withImplicitUse", () => {
   const commands = verbs();
@@ -20,7 +20,7 @@ describe("withImplicitUse", () => {
     expect(withImplicitUse(argv("api", "-n"), commands)).toEqual(argv("use", "api", "-n"));
   });
 
-  it("leaves commands, flags and bare specter alone", () => {
+  it("leaves commands, flags and bare wisp alone", () => {
     expect(withImplicitUse(argv("list"), commands)).toEqual(argv("list"));
     expect(withImplicitUse(argv("--help"), commands)).toEqual(argv("--help"));
     expect(withImplicitUse(argv(), commands)).toEqual(argv());
@@ -67,7 +67,7 @@ describe("spec", () => {
 
   it("mentions every command", () => {
     for (const command of COMMANDS.filter((entry) => entry.name !== "use" && entry.name !== "open-with")) {
-      expect(SPEC).toContain(`specter ${command.name}`);
+      expect(SPEC).toContain(`wisp ${command.name}`);
     }
   });
 });

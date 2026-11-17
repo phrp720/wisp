@@ -17,7 +17,7 @@ jobs:
       - name: Compile for every platform
         run: |
           bun scripts/compile.ts darwin-arm64 darwin-x64 linux-x64 linux-arm64 windows-x64
-          mkdir -p release && mv bin/specter-* release/
+          mkdir -p release && mv bin/wisp-* release/
           cd release && sha256sum * > SHA256SUMS
       - name: Publish the release
         env:

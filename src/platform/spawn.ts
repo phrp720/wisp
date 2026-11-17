@@ -22,7 +22,7 @@ export async function run(file: string, args: string[]): Promise<string> {
 }
 
 /**
- * Start a program that should outlive Specter — an editor, a terminal window — and return
+ * Start a program that should outlive Wisp — an editor, a terminal window — and return
  * once it has started. Resolves when the process exists, rejects if it could not start.
  */
 export function launch(file: string, args: string[], options: { windowsHide?: boolean } = {}): Promise<void> {

@@ -48,7 +48,7 @@ const ASCII: Glyphs = {
 };
 
 export function supportsUnicode(env: NodeJS.ProcessEnv = process.env, platform = process.platform): boolean {
-  if (env["SPECTER_ASCII"]) return false;
+  if (env["WISP_ASCII"]) return false;
   if (platform === "win32") return Boolean(env["WT_SESSION"] || env["TERM_PROGRAM"]);
   if (env["TERM"] === "linux") return false;
   return /utf-?8/i.test(env["LC_ALL"] || env["LC_CTYPE"] || env["LANG"] || "");

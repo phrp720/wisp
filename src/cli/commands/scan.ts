@@ -8,20 +8,20 @@ import type { CommandDef } from "../lib/define.js";
 
 export const scan: CommandDef<{ remember?: boolean; depth?: string }> = {
   name: "scan",
-  summary: "Find the .specter.json files under a directory, so they show up everywhere",
+  summary: "Find the .wisp.json files under a directory, so they show up everywhere",
   args: [["[dirs...]", "where to look; omitted scans the directories you remembered"]],
   options: [
-    ["-r, --remember", "scan these directories again whenever you run `specter scan`"],
+    ["-r, --remember", "scan these directories again whenever you run `wisp scan`"],
     ["--depth <levels>", "how deep to look", "4"],
   ],
-  examples: ["specter scan ~/dev", "specter scan ~/dev ~/work --remember", "specter scan"],
+  examples: ["wisp scan ~/dev", "wisp scan ~/dev ~/work --remember", "wisp scan"],
 
   async run(dirs, options) {
     const given = dirs.map((dir) => resolve(expandHome(dir)));
     const roots = given.length > 0 ? given : ((await loadConfig()).roots ?? []).map((dir) => expandHome(dir));
 
     if (roots.length === 0) {
-      console.log(dim("Say where to look: `specter scan ~/dev`. Add --remember to make it the default."));
+      console.log(dim("Say where to look: `wisp scan ~/dev`. Add --remember to make it the default."));
       return;
     }
 

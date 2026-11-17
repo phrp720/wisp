@@ -11,7 +11,7 @@ export const TONE = {
   stopped: "gray",
   /** Starting, waiting, restarting, not allowed yet. */
   busy: "yellow",
-  /** Specter itself: what is selected, focused, in progress. */
+  /** Wisp itself: what is selected, focused, in progress. */
   accent: "#a78bfa",
   /** A job, as opposed to a bolt that starts things. */
   job: "cyan",

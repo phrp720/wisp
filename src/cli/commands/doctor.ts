@@ -12,7 +12,7 @@ import { VERSION } from "../version.js";
 
 export const doctor: CommandDef<{ json?: boolean }> = {
   name: "doctor",
-  summary: "Show what Specter can do here, and where it keeps its files",
+  summary: "Show what Wisp can do here, and where it keeps its files",
   options: [["--json", "print it as JSON"]],
 
   async run(_args, options) {
@@ -45,7 +45,7 @@ export const doctor: CommandDef<{ json?: boolean }> = {
 
     const yes = (value: unknown) => (value ? green("yes") : yellow("no"));
 
-    console.log(`${bold("specter")} ${VERSION} ${dim(`on ${osName(environment.os)}`)}`);
+    console.log(`${bold("wisp")} ${VERSION} ${dim(`on ${osName(environment.os)}`)}`);
     console.log();
     console.log(`${dim("display        ")} ${yes(environment.gui)}${environment.ssh ? dim(" (over ssh)") : ""}`);
     console.log(`${dim("multiplexer    ")} ${environment.multiplexer ?? dim("none")}`);

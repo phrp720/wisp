@@ -1,6 +1,6 @@
 import { recordProject } from "../../core/config.js";
 import { listHistory } from "../../core/history.js";
-import { SpecterError } from "../../core/errors.js";
+import { WispError } from "../../core/errors.js";
 import { planRetry, runPlan, switchToWorkspace, type RunDeps } from "../../core/switch.js";
 import type { Bolt, RunMode, SwitchOptions, SwitchResult, SwitchTarget, TargetResult, Workspace } from "../../core/types.js";
 import { bold, cyan, dim, green, kindLabel, plural, red, title, yellow } from "../format.js";
@@ -37,10 +37,10 @@ export const use: CommandDef<Options> = {
     ["--json", "print the result as JSON"],
   ],
   examples: [
-    "specter api                          # a bolt of this project — `use` is implied",
-    'specter use acme "API development"   # a bolt of a named workspace',
-    "specter api --dry-run                # what would happen, and where",
-    "specter api --detach                 # commands in the background, on a server",
+    "wisp api                          # a bolt of this project — `use` is implied",
+    'wisp use acme "API development"   # a bolt of a named workspace',
+    "wisp api --dry-run                # what would happen, and where",
+    "wisp api --detach                 # commands in the background, on a server",
   ],
 
   async run([first, second], options) {
@@ -73,7 +73,7 @@ export const use: CommandDef<Options> = {
     const attachedSteps = new Set<string>();
     const runOptions: SwitchOptions = {
       // A git hook says so in its environment; anything else typed this.
-      trigger: process.env["SPECTER_TRIGGER"] ?? "cli",
+      trigger: process.env["WISP_TRIGGER"] ?? "cli",
       dryRun: options.dryRun ?? false,
       all: options.all ?? false,
       mode,
@@ -122,7 +122,7 @@ export const use: CommandDef<Options> = {
       // if the name had been wrong — and fail, so a script or an agent notices.
       if (result.bolt) {
         const waiting = read.withheld.length > 0 && !workspace.trusted;
-        console.log(dim(waiting ? "  nothing ran — every step waits for `specter trust` (see `specter check`)" : "  nothing ran — this bolt has no steps here"));
+        console.log(dim(waiting ? "  nothing ran — every step waits for `wisp trust` (see `wisp check`)" : "  nothing ran — this bolt has no steps here"));
         process.exitCode = 1;
         return;
       }
@@ -140,7 +140,7 @@ export const use: CommandDef<Options> = {
 
     const backgrounded = result.targets.filter((target) => target.run);
     if (backgrounded.length > 0) {
-      console.log(dim(`\n${plural(backgrounded.length, "command")} running — watch them in \`specter\` (p), or \`specter logs <name> -f\``));
+      console.log(dim(`\n${plural(backgrounded.length, "command")} running — watch them in \`wisp\` (p), or \`wisp logs <name> -f\``));
     }
 
     if (!workspace.trusted && read.withheld.length > 0) {
@@ -156,8 +156,8 @@ export const use: CommandDef<Options> = {
     const total = result.targets.reduce((sum, target) => sum + (target.durationMs ?? 0), 0);
     if (!result.ok) {
       const next = [
-        result.historyId ? `\`specter history ${result.historyId}\`` : "",
-        failedAt && result.historyId ? `\`specter ${shortName(name)} --retry\` runs only what failed` : "",
+        result.historyId ? `\`wisp history ${result.historyId}\`` : "",
+        failedAt && result.historyId ? `\`wisp ${shortName(name)} --retry\` runs only what failed` : "",
       ].filter(Boolean);
       console.error(`\n${red("✗")} ${bold(name)} ${failedAt ? `failed at ${failedAt.label}` : "was stopped"}${next.length > 0 ? dim(` · ${next.join(" · ")}`) : ""}`);
       process.exitCode = 1;
@@ -172,7 +172,7 @@ function boltLabel(workspace: Workspace, ref: string): string {
 }
 
 /**
- * Which bolt, when nothing said. Only on a terminal: a script that pipes `specter use`
+ * Which bolt, when nothing said. Only on a terminal: a script that pipes `wisp use`
  * somewhere must not stop on a question nobody is there to answer.
  */
 async function chooseBolt(workspace: Workspace, options: Options): Promise<string | undefined> {
@@ -212,7 +212,7 @@ async function retryLast(
   const [last] = (await listHistory({ workspace: workspace.file, bolt: label })).filter((entry) =>
     entry.bolt.replace(/ \(retry\)$/, "").toLowerCase() === label.toLowerCase(),
   );
-  if (!last) throw new SpecterError(`"${label}" has not run yet — run it whole first`, "NOTHING_TO_RETRY");
+  if (!last) throw new WispError(`"${label}" has not run yet — run it whole first`, "NOTHING_TO_RETRY");
   const again = await planRetry(workspace, last, deps);
   return runPlan(workspace, again, { ...options, label: `${label} (retry)`, job, trigger: "retry" }, deps);
 }

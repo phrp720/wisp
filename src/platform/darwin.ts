@@ -37,7 +37,7 @@ export function terminalArgs(name: string, invocation: Invocation, title: string
   }
 
   const spec = TERMINALS.find((terminal) => terminal.name === name);
-  if (!spec) throw new Error(`Specter cannot drive "${name}" on macOS`);
+  if (!spec) throw new Error(`Wisp cannot drive "${name}" on macOS`);
   return { file: "open", args: ["-na", name, "--args", ...spec.args(invocation, title)] };
 }
 
@@ -88,7 +88,7 @@ export const darwin: Platform = {
 };
 
 /**
- * The browsers Specter can look inside.
+ * The browsers Wisp can look inside.
  *
  * Firefox is absent on purpose: it exposes no tab list to AppleScript. Everything here is
  * Safari or a Chromium fork, and the two dictionaries differ only in how a tab is selected.

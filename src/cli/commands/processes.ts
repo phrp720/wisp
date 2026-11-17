@@ -1,6 +1,6 @@
 import { createReadStream } from "node:fs";
 
-import { SpecterError } from "../../core/errors.js";
+import { WispError } from "../../core/errors.js";
 import { tildify } from "../../core/paths.js";
 import {
   clearFinishedRuns,
@@ -17,13 +17,13 @@ import type { CommandDef } from "../lib/define.js";
 
 export const ps: CommandDef<{ all?: boolean; clear?: boolean; json?: boolean }> = {
   name: "ps",
-  summary: "List the commands Specter is running in the background",
+  summary: "List the commands Wisp is running in the background",
   options: [
     ["-a, --all", "include ones that have finished"],
     ["--clear", "forget finished ones and delete their logs"],
     ["--json", "print them as JSON"],
   ],
-  examples: ["specter ps", "specter ps --all", "specter logs <id>", "specter stop <id>"],
+  examples: ["wisp ps", "wisp ps --all", "wisp logs <id>", "wisp stop <id>"],
 
   async run(_args, options) {
     if (options.clear) {
@@ -38,7 +38,7 @@ export const ps: CommandDef<{ all?: boolean; clear?: boolean; json?: boolean }> 
 
     if (shown.length === 0) {
       const finished = runs.length - runs.filter((run) => run.alive).length;
-      console.log(dim(finished > 0 ? `Nothing running. ${plural(finished, "finished run")} — \`specter ps --all\`` : "Nothing running."));
+      console.log(dim(finished > 0 ? `Nothing running. ${plural(finished, "finished run")} — \`wisp ps --all\`` : "Nothing running."));
       return;
     }
 
@@ -46,7 +46,7 @@ export const ps: CommandDef<{ all?: boolean; clear?: boolean; json?: boolean }> 
     const { tail: readTail } = await import("../../core/processes.js");
     const rows = await Promise.all(
       shown.map(async (run) => {
-        const restarts = run.log ? ((await readTail(run.log, 2000)).match(/\[specter\] restarting/g)?.length ?? 0) : 0;
+        const restarts = run.log ? ((await readTail(run.log, 2000)).match(/\[wisp\] restarting/g)?.length ?? 0) : 0;
         return [
           run.alive ? green("● running") : dim("○ stopped"),
           bold(run.id),
@@ -59,7 +59,7 @@ export const ps: CommandDef<{ all?: boolean; clear?: boolean; json?: boolean }> 
       }),
     );
     printTable(["STATUS", "ID", "NAME", "WORKSPACE", "UP", "RESTARTS", "WHERE"], rows);
-    console.log(dim(`\n\`specter logs <name> -f\` follows one · \`specter stop <name>\` stops it`));
+    console.log(dim(`\n\`wisp logs <name> -f\` follows one · \`wisp stop <name>\` stops it`));
   },
 };
 
@@ -80,13 +80,13 @@ export const logs: CommandDef<{ follow?: boolean; lines?: string }> = {
     ["-f, --follow", "keep printing as it writes"],
     ["-n, --lines <count>", "how many lines from the end", "100"],
   ],
-  examples: ["specter logs", "specter logs dev -f", "specter logs 3fa9"],
+  examples: ["wisp logs", "wisp logs dev -f", "wisp logs 3fa9"],
 
   async run([query], options) {
     const run = pick(query, await listRuns());
     const lines = Number.parseInt(options.lines ?? "100", 10) || 100;
 
-    // A command in a window prints to its window; Specter never sees that output.
+    // A command in a window prints to its window; Wisp never sees that output.
     if (!run.log) {
       console.log(dim(`${run.label} runs in ${run.where ?? "a terminal window"} — its output is there.`));
       return;
@@ -121,7 +121,7 @@ export const stop: CommandDef<{ all?: boolean }> = {
   summary: "Stop a background command, and everything it started",
   args: [["[run]", "its id or name"]],
   options: [["-a, --all", "stop every one that is running"]],
-  examples: ["specter stop dev", "specter stop --all"],
+  examples: ["wisp stop dev", "wisp stop --all"],
 
   async run([query], options) {
     const running = (await listRuns()).filter((run) => run.alive);
@@ -143,9 +143,9 @@ function pick(query: string | undefined, runs: RunStatus[]): RunStatus {
   if (!query) {
     const alive = runs.filter((run) => run.alive);
     if (alive.length === 1) return alive[0] as RunStatus;
-    if (runs.length === 0) throw new SpecterError("Specter has not run anything in the background", "NOT_FOUND");
-    throw new SpecterError(
-      alive.length === 0 ? "Nothing is running — name a finished run, from `specter ps --all`" : `${plural(alive.length, "command")} running — name one: ${alive.map((run) => `${run.id} (${run.label})`).join(", ")}`,
+    if (runs.length === 0) throw new WispError("Wisp has not run anything in the background", "NOT_FOUND");
+    throw new WispError(
+      alive.length === 0 ? "Nothing is running — name a finished run, from `wisp ps --all`" : `${plural(alive.length, "command")} running — name one: ${alive.map((run) => `${run.id} (${run.label})`).join(", ")}`,
       "AMBIGUOUS",
     );
   }
@@ -153,7 +153,7 @@ function pick(query: string | undefined, runs: RunStatus[]): RunStatus {
   const { match, candidates } = matchRun(query, runs);
   if (match) return match;
   if (candidates.length > 1) {
-    throw new SpecterError(`"${query}" matches several: ${candidates.map((run) => `${run.id} (${run.label})`).join(", ")}`, "AMBIGUOUS");
+    throw new WispError(`"${query}" matches several: ${candidates.map((run) => `${run.id} (${run.label})`).join(", ")}`, "AMBIGUOUS");
   }
-  throw new SpecterError(`No run called "${query}" — see \`specter ps --all\``, "NOT_FOUND");
+  throw new WispError(`No run called "${query}" — see \`wisp ps --all\``, "NOT_FOUND");
 }
