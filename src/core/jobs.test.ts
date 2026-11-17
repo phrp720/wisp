@@ -302,3 +302,64 @@ describe("stopping and retrying", () => {
     expect((await readFile(marker, "utf8")).trim().split("\n")).toHaveLength(1);
   });
 });
+
+describe("restart policies", () => {
+  it("bring a crashed command back, and say so in its log", async () => {
+    const counter = join(dir, "starts");
+    const ws = workspace({
+      bolts: [{ label: "api", targets: [{ run: `echo started >> '${counter}'; exit 1`, label: "server", background: true, restart: "on-failure" }] }],
+    });
+    await switchToWorkspace(ws, { bolt: "api" }, { platform: recorder(), environment: desktop, defaults: {} });
+    await new Promise((resolve) => setTimeout(resolve, 2600));
+    const starts = (await readFile(counter, "utf8")).trim().split("\n").length;
+    expect(starts).toBeGreaterThanOrEqual(2);
+    const [run] = await listRuns();
+    const { tail } = await import("./processes.js");
+    expect(await tail(run!.log, 50)).toContain("[specter] restarting server (exited with 1) — try 1 of 10");
+    stopRun(run!);
+  }, 10_000);
+
+  it("leave a command that finished cleanly alone, on-failure", async () => {
+    const { restartLoop } = await import("./shell.js");
+    const { spawnSync } = await import("node:child_process");
+    const loop = restartLoop({ file: "/bin/sh", args: ["-c", "echo done"] }, "on-failure", "once");
+    const result = spawnSync(loop.file, loop.args, { encoding: "utf8", timeout: 5000 });
+    expect(result.status).toBe(0);
+    expect(result.stdout.trim()).toBe("done");
+  });
+
+  it("are read from the file, and a wrong one is said", () => {
+    const read = interpret(
+      { main: { commands: [{ label: "a", run: "x", restart: "on-failure" }, { label: "b", run: "y", restart: "sometimes" }] } },
+      { file: "/w/.specter.json", personal: false, trust: "trusted", os: "darwin" },
+    );
+    expect(read.declaredCommands.map((command) => command.restart)).toEqual(["on-failure", undefined]);
+    expect(read.diagnostics).toContainEqual(expect.objectContaining({ at: "commands[1].restart", level: "warning" }));
+  });
+});
+
+describe("history like a CI", () => {
+  it("numbers each bolt's runs, and records which bolt a dependency's steps came from", async () => {
+    const ws = workspace({
+      bolts: [
+        { label: "Database", targets: [{ run: "true", label: "postgres", background: true }] },
+        { label: "Check", job: true, targets: [{ bolt: "Database" }, { run: "true", label: "test" }] },
+      ],
+    });
+    const deps = { platform: recorder(), environment: desktop, defaults: {} };
+    await switchToWorkspace(ws, { bolt: "check" }, deps);
+    await switchToWorkspace(ws, { bolt: "check" }, deps);
+    const [latest, earlier] = await listHistory({ bolt: "Check" });
+    expect([latest?.number, earlier?.number]).toEqual([2, 1]);
+    expect(latest?.steps.map((step) => [step.label, step.bolt])).toEqual([
+      ["postgres", "Database"],
+      ["test", undefined],
+    ]);
+
+    const { pipeline } = await import("../tui/history.js");
+    expect(pipeline(latest!).map((node) => [node.label, node.detail?.split(" ").slice(0, 2).join(" ")])).toEqual([
+      ["Database", "1 step"],
+      ["Check", "1 step"],
+    ]);
+  });
+});

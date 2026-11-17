@@ -48,6 +48,8 @@ export interface StepField {
   label: string;
   hint: string;
   required: boolean;
+  /** A choice between a few options instead of text. */
+  choices?: { value: string; label: string }[];
 }
 
 /** What each kind of step asks for. The first field is the one that matters. */
@@ -56,6 +58,17 @@ export const STEP_FIELDS: Record<StepKindName, StepField[]> = {
     { key: "run", label: "Command", hint: "what you would type: pnpm dev", required: true },
     { key: "label", label: "Name", hint: "how it is shown — leave empty to use the command", required: false },
     { key: "cwd", label: "In folder", hint: "relative to the project — leave empty for its root", required: false },
+    {
+      key: "restart",
+      label: "If it stops",
+      hint: "←/→ to choose. Brought back with a growing pause, up to 10 times in a row.",
+      required: false,
+      choices: [
+        { value: "no", label: "leave it stopped" },
+        { value: "on-failure", label: "restart it if it crashed" },
+        { value: "always", label: "always restart it" },
+      ],
+    },
   ],
   compose: [
     { key: "compose", label: "Compose file", hint: "relative to the project: compose.yaml", required: true },
@@ -139,7 +152,10 @@ export function buildStep(kind: StepKindName, values: Record<string, string>): {
   } else {
     for (const field of STEP_FIELDS[kind]) {
       const text = value(field.key);
-      if (text && field.key !== "label") step[field.key] = text;
+      if (!text || field.key === "label") continue;
+      // A choice at its default says nothing, so it is not written.
+      if (field.key === "restart" && text === "no") continue;
+      step[field.key] = text;
     }
   }
 

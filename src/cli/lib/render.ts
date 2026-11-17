@@ -13,11 +13,20 @@ export function named(label: string, value: string, from = ""): string {
 }
 
 /** One asset, as every command shows it: kind, label, then the thing itself. */
-export function targetLine(target: SwitchTarget, indent = "  "): string {
+export function targetLine(target: SwitchTarget, indent = "  ", root?: string): string {
   const via = target.openWith ? dim(` ↦ ${target.openWith}`) : "";
-  const where = target.cwd ? dim(` in ${tildify(target.cwd)}`) : "";
+  const where = whereLine(target.cwd, root);
   const from = target.workspace ? dim(` (${target.workspace})`) : "";
   return `${indent}${dim(kindLabel(target.kind))} ${named(target.label, shown(target), from)}${where}${via}`;
+}
+
+/**
+ * Where a command runs — said only when it is somewhere other than the project's own
+ * folder, which is where every command runs unless it says otherwise.
+ */
+export function whereLine(cwd: string | undefined, root: string | undefined): string {
+  if (!cwd || (root && cwd === root)) return "";
+  return dim(` in ${root && cwd.startsWith(`${root}/`) ? cwd.slice(root.length + 1) : tildify(cwd)}`);
 }
 
 /** Paths shown from home, so they read as yours rather than as a wall of directories. */
@@ -154,6 +163,7 @@ export function trustLine(read: WorkspaceRead): string | undefined {
 /** What a run did to one step, as a line. */
 export function resultLine(result: {
   ok: boolean;
+  durationMs?: number;
   skipped?: boolean;
   kind: SwitchTarget["kind"];
   label: string;
@@ -165,5 +175,6 @@ export function resultLine(result: {
   const mark = result.skipped ? dim("–") : !result.ok ? red("✗") : green("✓");
   const from = result.workspace ? dim(` (${result.workspace})`) : "";
   const detail = result.error ? ` ${red(`(${result.error})`)}` : result.note ? ` ${dim(`· ${result.note}`)}` : "";
-  return `  ${mark} ${dim(kindLabel(result.kind))} ${named(result.label, shown(result), from)}${detail}`;
+  const time = result.durationMs && result.durationMs >= 1000 ? dim(` ${(result.durationMs / 1000).toFixed(1)}s`) : "";
+  return `  ${mark} ${dim(kindLabel(result.kind))} ${named(result.label, shown(result), from)}${time}${detail}`;
 }

@@ -13,7 +13,7 @@ import { SpecterError, describe } from "./errors.js";
 import { gitState, newHistoryId, recordHistory, stepLogPath, type HistoryEntry, type HistoryStep } from "./history.js";
 import { currentOS, expandHome } from "./paths.js";
 import { listRuns, newRunId, pidFileFor, recordWindowRun, runningFor, startRun, stopRun, type RunStatus } from "./processes.js";
-import { shellInvocation, windowInvocation } from "./shell.js";
+import { restartLoop, shellInvocation, windowInvocation } from "./shell.js";
 import { normalizeUrl, sameUrl } from "./url.js";
 import { describeWait, waitFor } from "./wait.js";
 import { slugify } from "./workspaces.js";
@@ -191,7 +191,12 @@ export async function runPlan(
       startedAt: startedAt.toISOString(),
       finishedAt: new Date().toISOString(),
       ok,
-      steps: results.map(toHistoryStep),
+      // Each step remembers its bolt when a dependency brought it in, so history can draw
+      // the dependency as one group, as a CI draws a reused workflow.
+      steps: results.map((result, at) => {
+        const owner = steps[at]?.bolt;
+        return { ...toHistoryStep(result), ...(owner && owner !== options.label.replace(/ \((retry|down)\)$/, "") ? { bolt: owner } : {}) };
+      }),
     }).catch(() => undefined);
   }
 
@@ -546,6 +551,7 @@ async function runCommand(step: PlannedStep, index: number, context: Context): P
     workspaceName: workspace.name,
     asset: target.id,
     bolt: step.bolt,
+    ...(context.historyId ? { historyId: context.historyId } : {}),
   };
 
   if (route.kind === "inline") {
@@ -561,7 +567,7 @@ async function runCommand(step: PlannedStep, index: number, context: Context): P
   }
 
   if (route.kind === "background") {
-    const started = await startRun({ ...info, invocation: shellInvocation(request) });
+    const started = await startRun({ ...info, invocation: supervised(shellInvocation(request), target) });
     const note = [route.reason, `logs: specter logs ${started.run.id}`].filter(Boolean).join(" · ");
     return started.ok
       ? { ...target, ok: true, run: started.run.id, note }
@@ -576,7 +582,7 @@ async function runCommand(step: PlannedStep, index: number, context: Context): P
   const invocation =
     currentOS() === "win32"
       ? shellInvocation({ ...request, pidFile })
-      : windowInvocation(shellInvocation(request), pidFile, target.label);
+      : windowInvocation(supervised(shellInvocation(request), target), pidFile, target.label);
 
   if (route.kind === "tmux") {
     const inside = context.environment.multiplexer === "tmux";
@@ -639,6 +645,11 @@ function lastMeaningfulLine(text: string): string | undefined {
     .map((line) => line.replace(/\u001B\[[0-9;?]*[A-Za-z]/g, "").trim())
     .filter(Boolean)
     .pop();
+}
+
+/** The invocation, under its restart policy when it has one. */
+function supervised(invocation: Invocation, target: SwitchTarget): Invocation {
+  return target.restart && currentOS() !== "win32" ? restartLoop(invocation, target.restart, target.label) : invocation;
 }
 
 /**
@@ -915,6 +926,7 @@ export function collectTargets(workspace: Workspace, only?: TargetKind[]): Switc
         const target = toTarget(kind, command, command.run);
         if (command.cwd) target.cwd = command.cwd;
         if (command.background) target.background = true;
+        if (command.restart) target.restart = command.restart;
         if (command.shell) target.shell = command.shell;
         if (command.env) target.env = command.env;
         targets.push(target);

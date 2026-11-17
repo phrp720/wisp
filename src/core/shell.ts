@@ -138,6 +138,40 @@ export function underTerminal(inner: Invocation, os: OS = currentOS(), env: Node
   return { file: script, args: ["-qfec", posixCommandLine(sized), "/dev/null"] };
 }
 
+/** How many times in a row a command is brought back before Specter gives up on it. */
+export const MAX_RESTARTS = 10;
+
+/** The line a restart leaves in the log — read back by the panes to count restarts. */
+export const RESTART_MARK = "[specter] restarting";
+
+/**
+ * An invocation that comes back when it stops, by its policy.
+ *
+ * A small loop in `/bin/sh` around the command, rather than Specter watching from outside:
+ * a background command outlives the TUI that started it, and must keep its policy when
+ * nothing of Specter's is running. Waits 1s, 2s, 4s… up to 30s between tries, so a server
+ * that dies at once does not spin; stops after ten restarts in a row, saying so; and a run
+ * that stayed up a minute counts as healthy again, so tomorrow's crash starts the count anew.
+ */
+export function restartLoop(inner: Invocation, policy: "on-failure" | "always", label: string): Invocation {
+  const script = [
+    "tries=0; pause=1",
+    "while :; do",
+    "  began=$(date +%s)",
+    '  "$@"',
+    "  code=$?",
+    policy === "on-failure" ? '  [ "$code" -eq 0 ] && exit 0' : "  :",
+    '  [ $(( $(date +%s) - began )) -ge 60 ] && { tries=0; pause=1; }',
+    "  tries=$((tries + 1))",
+    `  if [ "$tries" -gt ${MAX_RESTARTS} ]; then printf '\\n[specter] %s exited with %s — gave up after ${MAX_RESTARTS} restarts\\n' ${posixQuote(label)} "$code"; exit "$code"; fi`,
+    `  printf '\\n${RESTART_MARK} %s (exited with %s) — try %s of ${MAX_RESTARTS}, in %ss\\n' ${posixQuote(label)} "$code" "$tries" "$pause"`,
+    '  sleep "$pause"',
+    '  pause=$((pause * 2)); [ "$pause" -gt 30 ] && pause=30',
+    "done",
+  ].join("\n");
+  return { file: "/bin/sh", args: ["-c", script, "sh", inner.file, ...inner.args] };
+}
+
 /** One invocation as a line a POSIX shell will read back into the same arguments. */
 export function posixCommandLine(invocation: Invocation): string {
   return [invocation.file, ...invocation.args].map(posixQuote).join(" ");

@@ -30,6 +30,8 @@ export interface Run {
   asset: string;
   /** The bolt that started it, for showing; `down` goes by asset. */
   bolt?: string;
+  /** The run in history that started it. */
+  historyId?: string;
   /** 0 until a window's shell has written its PID file. */
   pid: number;
   pidFile?: string;
@@ -40,6 +42,8 @@ export interface Run {
   where?: string;
   /** How it was started, for a background run, so it can be started again the same way. */
   invocation?: Invocation;
+  /** Run under the `script` terminal shim, whose PID is the one recorded. */
+  shim?: boolean;
 }
 
 export interface RunStatus extends Run {
@@ -112,6 +116,8 @@ export interface RunInfo {
   workspaceName: string;
   asset: string;
   bolt?: string;
+  /** The run in history that started it — how the Running list says "#4". */
+  historyId?: string;
 }
 
 export interface StartRequest extends RunInfo {
@@ -163,7 +169,16 @@ export async function startRun(request: StartRequest): Promise<StartResult> {
     })
     .finally(() => handle.close());
 
-  const run: Run = { ...info(request), id, kind: "background", pid, startedAt: new Date().toISOString(), log, invocation: request.invocation };
+  const run: Run = {
+    ...info(request),
+    id,
+    kind: "background",
+    pid,
+    startedAt: new Date().toISOString(),
+    log,
+    invocation: request.invocation,
+    ...(shimmed !== request.invocation ? { shim: true } : {}),
+  };
   await saveRun(run);
 
   let grace: NodeJS.Timeout | undefined;
@@ -201,6 +216,7 @@ function info(request: RunInfo): RunInfo {
     workspaceName: request.workspaceName,
     asset: request.asset,
     ...(request.bolt ? { bolt: request.bolt } : {}),
+    ...(request.historyId ? { historyId: request.historyId } : {}),
   };
 }
 
@@ -213,22 +229,77 @@ function info(request: RunInfo): RunInfo {
 export function stopRun(run: Run): boolean {
   const pid = pidOf(run);
   if (!pid || !isAlive(pid)) return false;
+  return stopTree(pid, run.shim ?? false);
+}
 
+/**
+ * Stop a process and everything under it — at once.
+ *
+ * Not by asking the top of the tree to pass it on: Linux's `script`, asked to stop, says
+ * "killing shell…" and waits two seconds first, holding the port the whole time. And not
+ * by process group alone: a command under a terminal shim is in a session of its own, and
+ * a dev server's workers can be in theirs. So every descendant is found and signalled,
+ * deepest first, then the top.
+ */
+export function stopTree(pid: number, shim = false): boolean {
   if (currentOS() === "win32") {
     const result = spawnSync("taskkill", ["/pid", String(pid), "/T", "/F"], { windowsHide: true });
     return result.status === 0;
   }
 
+  const tree = descendants(pid);
+  const own = ownGroup();
+  const groups = new Set(tree.map((entry) => entry.pgid).filter((pgid) => pgid > 1 && pgid !== own));
+  for (const entry of [...tree].reverse()) signal(entry.pid);
+  for (const pgid of groups) signal(-pgid);
+  // The shim has nothing of its own to save, and Linux's waits two seconds before it goes —
+  // with the command under it already stopped, it is ended outright.
+  const stopped = shim ? signal(pid, "SIGKILL") : signal(-pid) || signal(pid);
+  return stopped || tree.length > 0;
+}
+
+function signal(target: number, kind: NodeJS.Signals = "SIGTERM"): boolean {
   try {
-    process.kill(-pid, "SIGTERM");
+    process.kill(target, kind);
+    return true;
   } catch {
-    try {
-      process.kill(pid, "SIGTERM");
-    } catch {
-      return false;
+    return false;
+  }
+}
+
+/** Every process below `pid`, parents before children — from one look at the process table. */
+export function descendants(pid: number): { pid: number; pgid: number }[] {
+  const table = spawnSync("ps", ["-A", "-o", "pid=,ppid=,pgid="], { encoding: "utf8" }).stdout ?? "";
+  const rows = parseProcessTable(table);
+  const found: { pid: number; pgid: number }[] = [];
+  const queue = [pid];
+  while (queue.length > 0) {
+    const parent = queue.shift() as number;
+    for (const row of rows) {
+      if (row.ppid === parent && !found.some((entry) => entry.pid === row.pid)) {
+        found.push({ pid: row.pid, pgid: row.pgid });
+        queue.push(row.pid);
+      }
     }
   }
-  return true;
+  return found;
+}
+
+export function parseProcessTable(output: string): { pid: number; ppid: number; pgid: number }[] {
+  return output.split(/\r?\n/).flatMap((line) => {
+    const match = /^\s*(\d+)\s+(\d+)\s+(\d+)/.exec(line);
+    return match ? [{ pid: Number(match[1]), ppid: Number(match[2]), pgid: Number(match[3]) }] : [];
+  });
+}
+
+/** Specter's own process group, which must never be signalled along with a run's. */
+let ownPgid: number | undefined;
+function ownGroup(): number {
+  if (ownPgid === undefined) {
+    const out = spawnSync("ps", ["-o", "pgid=", "-p", String(process.pid)], { encoding: "utf8" }).stdout ?? "";
+    ownPgid = Number.parseInt(out.trim(), 10) || 0;
+  }
+  return ownPgid;
 }
 
 /**
@@ -250,6 +321,7 @@ export async function restartRun(run: RunStatus): Promise<StartResult> {
     workspaceName: run.workspaceName,
     asset: run.asset,
     ...(run.bolt ? { bolt: run.bolt } : {}),
+    ...(run.historyId ? { historyId: run.historyId } : {}),
     invocation: run.invocation,
   });
 }

@@ -582,6 +582,19 @@ function commands(entries: Entry[], ctx: Context): Command[] {
     else if (!ctx.personal) command.cwd = ctx.root;
     if (entry["background"] === true) command.background = true;
 
+    const restart = entry["restart"];
+    if (restart !== undefined && restart !== "no" && restart !== false) {
+      if (restart === "on-failure" || restart === "always") command.restart = restart;
+      else {
+        ctx.found.push({
+          level: "warning",
+          at: `${at}.restart`,
+          message: `"${String(restart)}" is not a restart policy — it is ignored`,
+          hint: 'Use "on-failure" (after a crash) or "always"',
+        });
+      }
+    }
+
     const shell = entry["shell"];
     if (shell !== undefined) {
       if (typeof shell === "string" && (SHELLS as readonly string[]).includes(shell)) {

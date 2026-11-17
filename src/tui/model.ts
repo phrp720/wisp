@@ -36,7 +36,8 @@ export interface Services {
   planRetry(read: WorkspaceRead, entry: HistoryEntry): Promise<PlannedStep[]>;
   /** Run part of a plan again — the steps that failed, and what they kept from running. */
   retry(read: WorkspaceRead, steps: PlannedStep[], label: string, job: boolean, callbacks: RunCallbacks): Promise<SwitchResult>;
-  down(read: WorkspaceRead, bolt: Bolt): Promise<DownResult>;
+  /** Stop what a bolt started and run its teardown; with `deps`, the bolts it needed too. */
+  down(read: WorkspaceRead, bolt: Bolt, options?: { deps?: boolean }): Promise<DownResult>;
   history(): Promise<HistoryEntry[]>;
   readLog(path: string): Promise<string>;
   check(file: string): Promise<WorkspaceRead>;
@@ -226,4 +227,15 @@ function hostOf(value: string): string {
   } catch {
     return value;
   }
+}
+
+/**
+ * A filter as you type: every word must appear somewhere in what the row says about itself,
+ * in any order and any case — "cymph fail" finds Cymph's failed runs.
+ */
+export function matchesAll(query: string, ...texts: (string | undefined)[]): boolean {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return true;
+  const haystack = texts.filter(Boolean).join(" ").toLowerCase();
+  return words.every((word) => haystack.includes(word));
 }

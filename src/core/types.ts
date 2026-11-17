@@ -12,6 +12,12 @@ export const OPERATING_SYSTEMS: readonly OS[] = ["darwin", "linux", "win32"];
  */
 export type PerOS<T> = T | Partial<Record<OS, T>>;
 
+/**
+ * What happens when a command stops by itself. `on-failure`: it is started again when it
+ * exits with an error — a dev server that crashed. `always`: whenever it exits.
+ */
+export type RestartPolicy = "on-failure" | "always";
+
 /** Which shell a command is written for. */
 export type ShellKind = "sh" | "pwsh" | "cmd";
 
@@ -75,6 +81,8 @@ export interface Command extends AssetBase {
   /** Absolute by the time it is here; written relative to the file it came from. */
   cwd?: string;
   background?: boolean;
+  /** Brought back when it stops: after a crash, or whenever. Absent: left stopped. */
+  restart?: RestartPolicy;
   /** Which shell `run` is written for. Absent means the platform's usual one. */
   shell?: ShellKind;
   /** Set for this command only, on top of your own environment. */
@@ -274,6 +282,7 @@ export interface SwitchTarget {
   value: string;
   cwd?: string;
   background?: boolean;
+  restart?: RestartPolicy;
   shell?: ShellKind;
   env?: Record<string, string>;
   openWith?: string;

@@ -107,7 +107,8 @@ export const history: CommandDef<{ all?: boolean; log?: string; json?: boolean }
       const where = here ? "" : dim(` · ${run.workspaceName}`);
       const tag = run.job ? dim(" job") : "";
       const context = [TRIGGERS[run.trigger ?? ""], run.git ? `${run.git.branch} @ ${run.git.commit}` : ""].filter(Boolean).join(" · ");
-      console.log(`${mark} ${bold(run.id)}  ${run.bolt}${tag}${where} ${dim(`· ${ago(run.startedAt)} ago · ${duration(run)}${context ? ` · ${context}` : ""}`)}`);
+      const number = run.number ? dim(` #${run.number}`) : "";
+      console.log(`${mark} ${bold(run.id)}  ${run.bolt}${number}${tag}${where} ${dim(`· ${ago(run.startedAt)} ago · ${duration(run)}${context ? ` · ${context}` : ""}`)}`);
     }
     if (entries.length > 30) console.log(dim(`… ${entries.length - 30} older`));
   },
@@ -138,8 +139,9 @@ async function showEntry(entry: HistoryEntry, options: { log?: string; json?: bo
 const TRIGGERS: Record<string, string> = { tui: "the TUI", cli: "the command line", hook: "a git hook", retry: "a retry" };
 
 function duration(entry: HistoryEntry): string {
-  const ms = Date.parse(entry.finishedAt) - Date.parse(entry.startedAt);
-  return ms >= 60_000 ? `${Math.floor(ms / 60_000)}m${Math.round((ms % 60_000) / 1000)}s` : `${(ms / 1000).toFixed(1)}s`;
+  const ms = Math.max(0, Date.parse(entry.finishedAt) - Date.parse(entry.startedAt));
+  if (ms < 1000) return `${ms}ms`;
+  return ms >= 60_000 ? `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s` : `${(ms / 1000).toFixed(1)}s`;
 }
 
 /** Hooks git runs where checking first makes sense. */

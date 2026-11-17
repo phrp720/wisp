@@ -218,3 +218,35 @@ describe("what a pane shows", () => {
     ]);
   });
 });
+
+describe("stopping a tree", () => {
+  it("reads the process table into parents and groups", async () => {
+    const { parseProcessTable } = await import("./processes.js");
+    expect(parseProcessTable("  101     1   101\n  102   101   102\n  103   102   102\n")).toEqual([
+      { pid: 101, ppid: 1, pgid: 101 },
+      { pid: 102, ppid: 101, pgid: 102 },
+      { pid: 103, ppid: 102, pgid: 102 },
+    ]);
+  });
+
+  it("stops a command in a session of its own straight away, children and all", async () => {
+    const started = await startRun({
+      label: "server",
+      command: "sleep 30",
+      workspace: "/w",
+      workspaceName: "w",
+      asset: "command:tree",
+      // A shell that starts a child in yet another session, as a dev server's worker might.
+      invocation: { file: "/bin/sh", args: ["-c", "sleep 30 & sleep 30"] },
+      graceMs: 300,
+    });
+    const { descendants, isAlive: alive } = await import("./processes.js");
+    const tree = descendants(started.run.pid);
+    expect(tree.length).toBeGreaterThan(0);
+    const [run] = await listRuns();
+    stopRun(run!);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(alive(started.run.pid)).toBe(false);
+    for (const entry of tree) expect(alive(entry.pid)).toBe(false);
+  });
+});

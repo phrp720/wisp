@@ -75,6 +75,7 @@ function services(overrides: Partial<Services> = {}, library: Library = { reads:
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 const ARROW_DOWN = "\u001B[B";
 const ARROW_LEFT = "\u001B[D";
+const ARROW_RIGHT = "\u001B[C";
 
 async function open(api: Services) {
   const app = render(<App services={api} glyphs={unicode} size={{ columns: 100, rows: 24 }} />);
@@ -96,7 +97,7 @@ describe("the TUI", () => {
   it("lists projects before personal workspaces, and flags one waiting for trust", async () => {
     const frame = (await open(services())).lastFrame() ?? "";
     expect(frame.indexOf("infra")).toBeLessThan(frame.indexOf("Morning"));
-    expect(frame).toContain("infra · not allowed");
+    expect(frame).toContain("infra !");
     // Grouped, and said in words: no unexplained marks. Read from the list alone — the
     // left column — since the panel beside it names the workspace too.
     const list = frame.split("\n").map((line) => line.slice(0, 28)).join("\n");
@@ -176,6 +177,29 @@ describe("the TUI", () => {
     expect(run).toHaveBeenCalledWith(infra, "Database", expect.anything());
   });
 
+  it("does nothing else with the ⏎ that cancels a trust dialog — it does not run the bolt behind it", async () => {
+    const run = vi.fn(services().run);
+    const trust = vi.fn(async () => undefined);
+    const app = await open(services({ run, trust }));
+    app.stdin.write(ARROW_LEFT);
+    await tick();
+    app.stdin.write(ARROW_DOWN);
+    await tick();
+    app.stdin.write(ARROW_RIGHT);
+    await tick();
+    // On a bolt, t opens the trust dialog; ⏎ on its Cancel must stop there.
+    app.stdin.write("t");
+    await tick();
+    expect(app.lastFrame()).toContain("Trust infra?");
+    app.stdin.write("\r");
+    await tick();
+    await tick();
+    await tick();
+    expect(trust).not.toHaveBeenCalled();
+    expect(run).not.toHaveBeenCalled();
+    expect(app.lastFrame()).not.toContain("Trust infra?");
+  });
+
   it("shows what trust would allow, and trusts only on y", async () => {
     const trust = vi.fn(async () => undefined);
     const app = await open(services({ trust }));
@@ -192,11 +216,64 @@ describe("the TUI", () => {
     await tick();
     expect(trust).not.toHaveBeenCalled();
 
+    // Buttons: it starts on Cancel, so ⏎ alone allows nothing; ← then ⏎ trusts.
     app.stdin.write("t");
     await tick();
-    app.stdin.write("y");
+    expect(app.lastFrame()).toMatch(/Trust this file[\s\S]*Cancel/);
+    app.stdin.write("\r");
+    await tick();
+    expect(trust).not.toHaveBeenCalled();
+    app.stdin.write("t");
+    await tick();
+    app.stdin.write("\u001B[D");
+    await tick();
+    app.stdin.write("\r");
     await tick();
     expect(trust).toHaveBeenCalledWith(infra.workspace.file, infra.hash);
+  });
+
+  it("shows a bolt whole with v: its order, the bolts it needs opened up, what each runs", async () => {
+    const shop = read("/dev/shop/.specter.json", {
+      name: "Shop",
+      bolts: [
+        { label: "Work on web", targets: [{ bolt: "Database" }, { run: "pnpm dev", label: "web", cwd: "apps/web", restart: "on-failure" }, { wait: "localhost:3000" }, { url: "http://localhost:3000" }] },
+        { label: "Database", targets: [{ compose: "compose.yaml", services: ["db"] }] },
+      ],
+    });
+    const app = await open(services({}, { reads: [shop], here: shop.workspace.file, unreadable: [] }));
+    await tick();
+    app.stdin.write("v");
+    await tick();
+    const frame = app.lastFrame() ?? "";
+    expect(frame).toContain("order  Database ──▶ Work on web");
+    expect(frame).toMatch(/1 +⚡ Database[\s\S]*1\.1 +start Docker services: db[\s\S]*2 +start web[\s\S]*pnpm dev · in apps\/web · restarted if it crashes[\s\S]*3 +wait until port 3000 is open[\s\S]*4 +open/);
+    expect(frame).toContain("read-only");
+    app.stdin.write("\u001B");
+    await tick();
+    expect(app.lastFrame()).not.toContain("read-only");
+  });
+
+  it("jumps between panels with 1–4, and keeps a log of what happened under Running", async () => {
+    const app = await open(services({ history: async () => [] }));
+    await tick();
+    app.stdin.write("4");
+    await tick();
+    expect(app.lastFrame()).toContain("4 History");
+    app.stdin.write("3");
+    await tick();
+    expect(app.lastFrame()).toContain("3 Running");
+    app.stdin.write("1");
+    await tick();
+    expect(app.lastFrame()).toContain("1 Workspaces");
+    // A run started here shows up in the activity log.
+    app.stdin.write("2");
+    await tick();
+    app.stdin.write("\r");
+    await tick();
+    await tick();
+    app.stdin.write("3");
+    await tick();
+    expect(app.lastFrame()).toMatch(/ACTIVITY[\s\S]*\d\d:\d\d Work on api is up/);
   });
 
   it("says so when there are no workspaces at all", async () => {
@@ -243,12 +320,39 @@ describe("jobs, down and history in the TUI", () => {
     expect(app.lastFrame()).toContain("exited with code 1");
   });
 
+  it("asks, when the bolt needed others, whether to stop those too", async () => {
+    const shop = read("/dev/shop/.specter.json", {
+      name: "Shop",
+      bolts: [
+        { label: "Work on web", targets: [{ bolt: "Database" }, { run: "pnpm dev", label: "web" }] },
+        { label: "Database", targets: [{ run: "postgres", label: "db" }] },
+      ],
+    });
+    const down = vi.fn(async () => ({ stopped: [] as never[] }));
+    const app = await open(services({ down }, { reads: [shop], here: shop.workspace.file, unreadable: [] }));
+    await tick();
+    app.stdin.write("x");
+    await tick();
+    expect(app.lastFrame()).toContain("It needed Database");
+    // esc backs out: nothing stopped.
+    app.stdin.write("\u001B");
+    await tick();
+    await tick();
+    expect(down).not.toHaveBeenCalled();
+    app.stdin.write("x");
+    await tick();
+    app.stdin.write("\r");
+    await tick();
+    await tick();
+    expect(down).toHaveBeenCalledWith(shop, shop.workspace.bolts[0], { deps: true });
+  });
+
   it("takes the selected bolt down with x", async () => {
     const down = vi.fn(async () => ({ stopped: [{ id: "ab12", label: "pnpm dev" }] as never[] }));
     const app = await open(services({ down }));
     app.stdin.write("x");
     await tick();
-    expect(down).toHaveBeenCalledWith(acme, acme.workspace.bolts[0]);
+    expect(down).toHaveBeenCalledWith(acme, acme.workspace.bolts[0], { deps: false });
     expect(app.lastFrame()).toContain("Work on api: stopped 1");
   });
 
@@ -259,45 +363,65 @@ describe("jobs, down and history in the TUI", () => {
     expect(app.lastFrame()).toMatch(/Work on api ● running/);
   });
 
-  it("shows past runs like a CI: what started them, the commit, each step's time — and the failed step's log", async () => {
+  it("shows past runs like a CI: bolts to filter by, numbered runs, and a run's summary, pipeline and logs", async () => {
     const entry = {
       id: "3f2a1b",
+      number: 7,
       workspace: acme.workspace.file,
       workspaceName: "Acme",
       bolt: "Check",
       job: true,
       trigger: "hook",
-      git: { branch: "main", commit: "a1b2c3d" },
+      git: { branch: "main", commit: "a1b2c3d", subject: "fix cart total" },
       startedAt: new Date(Date.now() - 600_000).toISOString(),
       finishedAt: new Date(Date.now() - 597_000).toISOString(),
       ok: false,
       steps: [
+        { kind: "command" as const, label: "postgres", value: "docker compose up", ok: true, durationMs: 1200, bolt: "Database" },
         { kind: "command" as const, label: "lint", value: "pnpm lint", ok: true, durationMs: 900, log: "/logs/1" },
         { kind: "command" as const, label: "test", value: "pnpm test", ok: false, error: "exited with code 1", durationMs: 2100, log: "/logs/2" },
         { kind: "command" as const, label: "build", value: "pnpm build", ok: false, skipped: true, note: 'not reached — "test" failed', durationMs: 0 },
       ],
     };
     const readLog = vi.fn(async (path: string) => (path === "/logs/2" ? "✓ adds\nFAIL divides by zero" : "lint ok"));
-    const app = await open(services({ history: async () => [entry], readLog }));
+    const app = render(<App services={services({ history: async () => [entry], readLog })} glyphs={unicode} size={{ columns: 130, rows: 30 }} />);
+    await tick();
     app.stdin.write("h");
     await tick();
     await tick();
     let frame = app.lastFrame() ?? "";
-    expect(frame).toContain("TODAY");
-    expect(frame).toContain("✗ Check");
-    expect(frame).toContain("a git hook · main @ a1b2c3d");
-    expect(frame).toContain("failed in 3.0s");
-    expect(frame).toContain("failed at test");
-    // Into the steps: the failed one is already selected; ⏎ opens its whole log.
-    app.stdin.write("\u001B[C");
+    expect(frame).toContain("All bolts");
+    expect(frame).toContain("Check #7");
+    expect(frame).toContain("failed at test · “fix cart total” · a1b2c3d");
+    expect(frame).toContain(" main ");
+
+    // / narrows the runs as you type; nothing matching says so.
+    for (const key of ["/", "z", "z"]) {
+      app.stdin.write(key);
+      await tick();
+    }
+    expect(app.lastFrame()).toContain("No run matches “zz”");
+    app.stdin.write("\u001B");
     await tick();
+    for (const key of ["/", "c", "a", "r", "t", "\r"]) {
+      app.stdin.write(key);
+      await tick();
+    }
+    expect(app.lastFrame()).toContain("Check #7");
+
+    // Open it: summary, pipeline with the dependency as one box, and the failed step's log.
     app.stdin.write("\r");
     await tick();
     await tick();
     frame = app.lastFrame() ?? "";
+    expect(frame).toContain("Check #7");
+    expect(frame).toContain("Triggered");
+    expect(frame).toContain("from a git hook");
+    expect(frame).toContain("Failed");
+    expect(frame).toContain("Database");
+    expect(frame).toContain("1 step");
     expect(readLog).toHaveBeenCalledWith("/logs/2");
     expect(frame).toMatch(/2 FAIL divides by zero/);
-    expect(frame).toContain("lines 1–2 of 2");
   });
 
   it("retries the failed part of a past run from history", async () => {
@@ -398,6 +522,7 @@ describe("doing everything without JSON", () => {
     await tick();
     app.stdin.write("\r"); // to Name
     app.stdin.write("\r"); // to In folder
+    app.stdin.write("\r"); // to If it stops
     app.stdin.write("\r"); // add it
     await tick();
     await tick();
@@ -436,7 +561,7 @@ describe("doing everything without JSON", () => {
   });
 
   it("shows containers next to commands, with how they are doing", async () => {
-    const container = { file: "/f", project: "shop", service: "postgres", name: "shop-postgres-1", image: "postgres:16", state: "running", health: "healthy", status: "Up 3 minutes (healthy)", ports: ["5432"], exitCode: 0 };
+    const container = { file: "/dev/shop/compose.yaml", project: "shop", service: "postgres", name: "shop-postgres-1", image: "postgres:16", state: "running", health: "healthy", status: "Up 3 minutes (healthy)", ports: ["5432"], exitCode: 0 };
     const app = await open(
       services({
         containers: async () => ({ containers: [container] }),
@@ -463,9 +588,38 @@ describe("doing everything without JSON", () => {
     await tick();
     await tick();
     const frame = app2.lastFrame() ?? "";
-    expect(frame).toContain("CONTAINERS · SHOP");
+    // Under the bolt whose compose step starts it, in its workspace.
+    expect(frame).toMatch(/SHOP[\s\S]*Services[\s\S]*postgres container/);
     expect(frame).toContain("healthy · 5432 · up 3m");
     expect(frame).toContain("ready to accept connections");
+  });
+
+  it("groups what runs under the bolt that started it, and finds things with /", async () => {
+    const server = { kind: "background", workspace: acme.workspace.file, workspaceName: "Acme", asset: "command:x", pid: 1, startedAt: new Date().toISOString(), alive: true, log: "/l" };
+    const api = { ...server, id: "a1", label: "api", command: "pnpm api", bolt: "Work on web", historyId: "h3" };
+    const web = { ...server, id: "w1", label: "web", command: "pnpm web", bolt: "Work on web", historyId: "h5" };
+    const lone = { ...server, id: "l1", label: "notes", command: "mdbook serve" };
+    const past = (id: string, number: number) => ({ id, number, workspace: acme.workspace.file, workspaceName: "Acme", bolt: "Work on web", ok: true, startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), steps: [] });
+    const app = await open(services({ runs: async () => [api, web, lone] as never, tail: async () => "", history: async () => [past("h5", 5), past("h3", 3)] as never }));
+    await tick();
+    app.stdin.write("p");
+    await tick();
+    await tick();
+    let frame = app.lastFrame() ?? "";
+    expect(frame).toMatch(/ACME[\s\S]*Work on web[\s\S]*all up[\s\S]*api #3[\s\S]*web #5[\s\S]*Not from a bolt[\s\S]*notes/);
+
+    for (const key of ["/", "m", "d", "b"]) {
+      app.stdin.write(key);
+      await tick();
+    }
+    frame = app.lastFrame() ?? "";
+    expect(frame).toContain("/ mdb");
+    expect(frame).toContain("notes");
+    expect(frame).not.toContain("Work on web");
+    app.stdin.write("\u001B");
+    await tick();
+    await tick();
+    expect(app.lastFrame()).toContain("Work on web");
   });
 
   it("says so the moment something stops by itself", async () => {

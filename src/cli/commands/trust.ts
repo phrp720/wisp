@@ -1,3 +1,5 @@
+import { dirname } from "node:path";
+
 import { SpecterError } from "../../core/errors.js";
 import { tildify } from "../../core/paths.js";
 import { PROJECT_FILE, findProjectFile, readProjectFile } from "../../core/project.js";
@@ -5,13 +7,13 @@ import { listTrustedProjects, revokeProject, trustProject } from "../../core/tru
 import { bold, cyan, dim, green, kindLabel, plural, red, yellow } from "../format.js";
 import { emitJson } from "../lib/context.js";
 import type { CommandDef } from "../lib/define.js";
-import { named } from "../lib/render.js";
+import { named, whereLine } from "../lib/render.js";
 import { Prompter } from "../prompt.js";
 
 export const trust: CommandDef<{ revoke?: boolean; list?: boolean; yes?: boolean; json?: boolean }> = {
   name: "trust",
   summary: `Allow a ${PROJECT_FILE} to run the code it declares`,
-  args: [["[file]", `path to a ${PROJECT_FILE}; omitted walks up from here`]],
+  args: [["[path]", `a ${PROJECT_FILE}, or the folder with one; omitted walks up from here`]],
   options: [
     ["--revoke", "withdraw trust from this project file"],
     ["--list", "list every project file you have trusted"],
@@ -23,7 +25,8 @@ export const trust: CommandDef<{ revoke?: boolean; list?: boolean; yes?: boolean
   async run([given], options) {
     if (options.list) return listGrants(options.json ?? false);
 
-    const file = given ?? (await findProjectFile());
+    // A folder means the file in it: `specter check ../shop` as well as `../shop/.specter.json`.
+    const file = given ? await fileIn(given) : await findProjectFile();
     if (!file) throw new SpecterError(`No ${PROJECT_FILE} above this directory`, "NO_PROJECT");
 
     if (options.revoke) {
@@ -58,7 +61,7 @@ export const trust: CommandDef<{ revoke?: boolean; list?: boolean; yes?: boolean
     console.log();
     console.log(bold(`Would allow ${plural(read.withheld.length, "item")} to run:`));
     for (const item of read.withheld) {
-      const where = item.cwd ? dim(` in ${tildify(item.cwd)}`) : "";
+      const where = whereLine(item.cwd, dirname(path));
       const why = item.reason ? dim(` (${item.reason})`) : "";
       console.log(`  ${dim(kindLabel(item.kind))} ${named(item.label, tildify(item.value))}${where}${why}`);
     }
@@ -107,4 +110,11 @@ async function listGrants(json: boolean): Promise<void> {
     console.log(`${mark} ${tildify(grant.path)}${note}`);
     console.log(`  ${dim(grant.at)}`);
   }
+}
+
+async function fileIn(path: string): Promise<string> {
+  const { stat } = await import("node:fs/promises");
+  const { join } = await import("node:path");
+  const found = await stat(path).catch(() => undefined);
+  return found?.isDirectory() ? join(path, PROJECT_FILE) : path;
 }
