@@ -32,8 +32,20 @@ jobs:
       - name: Smoke test the CLI
         shell: bash
         run: |
-          node dist/cli/index.js --version
-          node dist/cli/index.js doctor
-          node dist/cli/index.js check
-          node dist/cli/index.js "Work on core" --dry-run
-          node dist/cli/index.js spec > /dev/null
+          node cli/dist/cli/index.js --version
+          node cli/dist/cli/index.js doctor
+          node cli/dist/cli/index.js check
+          node cli/dist/cli/index.js "Check everything" --dry-run
+          node cli/dist/cli/index.js spec > /dev/null
+
+  website:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm website:build

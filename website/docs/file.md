@@ -1,0 +1,118 @@
+# The .wisp.json file
+
+A **bolt** is a named list of things to start, in order. That is the whole idea:
+
+```json
+{
+  "$schema": "https://raw.githubusercontent.com/phrp720/wisp/main/schema/wisp.schema.json",
+  "name": "Acme",
+  "bolts": [
+    {
+      "label": "Work on api",
+      "targets": [
+        { "compose": "compose.yaml", "services": ["postgres"] },
+        { "folder": "apps/api" },
+        { "run": "pnpm dev", "cwd": "apps/api" },
+        { "wait": "http://localhost:3000" },
+        { "url": "http://localhost:3000" }
+      ]
+    }
+  ]
+}
+```
+
+Paths are relative to the file, so it works on everyone's machine. Commit it. The
+`$schema` line (which `wisp init` adds) makes your editor autocomplete and check the file as
+you type; `wisp check` catches the rest.
+
+## Steps
+
+| Step | Example | |
+|---|---|---|
+| Command | `{ "run": "pnpm dev", "cwd": "apps/api" }` | runs in the background; see [What's running](./running) |
+| Docker services | `{ "compose": "compose.yaml", "services": ["postgres"] }` | done when they're healthy |
+| Another bolt | `{ "bolt": "Database" }` | runs it first |
+| Wait | `{ "wait": "localhost:5432" }` · `{ "wait": "http://localhost:3000" }` · `{ "wait": 3 }` | a port, a website, or seconds |
+| Link | `{ "url": "https://staging.acme.com" }` | on macOS, focuses the tab if it's already open |
+| Folder | `{ "folder": "apps/api" }` | in your file manager, or your editor |
+| File | `{ "file": "docs/runbook.md" }` | |
+| App | `{ "app": "Slack" }` | |
+
+Any step can have a `"label"`, the name Wisp shows for it.
+
+### Commands
+
+```json
+{
+  "run": "pnpm dev",
+  "label": "api",
+  "cwd": "apps/api",
+  "env": { "PORT": 3000 },
+  "restart": "on-failure"
+}
+```
+
+- `cwd` is relative to the file; left out, the command runs in the project's folder.
+- `restart`: `"on-failure"` brings it back after a crash, `"always"` whenever it exits. Wisp
+  waits 1s, 2s, 4s and so on up to 30s between tries, and gives up after 10 in a row.
+- `shell`: commands run in your own shell on macOS and Linux and PowerShell on Windows;
+  `"sh"`, `"pwsh"` or `"cmd"` says otherwise.
+
+## Bolts that need bolts
+
+`{ "bolt": "Database" }` runs another bolt first. It runs once per run however many bolts
+need it, a command Wisp already has running is left alone rather than started twice, and
+bolts that need each other are refused before anything starts. Point at another project's
+bolt with `"workspace": "infra"`.
+
+## Jobs
+
+`"job": true` makes a bolt run to completion and stop at the first failure, like a CI job.
+See [Jobs and history](./jobs).
+
+## Taking a bolt down
+
+`"down"` lists steps to run after Wisp has stopped what the bolt started, for teardown that
+isn't a process:
+
+```json
+{ "label": "Services", "targets": [{ "run": "./start.sh" }], "down": [{ "run": "./stop.sh" }] }
+```
+
+## Shared assets
+
+When several bolts need the same thing, declare it once and name it by label:
+
+```json
+{
+  "links": [{ "label": "Repository", "url": "https://github.com/acme/acme" }],
+  "bolts": [
+    { "label": "Work on api", "targets": [{ "folder": "apps/api" }, "Repository"] },
+    { "label": "Work on web", "targets": [{ "folder": "apps/web" }, "Repository"] }
+  ]
+}
+```
+
+Sections: `links`, `folders`, `files`, `apps`, `commands`.
+
+## Several operating systems
+
+```json
+{ "app": { "macos": "Visual Studio Code", "linux": "code", "windows": "code" } }
+{ "run": { "macos": "open -a Docker", "linux": "systemctl --user start docker" } }
+{ "folder": "build/win", "os": "windows" }
+```
+
+A step for another OS is skipped quietly.
+
+## Your own additions
+
+A `.wisp.local.json` beside the project's file (add it to `.gitignore`) is merged in: its
+lists are added, and a bolt with the same name replaces the project's. Your own bolts and
+scripts, without touching the shared file.
+
+## Personal workspaces
+
+Things that belong to no repository, like *Morning* or *On call*, are the same format, kept
+in Wisp's own `workspaces` folder (`wisp doctor` shows where). Make one with `N` in the TUI.
+Their commands run without asking: they're yours.

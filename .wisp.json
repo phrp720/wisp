@@ -16,6 +16,14 @@
       "targets": [
         { "run": "pnpm typecheck && pnpm test && pnpm build" }
       ]
+    },
+    {
+      "label": "Work on the website",
+      "targets": [
+        { "run": "pnpm website:dev", "label": "website" },
+        { "wait": "http://localhost:5173" },
+        { "url": "http://localhost:5173", "label": "Website" }
+      ]
     }
   ]
 }

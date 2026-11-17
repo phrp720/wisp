@@ -332,17 +332,22 @@ trust` stays yours.
 
 ```bash
 pnpm install
-pnpm dev -- --help     # run from source
-pnpm test              # tests
+pnpm test              # the CLI's tests
 pnpm typecheck
-pnpm build             # dist/, for npm
-pnpm compile           # bin/wisp, a standalone binary
+pnpm build             # cli/dist, for npm
+pnpm compile           # cli/bin/wisp, a standalone binary
+pnpm website:dev       # the website, at http://localhost:5173
 ```
 
-- `src/core`: the format, trust, discovery, running bolts. No CLI code, so other front
-  ends can use it.
-- `src/platform`: everything specific to macOS, Linux and Windows.
-- `src/cli`: the `wisp` command.
+The repository holds two things:
+
+- `cli/`: Wisp itself, published as `@squaredasher/wisp`.
+  - `src/core`: the format, trust, discovery, running bolts. No CLI code, so other front
+    ends can use it.
+  - `src/platform`: everything specific to macOS, Linux and Windows.
+  - `src/cli` and `src/tui`: the `wisp` command and its TUI.
+- `website/`: the landing page and docs, built with VitePress and served by a Cloudflare
+  Worker. `pnpm website:deploy` builds and deploys it.
 
 ## License
 

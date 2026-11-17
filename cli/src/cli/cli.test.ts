@@ -62,7 +62,7 @@ describe("version", () => {
 describe("spec", () => {
   it("is what docs/SPEC.md says — regenerate it with `pnpm spec`", async () => {
     const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-    expect(await readFile(join(root, "docs", "SPEC.md"), "utf8")).toBe(SPEC);
+    expect(await readFile(join(root, "..", "docs", "SPEC.md"), "utf8")).toBe(SPEC);
   });
 
   it("mentions every command", () => {

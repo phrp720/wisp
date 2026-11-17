@@ -1,0 +1,13 @@
+// The website, served by a Cloudflare Worker from its static assets: no server code.
+// `pnpm website:deploy` from the repository's root builds it and deploys it.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "wisp-website",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": ".vitepress/dist",
+    // /docs/trust serves docs/trust.html; a missing page gets the site's own 404.
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page"
+  }
+}

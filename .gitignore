@@ -7,3 +7,13 @@ bin/
 .env.local
 .idea
 .vscode
+
+# Copied into the package only while packing (see cli/package.json)
+cli/schema/
+cli/README.md
+cli/LICENSE
+
+# The website
+.vitepress/cache/
+.vitepress/dist/
+.wrangler/
