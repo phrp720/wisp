@@ -1,0 +1,632 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/phrp720/specter/main/schema/specter.schema.json",
+  "title": "Specter workspace file",
+  "description": "A .specter.json: the bolts that start a project's working context — its links, folders, files, apps and commands — with one word. Committed next to the code, so the repository carries its own context.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "This file's schema, so your editor can autocomplete and validate it."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "What this project is called. Optional — a file that does not name itself is named after its directory.",
+      "examples": [
+        "Acme",
+        "Platform"
+      ]
+    },
+    "icon": {
+      "type": "string",
+      "description": "An emoji shown beside the name.",
+      "examples": [
+        "🏢",
+        "🔮"
+      ]
+    },
+    "color": {
+      "$ref": "#/$defs/color"
+    },
+    "notes": {
+      "type": "string",
+      "description": "A line about what this project is for."
+    },
+    "links": {
+      "type": "array",
+      "description": "Shared URLs any bolt can name by label. On macOS an already-open tab is focused rather than opened again.",
+      "items": {
+        "$ref": "#/$defs/link"
+      }
+    },
+    "folders": {
+      "type": "array",
+      "description": "Shared directories. Paths are relative to this file, so they mean the same thing on every machine.",
+      "items": {
+        "$ref": "#/$defs/folder"
+      }
+    },
+    "files": {
+      "type": "array",
+      "description": "Shared files. Paths are relative to this file. A file that runs when opened (.command, .exe, .sh…) waits for `specter trust`.",
+      "items": {
+        "$ref": "#/$defs/file"
+      }
+    },
+    "apps": {
+      "type": "array",
+      "description": "Shared applications to launch or bring forward.",
+      "items": {
+        "$ref": "#/$defs/app"
+      }
+    },
+    "commands": {
+      "type": "array",
+      "description": "Shared shell commands. These do NOT run until the reader allows this exact file with `specter trust` — any edit asks again.",
+      "items": {
+        "$ref": "#/$defs/command"
+      }
+    },
+    "bolts": {
+      "type": "array",
+      "description": "What you run: 'Work on api', 'Incident response'. A bolt lists what to start, in order — inline, or by naming a shared asset.",
+      "items": {
+        "$ref": "#/$defs/bolt"
+      }
+    }
+  },
+  "$defs": {
+    "color": {
+      "type": "string",
+      "pattern": "^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+      "description": "Hex colour.",
+      "examples": [
+        "#6d4aff"
+      ]
+    },
+    "label": {
+      "type": "string",
+      "minLength": 1,
+      "description": "How a bolt names this, and what is shown for it. Unique within its kind."
+    },
+    "osName": {
+      "type": "string",
+      "enum": [
+        "macos",
+        "linux",
+        "windows",
+        "darwin",
+        "win32",
+        "mac",
+        "osx",
+        "win"
+      ]
+    },
+    "os": {
+      "description": "Only on these operating systems. Elsewhere it is skipped, quietly.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/osName"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/osName"
+          },
+          "minItems": 1
+        }
+      ]
+    },
+    "perOS": {
+      "type": "object",
+      "description": "A different value per operating system. An OS left out does not have this.",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "patternProperties": {
+        "^(macos|linux|windows|darwin|win32|mac|osx|win)$": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "openWith": {
+      "type": "string",
+      "description": "Which app opens this folder or file. Honoured only in your personal workspaces; a shared project file cannot choose anyone's editor — readers set their own with `specter open-with`."
+    },
+    "link": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "url"
+          ],
+          "properties": {
+            "label": {
+              "$ref": "#/$defs/label"
+            },
+            "url": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The URL to open. A bare host is assumed to be https.",
+              "examples": [
+                "https://staging.acme.com",
+                "http://localhost:3000"
+              ]
+            },
+            "os": {
+              "$ref": "#/$defs/os"
+            },
+            "openWith": {
+              "$ref": "#/$defs/openWith"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "string",
+          "description": "Shorthand: the URL, doubling as its own label."
+        }
+      ]
+    },
+    "pathProperty": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Relative to this file — that is what makes it work on every machine. An absolute or ~ path works, but only where it exists; put those in .specter.local.json.",
+      "examples": [
+        "apps/api",
+        "README.md"
+      ]
+    },
+    "folder": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path"
+          ],
+          "properties": {
+            "label": {
+              "$ref": "#/$defs/label"
+            },
+            "path": {
+              "$ref": "#/$defs/pathProperty"
+            },
+            "os": {
+              "$ref": "#/$defs/os"
+            },
+            "openWith": {
+              "$ref": "#/$defs/openWith"
+            }
+          }
+        },
+        {
+          "type": "string",
+          "description": "Shorthand: the path, doubling as its own label."
+        }
+      ]
+    },
+    "file": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path"
+          ],
+          "properties": {
+            "label": {
+              "$ref": "#/$defs/label"
+            },
+            "path": {
+              "$ref": "#/$defs/pathProperty"
+            },
+            "os": {
+              "$ref": "#/$defs/os"
+            },
+            "openWith": {
+              "$ref": "#/$defs/openWith"
+            }
+          }
+        },
+        {
+          "type": "string",
+          "description": "Shorthand: the path, doubling as its own label."
+        }
+      ]
+    },
+    "appValue": {
+      "description": "The app as this OS knows it: a name (Slack), a macOS bundle id (com.tinyspeck.slackmacgap), a command on PATH (code), or one per OS.",
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "$ref": "#/$defs/perOS"
+        }
+      ],
+      "examples": [
+        "Slack",
+        {
+          "macos": "Visual Studio Code",
+          "linux": "code",
+          "windows": "code"
+        }
+      ]
+    },
+    "app": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "app"
+          ],
+          "properties": {
+            "label": {
+              "$ref": "#/$defs/label"
+            },
+            "app": {
+              "$ref": "#/$defs/appValue"
+            },
+            "os": {
+              "$ref": "#/$defs/os"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "bundleIdOrAppName"
+          ],
+          "properties": {
+            "label": {
+              "$ref": "#/$defs/label"
+            },
+            "bundleIdOrAppName": {
+              "$ref": "#/$defs/appValue",
+              "deprecated": true
+            },
+            "os": {
+              "$ref": "#/$defs/os"
+            }
+          }
+        },
+        {
+          "type": "string",
+          "description": "Shorthand: the app, doubling as its own label."
+        }
+      ]
+    },
+    "commandProperties": {
+      "label": {
+        "$ref": "#/$defs/label"
+      },
+      "run": {
+        "description": "Passed to the shell, so pipes and && work as they read. One per OS when they differ.",
+        "oneOf": [
+          {
+            "type": "string",
+            "minLength": 1
+          },
+          {
+            "$ref": "#/$defs/perOS"
+          }
+        ],
+        "examples": [
+          "pnpm dev",
+          "docker compose up"
+        ]
+      },
+      "cwd": {
+        "type": "string",
+        "description": "Where to run it, relative to this file.",
+        "examples": [
+          "apps/api"
+        ]
+      },
+      "background": {
+        "type": "boolean",
+        "description": "Always run it in the background, even when you have chosen to open commands in terminal windows — for anything you never need to look at.",
+        "default": false
+      },
+      "shell": {
+        "type": "string",
+        "enum": [
+          "sh",
+          "pwsh",
+          "cmd"
+        ],
+        "description": "Which shell `run` is written for. Defaults to your own shell on macOS and Linux, PowerShell on Windows."
+      },
+      "env": {
+        "type": "object",
+        "description": "Environment variables for this command, on top of your own.",
+        "propertyNames": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        },
+        "additionalProperties": {
+          "type": [
+            "string",
+            "number",
+            "boolean"
+          ]
+        },
+        "examples": [
+          {
+            "PORT": 3000
+          }
+        ]
+      },
+      "os": {
+        "$ref": "#/$defs/os"
+      }
+    },
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run"
+      ],
+      "description": "Runs only after the reader allows this file with `specter trust`.",
+      "properties": {
+        "label": {
+          "$ref": "#/$defs/commandProperties/label"
+        },
+        "run": {
+          "$ref": "#/$defs/commandProperties/run"
+        },
+        "cwd": {
+          "$ref": "#/$defs/commandProperties/cwd"
+        },
+        "background": {
+          "$ref": "#/$defs/commandProperties/background"
+        },
+        "shell": {
+          "$ref": "#/$defs/commandProperties/shell"
+        },
+        "env": {
+          "$ref": "#/$defs/commandProperties/env"
+        },
+        "os": {
+          "$ref": "#/$defs/commandProperties/os"
+        }
+      }
+    },
+    "wait": {
+      "description": "Seconds (5), a port (\"5432\" or \"db:5432\"), a url that must answer, or the object form with a timeout.",
+      "oneOf": [
+        {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        {
+          "type": "string",
+          "pattern": "^(https?://.+|([\\w.-]+:)?\\d{1,5}|\\d+(\\.\\d+)?s)$"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "port": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            },
+            "host": {
+              "type": "string",
+              "default": "localhost"
+            },
+            "url": {
+              "type": "string",
+              "pattern": "^https?://"
+            },
+            "seconds": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "timeout": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "default": 60,
+              "description": "Seconds before giving up."
+            }
+          }
+        }
+      ],
+      "examples": [
+        3,
+        "localhost:5432",
+        "http://localhost:3000"
+      ]
+    },
+    "step": {
+      "description": "One step of a bolt: a shared asset by label, something written inline, a wait, or another bolt to run first.",
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "description": "The label of a shared link, folder, file, app or command. folder:spec style ids pick between two of different kinds with one label."
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "url"
+          ],
+          "properties": {
+            "label": {
+              "$ref": "#/$defs/label"
+            },
+            "url": {
+              "type": "string",
+              "minLength": 1
+            },
+            "os": {
+              "$ref": "#/$defs/os"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "folder"
+          ],
+          "properties": {
+            "label": {
+              "$ref": "#/$defs/label"
+            },
+            "folder": {
+              "$ref": "#/$defs/pathProperty"
+            },
+            "os": {
+              "$ref": "#/$defs/os"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "file"
+          ],
+          "properties": {
+            "label": {
+              "$ref": "#/$defs/label"
+            },
+            "file": {
+              "$ref": "#/$defs/pathProperty"
+            },
+            "os": {
+              "$ref": "#/$defs/os"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "app"
+          ],
+          "properties": {
+            "label": {
+              "$ref": "#/$defs/label"
+            },
+            "app": {
+              "$ref": "#/$defs/appValue"
+            },
+            "os": {
+              "$ref": "#/$defs/os"
+            }
+          }
+        },
+        {
+          "$ref": "#/$defs/command",
+          "description": "A command written inline. Waits for `specter trust` like any other."
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "compose"
+          ],
+          "properties": {
+            "compose": {
+              "type": "string",
+              "minLength": 1,
+              "description": "A docker compose file, relative to this file. Its services are started with `up --wait` — the step is done when they are healthy — shown with their state and logs, and stopped by `specter down`. Waits for `specter trust`, like a command.",
+              "examples": [
+                "compose.yaml",
+                "deployments/development/docker-compose.yml"
+              ]
+            },
+            "services": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": "Only these services. All of them when left out."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "wait"
+          ],
+          "properties": {
+            "wait": {
+              "$ref": "#/$defs/wait"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "bolt"
+          ],
+          "properties": {
+            "bolt": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Another bolt to run first — once per run, and skipped where its commands are already running."
+            },
+            "workspace": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The workspace that bolt is in, when it is not this one."
+            }
+          }
+        }
+      ]
+    },
+    "bolt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "label"
+      ],
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Name it after the job, not the things it holds. Any distinctive word of it runs it: `specter api`.",
+          "examples": [
+            "Work on api",
+            "Incident response"
+          ]
+        },
+        "color": {
+          "$ref": "#/$defs/color"
+        },
+        "targets": {
+          "type": "array",
+          "description": "What this bolt starts, in the order it starts it.",
+          "items": {
+            "$ref": "#/$defs/step"
+          }
+        },
+        "job": {
+          "type": "boolean",
+          "default": false,
+          "description": "A job runs to completion — Test, Build, Release: its commands run attached, the first failure stops it, and every run is kept in `specter history`. Bolts it depends on still start the way they normally do."
+        },
+        "down": {
+          "type": "array",
+          "description": "Run by `specter down` after it has stopped what this bolt started — teardown that is not a process, like `docker compose stop`.",
+          "items": {
+            "$ref": "#/$defs/step"
+          }
+        }
+      }
+    }
+  }
+}

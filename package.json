@@ -1,0 +1,70 @@
+{
+  "name": "@squaredasher/specter",
+  "version": "0.1.0",
+  "description": "Run a project's bolts from the terminal: its links, folders, files, apps and commands, started together. macOS, Linux and Windows.",
+  "keywords": [
+    "specter",
+    "cli",
+    "tui",
+    "workspace",
+    "launcher",
+    "productivity"
+  ],
+  "homepage": "https://github.com/phrp720/specter#readme",
+  "bugs": "https://github.com/phrp720/specter/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/phrp720/specter.git"
+  },
+  "license": "MIT",
+  "author": "phrp720",
+  "type": "module",
+  "packageManager": "pnpm@10.18.2",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "specter": "./dist/cli/index.js"
+  },
+  "main": "./dist/core/index.js",
+  "types": "./dist/core/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/core/index.d.ts",
+      "default": "./dist/core/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "schema"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node -e \"require('fs').chmodSync('dist/cli/index.js', 0o755)\"",
+    "dev": "tsx src/cli/index.ts",
+    "start": "tsx src/cli/index.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "spec": "tsx src/cli/index.ts spec > docs/SPEC.md",
+    "compile": "bun scripts/compile.ts",
+    "clean": "rm -rf dist bin *.tsbuildinfo",
+    "prepublishOnly": "pnpm run clean && pnpm run build && pnpm run test"
+  },
+  "dependencies": {
+    "commander": "^15.0.0",
+    "ink": "^6.8.0",
+    "react": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "@types/react": "^19.3.0",
+    "ajv": "^8.20.0",
+    "ink-testing-library": "^4.0.0",
+    "tsx": "^4.23.1",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  }
+}

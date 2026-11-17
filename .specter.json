@@ -1,0 +1,27 @@
+{
+  "$schema": "https://raw.githubusercontent.com/phrp720/specter/main/schema/specter.schema.json",
+  "name": "Specter",
+  "icon": "🔮",
+  "color": "#6d4aff",
+  "notes": "Specter's own workspace file — the feature, used on itself.",
+
+  "links": [
+    { "label": "Repository", "url": "https://github.com/phrp720/specter" },
+    { "label": "Issues", "url": "https://github.com/phrp720/specter/issues" }
+  ],
+
+  "bolts": [
+    {
+      "label": "Work on core",
+      "targets": [{ "folder": "src/core" }, { "run": "pnpm test:watch" }, "Repository"]
+    },
+    {
+      "label": "Work on the CLI",
+      "targets": [{ "folder": "src/cli" }, { "run": "pnpm typecheck && pnpm test" }]
+    },
+    {
+      "label": "Check everything",
+      "targets": [{ "run": "pnpm typecheck && pnpm test && pnpm build" }]
+    }
+  ]
+}

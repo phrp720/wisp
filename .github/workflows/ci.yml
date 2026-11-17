@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      # Nothing should open on a CI machine, whatever it thinks its display is.
+      SPECTER_HEADLESS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      # The unit tests are written against POSIX paths and processes; Windows is covered by
+      # the build and the smoke test below until they are made path-neutral.
+      - if: runner.os != 'Windows'
+        run: pnpm test
+      - run: pnpm build
+      - name: Smoke test the CLI
+        shell: bash
+        run: |
+          node dist/cli/index.js --version
+          node dist/cli/index.js doctor
+          node dist/cli/index.js check
+          node dist/cli/index.js "Work on core" --dry-run
+          node dist/cli/index.js spec > /dev/null
