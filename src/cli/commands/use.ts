@@ -70,6 +70,7 @@ export const use: CommandDef<Options> = {
     // Each step is reported as it finishes, and an attached command's output arrives under
     // its own header — so a long job reads as it goes, not all at once at the end.
     let lastWasOutput = false;
+    const attachedSteps = new Set<string>();
     const runOptions: SwitchOptions = {
       // A git hook says so in its environment; anything else typed this.
       trigger: process.env["SPECTER_TRIGGER"] ?? "cli",
@@ -85,11 +86,16 @@ export const use: CommandDef<Options> = {
               const detail = target.label === target.value ? "" : ` ${dim(target.value)}`;
               console.log(`\n${bold("▸")} ${bold(target.label)}${detail}`);
               lastWasOutput = true;
+              attachedSteps.add(target.id);
             },
             onResult: (target: TargetResult) => {
               if (lastWasOutput) console.log();
               lastWasOutput = false;
-              console.log(resultLine(target));
+              // Its command was just printed above its output: the result line need not
+              // say it again — what happened, and how long it took, is enough.
+              // In a job every step reads the same short way; elsewhere a step that opened
+              // something says what it opened.
+              console.log(attachedSteps.has(target.id) || (isJob && target.kind === "command") ? compactLine(target) : resultLine(target));
             },
           }),
     };
@@ -144,13 +150,19 @@ export const use: CommandDef<Options> = {
     const health = diagnosticSummary(read);
     if (health) console.log(health);
 
-    const failed = result.targets.filter((target) => !target.ok && !target.skipped).length;
-    if (result.historyId && (isJob || failed > 0)) {
-      console.log(dim(`\n${result.ok ? "passed" : "failed"} · \`specter history ${result.historyId}\` for the details`));
-    }
+    // One line that says how it went and what to do next — not two that say the same.
+    const failedAt = result.targets.find((target) => !target.ok && !target.skipped);
+    const name = result.bolt?.label ?? label ?? workspace.name;
+    const total = result.targets.reduce((sum, target) => sum + (target.durationMs ?? 0), 0);
     if (!result.ok) {
-      console.error(red(failed > 0 ? `${plural(failed, "step")} failed` : "stopped"));
+      const next = [
+        result.historyId ? `\`specter history ${result.historyId}\`` : "",
+        failedAt && result.historyId ? `\`specter ${shortName(name)} --retry\` runs only what failed` : "",
+      ].filter(Boolean);
+      console.error(`\n${red("✗")} ${bold(name)} ${failedAt ? `failed at ${failedAt.label}` : "was stopped"}${next.length > 0 ? dim(` · ${next.join(" · ")}`) : ""}`);
       process.exitCode = 1;
+    } else if (isJob && !result.dryRun) {
+      console.log(`\n${green("✓")} ${bold(name)} passed ${dim(`in ${formatMs(total)}`)}`);
     }
   },
 };
@@ -203,4 +215,23 @@ async function retryLast(
   if (!last) throw new SpecterError(`"${label}" has not run yet — run it whole first`, "NOTHING_TO_RETRY");
   const again = await planRetry(workspace, last, deps);
   return runPlan(workspace, again, { ...options, label: `${label} (retry)`, job, trigger: "retry" }, deps);
+}
+
+/** A result line for a step whose command and output were just shown: the outcome and time. */
+function compactLine(target: TargetResult): string {
+  const mark = target.skipped ? dim("–") : !target.ok ? red("✗") : green("✓");
+  const time = target.durationMs ? dim(` ${formatMs(target.durationMs)}`) : "";
+  const detail = target.error ? ` ${red(target.error)}` : target.skipped && target.note ? ` ${dim(target.note)}` : "";
+  return `  ${mark} ${target.label}${time}${detail}`;
+}
+
+function formatMs(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+  return `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`;
+}
+
+/** The bolt as a word to type: a single word as it is, more than one in quotes. */
+function shortName(label: string): string {
+  return /\s/.test(label) ? `"${label}"` : label;
 }

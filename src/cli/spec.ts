@@ -93,7 +93,7 @@ names the folder.
 
 ## Commands
 
-\`{ "run": "…", "cwd": "…", "env": {…}, "shell": "sh" | "pwsh" | "cmd", "background": true }\`
+\`{ "run": "…", "cwd": "…", "env": {…}, "shell": "sh" | "pwsh" | "cmd", "background": true, "restart": "on-failure" | "always" }\`
 
 - \`run\` goes to the user's own shell (\`$SHELL -ilc\`) on macOS/Linux and PowerShell on
   Windows, unless \`shell\` says otherwise. Pipes and \`&&\` work.
@@ -101,6 +101,9 @@ names the folder.
   colours, with that output kept: \`specter logs <name>\`, \`specter ps\`, and a pane each in
   the TUI. They outlive Specter. \`--window\`, or \`specter open-with terminal <app|tmux>\`,
   puts them in terminal or tmux windows instead. A job's commands always run attached.
+- \`restart\` brings a command back when it stops — \`"on-failure"\` after a crash, \`"always"\`
+  whenever it exits — waiting 1s, 2s, 4s… up to 30s, and giving up after 10 in a row. It
+  keeps working after Specter is closed.
 
 ## Per-OS values
 

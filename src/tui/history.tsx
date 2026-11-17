@@ -1,12 +1,11 @@
 import { Box, Text, useInput } from "ink";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { cleanOutput } from "../core/ansi.js";
-import type { HistoryEntry, HistoryStep } from "../core/history.js";
+import { baseLabel, type HistoryEntry, type HistoryStep } from "../core/history.js";
 import type { Glyphs } from "./glyphs.js";
-import { shortUrl, windowed, type Services } from "./model.js";
-
-type Focus = "runs" | "steps" | "log";
+import { TONE } from "./tones.js";
+import { matchesAll, shortUrl, windowed, type Services } from "./model.js";
 
 export interface HistoryScreenProps {
   services: Services;
@@ -16,24 +15,38 @@ export interface HistoryScreenProps {
   onClose: () => void;
   /** Go to what is running instead. */
   onRunning: () => void;
+  /** 1–3 jump to another panel; 4 is this one. */
+  onJump?: (input: string) => void;
   /** Run the failed part of this run again. */
   onRetry: (entry: HistoryEntry) => void;
   /** Run the whole bolt again. */
   onRerun: (entry: HistoryEntry) => void;
 }
 
+/** A bolt in the sidebar: the filter, like a workflow in a CI's list. */
+interface BoltFilter {
+  key: string;
+  workspace?: string;
+  workspaceName?: string;
+  bolt?: string;
+  count: number;
+}
+
 /**
- * Every run, the way a CI shows them: what ran, whether it passed, how long it took, what
- * started it and against which commit — then its steps with their timings, then any step's
- * full log. A failed run opens on the step that failed.
+ * History, laid out the way a CI lays out its runs: bolts on the left to filter by, the
+ * runs of the chosen ones on the right — numbered, with their commit and what started
+ * them — and, opening one, its summary, its pipeline drawn as a graph, and its steps with
+ * their logs expanding in place.
  */
-export function HistoryScreen({ services, glyphs, height, columns, onClose, onRunning, onRetry, onRerun }: HistoryScreenProps) {
+export function HistoryScreen(props: HistoryScreenProps) {
+  const { services, glyphs, height, columns, onClose, onRunning, onRetry, onRerun, onJump } = props;
   const [entries, setEntries] = useState<HistoryEntry[]>();
+  const [filterIndex, setFilterIndex] = useState(0);
   const [runIndex, setRunIndex] = useState(0);
-  const [stepIndex, setStepIndex] = useState(0);
-  const [focus, setFocus] = useState<Focus>("runs");
-  const [log, setLog] = useState<string>();
-  const [scroll, setScroll] = useState(0);
+  const [focus, setFocus] = useState<"bolts" | "runs">("runs");
+  const [open, setOpen] = useState<string>();
+  const [query, setQuery] = useState("");
+  const [typing, setTyping] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -50,59 +63,75 @@ export function HistoryScreen({ services, glyphs, height, columns, onClose, onRu
     };
   }, [services]);
 
-  const run = entries?.[runIndex];
-  const step = run?.steps[stepIndex];
+  const filters = useMemo(() => boltFilters(entries ?? []), [entries]);
+  const filter = filters[Math.min(filterIndex, filters.length - 1)];
+  const shown = useMemo(
+    () =>
+      (entries ?? [])
+        .filter((entry) => !filter?.bolt || (entry.workspace === filter.workspace && baseLabel(entry.bolt) === filter.bolt))
+        .filter((entry) => matchesAll(query, ...searchText(entry))),
+    [entries, filter, query],
+  );
+  const run = shown[Math.min(runIndex, Math.max(0, shown.length - 1))];
+  const opened = open ? entries?.find((entry) => entry.id === open) : undefined;
 
-  const select = (at: number) => setRunIndex(at);
-  // Opening a run lands on the step that matters: the first that failed.
-  useEffect(() => {
-    const failed = run?.steps.findIndex((entry) => !entry.ok && !entry.skipped) ?? -1;
-    setStepIndex(Math.max(0, failed));
-  }, [run?.id]);
+  useInput(
+    (input, key) => {
+      if (!entries) return;
+      // Typing a search: letters go into it; ⏎ or ↓ keeps it and goes back to the runs.
+      if (typing) {
+        if (key.escape) {
+          setQuery("");
+          setTyping(false);
+          return setRunIndex(0);
+        }
+        if (key.return || key.downArrow || key.tab) return setTyping(false);
+        if (key.backspace || key.delete) {
+          setQuery((text) => text.slice(0, -1));
+          return setRunIndex(0);
+        }
+        if (input && !key.ctrl && !key.meta) {
+          setQuery((text) => text + input);
+          return setRunIndex(0);
+        }
+        return;
+      }
+      // Fast typing arrives as one chunk: "/fail" is "/" and the start of the search.
+      if (input.startsWith("/")) {
+        setFocus("runs");
+        setQuery((text) => text + input.slice(1));
+        setRunIndex(0);
+        return setTyping(true);
+      }
+      if (key.escape && query) {
+        setQuery("");
+        return setRunIndex(0);
+      }
+      if (input === "p") return onRunning();
+      if (onJump && (input === "1" || input === "2" || input === "3")) return onJump(input);
+      if (run && input === "r" && !run.ok) return onRetry(run);
+      if (run && input === "R") return onRerun(run);
+      if (key.escape || input === "q" || input === "h") return onClose();
 
-  const openLog = async (target: HistoryStep | undefined) => {
-    if (!target?.log) return;
-    setLog(await services.readLog(target.log));
-    setScroll(0);
-    setFocus("log");
-  };
-
-  const logLines = useMemo(() => (log === undefined ? [] : cleanOutput(log).split("\n").filter((line, at, all) => line !== "" || at < all.length - 1)), [log]);
-  const logRoom = Math.max(1, height - 4);
-
-  useInput((input, key) => {
-    if (!entries) return;
-    if (focus === "log") {
-      const most = Math.max(0, logLines.length - logRoom);
-      if (key.escape || key.leftArrow || input === "q") return setFocus("steps");
-      if (key.upArrow || input === "k") return setScroll((at) => Math.max(0, at - 1));
-      if (key.downArrow || input === "j") return setScroll((at) => Math.min(most, at + 1));
-      if (key.pageUp || input === "u") return setScroll((at) => Math.max(0, at - logRoom));
-      if (key.pageDown || input === "d" || input === " ") return setScroll((at) => Math.min(most, at + logRoom));
-      if (input === "g") return setScroll(0);
-      if (input === "G") return setScroll(most);
-      return;
-    }
-
-    if (input === "p") return onRunning();
-    if (input === "h" && focus === "runs") return onClose();
-    if (run && input === "r" && !run.ok) return onRetry(run);
-    if (run && input === "R") return onRerun(run);
-
-    if (focus === "runs") {
-      if (key.escape || input === "q") return onClose();
-      if (key.upArrow || input === "k") return select(Math.max(0, runIndex - 1));
-      if (key.downArrow || input === "j") return select(Math.min(entries.length - 1, runIndex + 1));
-      if ((key.return || key.rightArrow || key.tab) && run) return setFocus("steps");
-      return;
-    }
-
-    // Steps.
-    if (key.escape || key.leftArrow || (key.shift && key.tab)) return setFocus("runs");
-    if (key.upArrow || input === "k") return setStepIndex((at) => Math.max(0, at - 1));
-    if (key.downArrow || input === "j") return setStepIndex((at) => Math.min((run?.steps.length ?? 1) - 1, at + 1));
-    if (key.return) return void openLog(step);
-  });
+      if (focus === "bolts") {
+        if (key.upArrow || input === "k") {
+          setFilterIndex((at) => Math.max(0, at - 1));
+          return setRunIndex(0);
+        }
+        if (key.downArrow || input === "j") {
+          setFilterIndex((at) => Math.min(filters.length - 1, at + 1));
+          return setRunIndex(0);
+        }
+        if (key.rightArrow || key.return || key.tab) return setFocus("runs");
+        return;
+      }
+      if (key.leftArrow || (key.shift && key.tab)) return setFocus("bolts");
+      if (key.upArrow || input === "k") return setRunIndex((at) => Math.max(0, at - 1));
+      if (key.downArrow || input === "j") return setRunIndex((at) => Math.min(shown.length - 1, at + 1));
+      if (key.return && run) return setOpen(run.id);
+    },
+    { isActive: !opened },
+  );
 
   if (!entries) {
     return (
@@ -112,139 +141,326 @@ export function HistoryScreen({ services, glyphs, height, columns, onClose, onRu
     );
   }
 
+  if (opened) {
+    return (
+      <RunDetail
+        entry={opened}
+        services={services}
+        glyphs={glyphs}
+        height={height}
+        columns={columns}
+        onBack={() => setOpen(undefined)}
+        onRetry={() => onRetry(opened)}
+        onRerun={() => onRerun(opened)}
+      />
+    );
+  }
+
   if (entries.length === 0) {
     return (
       <Box flexDirection="column" height={height} borderStyle={glyphs.border} paddingX={1}>
-        <Text bold>History</Text>
+        <Text bold>
+          <Text dimColor>4 </Text>History
+        </Text>
         <Text> </Text>
-        <Text>Nothing has run yet. Every run of a bolt shows up here: whether it worked, how long each step took, and what it printed.</Text>
+        <Text>Nothing has run yet. Every run of a bolt shows up here — whether it worked, how long each step took, and what it printed — the way a CI shows its runs.</Text>
         <Box flexGrow={1} />
         <Text dimColor>esc back</Text>
       </Box>
     );
   }
 
-  if (focus === "log" && run && step) {
-    const shown = logLines.slice(scroll, scroll + logRoom);
-    const width = String(logLines.length).length;
-    return (
-      <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor={step.ok ? "gray" : "red"} paddingX={1}>
-        <Text wrap="truncate-end">
-          <Mark step={step} glyphs={glyphs} /> <Text bold>{step.label}</Text>
-          <Text dimColor>{`  ${run.bolt} · ${run.workspaceName} · ${formatDuration(step.durationMs)}${logLines.length > 0 ? ` · lines ${scroll + 1}–${Math.min(logLines.length, scroll + logRoom)} of ${logLines.length}` : ""}`}</Text>
-        </Text>
-        {shown.length === 0 ? <Text dimColor>It printed nothing.</Text> : null}
-        {shown.map((line, at) => (
-          <Text key={at} wrap="truncate-end">
-            <Text dimColor>{`${String(scroll + at + 1).padStart(width)} `}</Text>
-            {line || " "}
-          </Text>
-        ))}
-        <Box flexGrow={1} />
-        <Text dimColor>↑↓ scroll · pgup/pgdn a page · g/G start/end · esc back to the steps</Text>
-      </Box>
-    );
-  }
-
-  // The list of runs, by day.
-  const listWidth = Math.min(46, Math.max(30, Math.floor(columns * 0.38)));
-  type Row = { key: string; heading?: string; at?: number };
-  const rows: Row[] = [];
-  let day = "";
-  entries.forEach((entry, at) => {
-    const label = dayLabel(entry.startedAt);
-    if (label !== day) {
-      day = label;
-      rows.push({ key: `d:${label}`, heading: label });
-    }
-    rows.push({ key: entry.id, at });
-  });
-  const selectedRow = Math.max(0, rows.findIndex((row) => row.at === runIndex));
-  const visibleRows = windowed(rows, selectedRow, Math.floor((height - 3) / 2) + 2).items;
-
-  const longest = Math.max(1, ...(run?.steps.map((entry) => entry.durationMs) ?? [1]));
-  // The step's sentence gets what the panel can spare after the time and its bar.
-  const labelWidth = Math.max(24, Math.min(56, columns - listWidth - 34));
-  const stepsRoom = Math.max(1, height - 7);
-  const { items: shownSteps, offset } = windowed(run?.steps ?? [], stepIndex, stepsRoom);
+  const sideWidth = Math.min(32, Math.max(22, Math.floor(columns * 0.24)));
+  const { items: filterRows, offset: filterOffset } = windowed(filters, filterIndex, height - 3);
+  const runRoom = Math.max(1, Math.floor((height - 5) / 2));
+  const { items: runRows, offset: runOffset } = windowed(shown, runIndex, runRoom);
+  const runWidth = Math.max(30, columns - sideWidth - 6);
 
   return (
     <Box height={height}>
-      <Box flexDirection="column" width={listWidth} flexShrink={0} borderStyle={glyphs.border} borderColor={focus === "runs" ? "#a78bfa" : "gray"} paddingX={1} overflow="hidden">
-        <Text bold>History</Text>
-        {visibleRows.map((row) => {
-          if (row.heading) {
-            return (
-              <Text key={row.key} dimColor>
-                {row.heading.toUpperCase()}
-              </Text>
-            );
-          }
-          const entry = entries[row.at as number] as HistoryEntry;
-          const selected = row.at === runIndex;
-          const failedAt = entry.steps.find((item) => !item.ok && !item.skipped);
+      <Box flexDirection="column" width={sideWidth} flexShrink={0} borderStyle={glyphs.border} borderColor={focus === "bolts" ? TONE.accent : "gray"} paddingX={1} overflow="hidden">
+        <Text bold>
+          <Text dimColor>4 </Text>History
+        </Text>
+        {filterRows.map((entry, position) => {
+          const at = filterOffset + position;
+          const selected = at === filterIndex;
+          const heading = entry.bolt && (at === 0 || filters[at - 1]?.workspace !== entry.workspace);
           return (
-            <Box key={row.key} flexDirection="column">
-              <Text wrap="truncate-end" inverse={selected && focus === "runs"} bold={selected}>
-                {entry.ok ? <Text color="green">{glyphs.ok}</Text> : <Text color="red">{glyphs.fail}</Text>} {entry.bolt}
-                <Text dimColor>{`  ${formatDuration(totalMs(entry))} · ${ago(entry.startedAt)}`}</Text>
-              </Text>
-              <Text wrap="truncate-end" dimColor>
-                {`  ${[failedAt ? `failed at ${failedAt.label}` : "", entry.workspaceName, triggerWords(entry.trigger), entry.git ? `${entry.git.branch} @ ${entry.git.commit}` : ""].filter(Boolean).join(" · ")}`}
-              </Text>
+            <Box key={entry.key} flexDirection="column">
+              {heading ? <Text dimColor>{(entry.workspaceName ?? "").toUpperCase()}</Text> : null}
+              <Box>
+                <Box flexGrow={1} minWidth={0}>
+                  <Text wrap="truncate-end" inverse={selected && focus === "bolts"} bold={selected}>
+                    {selected ? glyphs.pointer : " "} {entry.bolt ?? "All bolts"}
+                  </Text>
+                </Box>
+                <Text dimColor>{` ${entry.count}`}</Text>
+              </Box>
             </Box>
           );
         })}
       </Box>
 
-      <Box flexDirection="column" flexGrow={1} flexShrink={1} minWidth={0} borderStyle={glyphs.border} borderColor={focus === "steps" ? "#a78bfa" : run?.ok ? "gray" : "red"} paddingX={1} overflow="hidden">
-        {run ? (
-          <>
-            <Text wrap="truncate-end">
-              <Mark step={{ ok: run.ok }} glyphs={glyphs} /> <Text bold>{run.bolt}</Text>
-              <Text>{` · ${run.ok ? "passed" : "failed"} in ${formatDuration(totalMs(run))}`}</Text>
-            </Text>
-            <Text dimColor wrap="truncate-end">
-              {[triggerWords(run.trigger) ? `from ${triggerWords(run.trigger)}` : "", run.git ? `${run.git.branch} @ ${run.git.commit}` : "", ago(run.startedAt), new Date(run.startedAt).toLocaleString()].filter(Boolean).join(" · ")}
-            </Text>
-            <Text> </Text>
-            {shownSteps.map((entry, position) => {
-              const at = offset + position;
-              const selected = focus === "steps" && at === stepIndex;
-              // Bars in their own fixed column, drawn plain — never inverted, which turns
-              // a bar into a block — with a gap before whatever is said after them.
-              const bar = entry.durationMs > 0 ? "▇".repeat(Math.max(1, Math.round((entry.durationMs / longest) * 12))) : "";
-              const said = describeHistoryStep(entry, run.job);
-              const note = entry.error ?? (entry.note && !entry.note.startsWith("logs:") ? entry.note : undefined);
-              return (
-                <Text key={at} wrap="truncate-end">
-                  <Text color="#a78bfa">{selected ? glyphs.pointer : " "}</Text> <Mark step={entry} glyphs={glyphs} />{" "}
-                  <Text bold={selected} color={selected ? "#a78bfa" : undefined}>{fit(said, labelWidth)}</Text>
-                  <Text dimColor>{` ${formatDuration(entry.durationMs).padStart(6)}  `}</Text>
-                  <Text color={entry.ok ? "#a78bfa" : "red"}>{bar.padEnd(12)}</Text>
-                  {"  "}
-                  {note ? <Text color={entry.error ? "red" : undefined} dimColor={!entry.error}>{note}</Text> : null}
-                  {entry.log ? <Text dimColor>{`${note ? "  " : ""}⏎ log`}</Text> : null}
-                </Text>
-              );
-            })}
-            <Box flexGrow={1} />
-            <Text dimColor wrap="truncate-end">
-              {[
-                focus === "runs" ? "→ its steps" : "⏎ open a step's log · ← the runs",
-                run.ok ? "" : "r retry what failed",
-                "R run it all again",
-                "p running",
-                "esc back",
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-            </Text>
-          </>
-        ) : null}
+      <Box flexDirection="column" flexGrow={1} flexShrink={1} minWidth={0} borderStyle={glyphs.border} borderColor={focus === "runs" ? TONE.accent : "gray"} paddingX={1} overflow="hidden">
+        <Text>
+          <Text bold>{filter?.bolt ?? "All runs"}</Text>
+          <Text dimColor>{`  ${shown.length} run${shown.length === 1 ? "" : "s"}`}</Text>
+        </Text>
+        {typing || query ? <SearchLine query={query} typing={typing} /> : <Text> </Text>}
+        {shown.length === 0 ? <Text dimColor>{`No run matches “${query}”. esc clears it.`}</Text> : null}
+        {runRows.map((entry, position) => {
+          const at = runOffset + position;
+          const selected = at === runIndex && focus === "runs";
+          const failedAt = entry.steps.find((step) => !step.ok && !step.skipped);
+          // A fixed width, so the times line up down the list whatever their length.
+          const right = `${(formatDuration(totalMs(entry)) || "0ms").padStart(7)} · ${ago(entry.startedAt).padEnd(8)}`;
+          const branch = entry.git ? ` ${entry.git.branch} ` : "";
+          return (
+            <Box key={entry.id} flexDirection="column">
+              <Box>
+                <Box flexGrow={1} minWidth={0}>
+                  <Text wrap="truncate-end" bold={selected} color={selected ? TONE.accent : undefined}>
+                    {selected ? glyphs.pointer : " "} <Mark ok={entry.ok} glyphs={glyphs} /> {entry.bolt}
+                    <Text dimColor>{` #${entry.number ?? ""}`}</Text>
+                  </Text>
+                </Box>
+                <Box flexShrink={0}>
+                  {branch ? <Text color="#60a5fa" inverse>{branch}</Text> : null}
+                  <Text dimColor>{`  ${right}`}</Text>
+                </Box>
+              </Box>
+              <Text wrap="truncate-end" dimColor>
+                {`    ${clip(
+                  [
+                    failedAt ? `failed at ${failedAt.label}` : "",
+                    entry.git?.subject ? `“${entry.git.subject}”` : "",
+                    entry.git ? entry.git.commit : "",
+                    triggerWords(entry.trigger),
+                    filter?.bolt ? "" : entry.workspaceName,
+                  ]
+                    .filter(Boolean)
+                    .join(" · "),
+                  runWidth - 4,
+                )}`}
+              </Text>
+            </Box>
+          );
+        })}
+        <Box flexGrow={1} />
+        <Text dimColor wrap="truncate-end">
+          {[focus === "runs" ? "⏎ open the run" : "→ its runs", "← bolts", "/ search", run && !run.ok ? "r retry what failed" : "", "R run again", "p running", "esc back"]
+            .filter(Boolean)
+            .join(" · ")}
+        </Text>
       </Box>
     </Box>
   );
+}
+
+/** One run, as a CI's run page: the summary, the pipeline, then each step with its log. */
+function RunDetail(props: {
+  entry: HistoryEntry;
+  services: Services;
+  glyphs: Glyphs;
+  height: number;
+  columns: number;
+  onBack: () => void;
+  onRetry: () => void;
+  onRerun: () => void;
+}) {
+  const { entry, services, glyphs, height, columns, onBack, onRetry, onRerun } = props;
+  const firstFailed = Math.max(0, entry.steps.findIndex((step) => !step.ok && !step.skipped));
+  const [selected, setSelected] = useState(firstFailed);
+  // The failed step opens with its log showing, as a CI opens the failing job.
+  const [expanded, setExpanded] = useState<Set<number>>(() => new Set(entry.ok ? [] : [firstFailed]));
+  const [logs, setLogs] = useState<Map<number, string[]>>(new Map());
+  const [top, setTop] = useState(0);
+
+  useEffect(() => {
+    for (const at of expanded) {
+      const step = entry.steps[at];
+      if (!step?.log || logs.has(at)) continue;
+      void services.readLog(step.log).then((text) => {
+        setLogs((prior) => new Map(prior).set(at, cleanOutput(text).split("\n").filter((line, index, all) => line !== "" || index < all.length - 1)));
+      });
+    }
+  }, [expanded, entry, services, logs]);
+
+  // The steps and their open logs, as one list of rows to scroll through.
+  const rows: { key: string; step?: number; node: ReactNode }[] = [];
+  const longest = Math.max(1, ...entry.steps.map((step) => step.durationMs));
+  // As wide as the longest step, so a step's time sits beside it rather than across the screen.
+  const labelWidth = Math.min(Math.max(24, columns - 34), Math.max(16, ...entry.steps.map((step) => describeHistoryStep(step, entry.job).length + 2)));
+  entry.steps.forEach((step, at) => {
+    const isSelected = at === selected;
+    const isOpen = expanded.has(at);
+    const bar = step.durationMs > 0 ? "▇".repeat(Math.max(1, Math.round((step.durationMs / longest) * 12))) : "";
+    rows.push({
+      key: `s${at}`,
+      step: at,
+      node: (
+        <Text wrap="truncate-end">
+          <Text color={TONE.accent}>{isSelected ? glyphs.pointer : " "}</Text> {step.log ? (isOpen ? "▾" : "▸") : " "} <Mark ok={step.ok} skipped={step.skipped} glyphs={glyphs} />{" "}
+          <Text bold={isSelected} color={isSelected ? TONE.accent : undefined}>{fit(describeHistoryStep(step, entry.job), labelWidth)}</Text>
+          <Text dimColor>{` ${formatDuration(step.durationMs).padStart(6)}  `}</Text>
+          <Text color={step.ok ? TONE.accent : "red"}>{bar.padEnd(12)}</Text>
+          {"  "}
+          {step.error ? <Text color="red">{step.error}</Text> : step.note && !step.note.startsWith("logs:") ? <Text dimColor>{step.note}</Text> : null}
+        </Text>
+      ),
+    });
+    if (isOpen) {
+      const lines = logs.get(at);
+      if (!lines) rows.push({ key: `l${at}`, node: <Text dimColor>{"        reading…"}</Text> });
+      else if (lines.length === 0) rows.push({ key: `l${at}`, node: <Text dimColor>{"        it printed nothing"}</Text> });
+      else {
+        const width = String(lines.length).length;
+        lines.forEach((line, index) =>
+          rows.push({
+            key: `l${at}:${index}`,
+            node: (
+              <Text wrap="truncate-end">
+                <Text dimColor>{`        ${String(index + 1).padStart(width)} `}</Text>
+                {line || " "}
+              </Text>
+            ),
+          }),
+        );
+      }
+    }
+  });
+
+  const graph = pipeline(entry);
+  const graphRows = graph.length > 1 ? Math.max(1, Math.ceil(graphWidth(graph) / Math.max(20, columns - 6))) : 0;
+  const room = Math.max(3, height - 8 - graphRows * 3);
+  const selectedRow = Math.max(0, rows.findIndex((row) => row.step === selected));
+  // The view follows the selected step; page keys move it on their own.
+  const most = Math.max(0, rows.length - room);
+  const first = Math.min(most, Math.max(0, selectedRow < top ? selectedRow : selectedRow >= top + room ? selectedRow - room + 1 : top));
+  const visible = rows.slice(first, first + room);
+
+  useInput((input, key) => {
+    if (key.escape || key.leftArrow || input === "q") return onBack();
+    if (input === "r" && !entry.ok) return onRetry();
+    if (input === "R") return onRerun();
+    if (key.upArrow || input === "k") {
+      setTop(first);
+      return setSelected((at) => Math.max(0, at - 1));
+    }
+    if (key.downArrow || input === "j") {
+      setTop(first);
+      return setSelected((at) => Math.min(entry.steps.length - 1, at + 1));
+    }
+    if (key.pageDown || input === "d") return setTop(Math.min(most, first + room));
+    if (key.pageUp || input === "u") return setTop(Math.max(0, first - room));
+    if (key.return || input === " ") {
+      if (!entry.steps[selected]?.log) return;
+      setTop(first);
+      setExpanded((prior) => {
+        const next = new Set(prior);
+        if (next.has(selected)) next.delete(selected);
+        else next.add(selected);
+        return next;
+      });
+    }
+  });
+
+  return (
+    <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor={entry.ok ? "gray" : "red"} paddingX={1} overflow="hidden">
+      <Text wrap="truncate-end">
+        <Mark ok={entry.ok} glyphs={glyphs} /> <Text bold>{entry.bolt}</Text>
+        <Text dimColor>{` #${entry.number ?? ""}`}</Text>
+        <Text dimColor>{`   ${entry.workspaceName}`}</Text>
+      </Text>
+      <Summary entry={entry} />
+      {graph.length > 1 ? (
+      <Box flexWrap="wrap" marginTop={1}>
+        {graph.map((node, at) => (
+          <Box key={at} alignItems="center">
+            {at > 0 ? <Text dimColor>{" ── "}</Text> : null}
+            <Box borderStyle="round" borderColor={node.skipped ? "gray" : node.ok ? "green" : "red"} paddingX={1}>
+              <Text wrap="truncate-end">
+                <Mark ok={node.ok} skipped={node.skipped} glyphs={glyphs} /> {node.label}
+                {node.detail ? <Text dimColor>{` ${node.detail}`}</Text> : null}
+              </Text>
+            </Box>
+          </Box>
+        ))}
+      </Box>
+      ) : (
+        <Text> </Text>
+      )}
+      {visible.map((row) => (
+        <Box key={row.key}>{row.node}</Box>
+      ))}
+      <Box flexGrow={1} />
+      <Text dimColor wrap="truncate-end">
+        {["↑↓ steps", "⏎ show or hide its log", "pgup/pgdn scroll", entry.ok ? "" : "r retry what failed", "R run again", "esc back to the runs"].filter(Boolean).join(" · ")}
+      </Text>
+    </Box>
+  );
+}
+
+/** The line under a run's title: how it started, against what, how it ended, how long. */
+function Summary({ entry }: { entry: HistoryEntry }) {
+  const cells: [string, string, string?][] = [
+    ["Triggered", `${triggerWords(entry.trigger) ? `from ${triggerWords(entry.trigger)} ` : ""}${ago(entry.startedAt)}`],
+    ...(entry.git ? ([["Commit", `${entry.git.branch} @ ${entry.git.commit}${entry.git.subject ? `  “${clip(entry.git.subject, 40)}”` : ""}`]] as [string, string][]) : []),
+    ["Status", entry.ok ? "Success" : "Failed", entry.ok ? "green" : "red"],
+    ["Total duration", formatDuration(totalMs(entry)) || "0ms"],
+  ];
+  return (
+    <Box marginTop={1}>
+      {cells.map(([title, value, color]) => (
+        <Box key={title} flexDirection="column" marginRight={4} flexShrink={title === "Commit" ? 1 : 0}>
+          <Text dimColor>{title}</Text>
+          <Text bold color={color} wrap="truncate-end">
+            {value}
+          </Text>
+        </Box>
+      ))}
+    </Box>
+  );
+}
+
+export interface GraphNode {
+  label: string;
+  detail?: string;
+  ok: boolean;
+  skipped?: boolean;
+}
+
+/**
+ * A run as a pipeline: one node per step — but a dependency's steps as one node, the way
+ * a CI draws a reused workflow as one box with its jobs inside.
+ */
+export function pipeline(entry: HistoryEntry): GraphNode[] {
+  // Like a CI's graph of jobs: one box per bolt the run went through — the ones it needed,
+  // then its own — each with its steps counted inside. Steps themselves are the list below.
+  const nodes: (GraphNode & { key: string; steps: number; ms: number })[] = [];
+  for (const step of entry.steps) {
+    const owner = step.bolt ? (step.workspace ? `${step.workspace} › ${step.bolt}` : step.bolt) : baseLabel(entry.bolt);
+    let node = nodes.find((candidate) => candidate.key === owner);
+    if (!node) {
+      node = { key: owner, label: owner, ok: true, skipped: true, steps: 0, ms: 0 };
+      nodes.push(node);
+    }
+    node.steps += 1;
+    node.ms += step.durationMs;
+    node.ok = node.ok && step.ok;
+    node.skipped = Boolean(node.skipped && step.skipped);
+  }
+  return nodes.map(({ label, ok, skipped, steps, ms }) => ({
+    label,
+    detail: `${steps} step${steps === 1 ? "" : "s"}${ms > 0 ? ` ${formatDuration(ms)}` : ""}`,
+    ok,
+    ...(skipped ? { skipped } : {}),
+  }));
+}
+
+function graphWidth(nodes: GraphNode[]): number {
+  return nodes.reduce((total, node) => total + node.label.length + (node.detail?.length ?? 0) + 10, 0);
 }
 
 /** A past step as the sentence the rest of Specter would use for it. */
@@ -269,14 +485,23 @@ export function describeHistoryStep(step: HistoryStep, job: boolean): string {
   }
 }
 
-/** Cut to a column's width, saying so when it is cut. */
-function fit(text: string, width: number): string {
-  return text.length > width ? `${text.slice(0, width - 1)}…` : text.padEnd(width);
+/** The sidebar: every bolt that has run, grouped by workspace, after "All bolts". */
+function boltFilters(entries: HistoryEntry[]): BoltFilter[] {
+  const byKey = new Map<string, BoltFilter>();
+  for (const entry of entries) {
+    const bolt = baseLabel(entry.bolt);
+    const key = `${entry.workspace}#${bolt}`;
+    const found = byKey.get(key);
+    if (found) found.count += 1;
+    else byKey.set(key, { key, workspace: entry.workspace, workspaceName: entry.workspaceName, bolt, count: 1 });
+  }
+  const bolts = [...byKey.values()].sort((left, right) => (left.workspaceName ?? "").localeCompare(right.workspaceName ?? "") || (left.bolt ?? "").localeCompare(right.bolt ?? ""));
+  return [{ key: "all", count: entries.length }, ...bolts];
 }
 
-function Mark({ step, glyphs }: { step: { ok: boolean; skipped?: boolean }; glyphs: Glyphs }) {
-  if (step.skipped) return <Text dimColor>{glyphs.skip}</Text>;
-  return step.ok ? <Text color="green">{glyphs.ok}</Text> : <Text color="red">{glyphs.fail}</Text>;
+function Mark({ ok, skipped, glyphs }: { ok: boolean; skipped?: boolean | undefined; glyphs: Glyphs }) {
+  if (skipped) return <Text dimColor>{glyphs.skip}</Text>;
+  return ok ? <Text color="green">{glyphs.ok}</Text> : <Text color="red">{glyphs.fail}</Text>;
 }
 
 function totalMs(entry: HistoryEntry): number {
@@ -293,19 +518,47 @@ function triggerWords(trigger: string | undefined): string {
   return { tui: "the TUI", cli: "the command line", hook: "a git hook", retry: "a retry" }[trigger ?? ""] ?? "";
 }
 
-function dayLabel(iso: string): string {
-  const date = new Date(iso);
-  const today = new Date();
-  const yesterday = new Date(today.getTime() - 86_400_000);
-  if (date.toDateString() === today.toDateString()) return "Today";
-  if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
-  return date.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "short" });
-}
-
 function ago(iso: string): string {
   const seconds = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 1000));
   if (seconds < 60) return "just now";
   if (seconds < 3600) return `${Math.round(seconds / 60)}m ago`;
   if (seconds < 86400) return `${Math.round(seconds / 3600)}h ago`;
   return `${Math.round(seconds / 86400)}d ago`;
+}
+
+/** Cut to a column's width, saying so when it is cut. */
+function fit(text: string, width: number): string {
+  return text.length > width ? `${text.slice(0, width - 1)}…` : text.padEnd(width);
+}
+
+function clip(text: string, width: number): string {
+  return text.length > width ? `${text.slice(0, Math.max(1, width - 1))}…` : text;
+}
+
+/** The search box of a list: what is typed, and a cursor while typing. */
+export function SearchLine({ query, typing }: { query: string; typing: boolean }) {
+  return (
+    <Text wrap="truncate-end">
+      <Text color={TONE.accent}>/ </Text>
+      <Text>{query}</Text>
+      {typing ? <Text inverse> </Text> : <Text dimColor>{"  esc clears"}</Text>}
+    </Text>
+  );
+}
+
+/** What a run can be found by: its bolt, where, the commit, how it went and where it failed. */
+function searchText(entry: HistoryEntry): (string | undefined)[] {
+  const failedAt = entry.steps.find((step) => !step.ok && !step.skipped);
+  return [
+    entry.bolt,
+    `#${entry.number ?? ""}`,
+    entry.workspaceName,
+    entry.ok ? "passed success ok" : "failed failure",
+    failedAt ? failedAt.label : "",
+    entry.git?.branch,
+    entry.git?.commit,
+    entry.git?.subject,
+    triggerWords(entry.trigger),
+    entry.id,
+  ];
 }

@@ -5,6 +5,7 @@ import { STEP_FIELDS, STEP_KINDS, buildStep, describeRawStep, stepKindOf, stepVa
 import { tildify } from "../core/paths.js";
 import { Confirm, Form, Picker } from "./forms.js";
 import type { Glyphs } from "./glyphs.js";
+import { TONE } from "./tones.js";
 import { windowed, type Editing } from "./model.js";
 
 type Mode =
@@ -190,7 +191,7 @@ export function BoltEditor({ file, bolt, others, editing, glyphs, height, onClos
   const { items } = windowed(listRows, index, room);
 
   return (
-    <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor="#a78bfa" paddingX={1}>
+    <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor={TONE.accent} paddingX={1}>
       <Text wrap="truncate-end">
         <Text bold>{`Edit "${label}"`}</Text>
         <Text dimColor>{`   ${tildify(file)}`}</Text>
@@ -211,7 +212,7 @@ export function BoltEditor({ file, bolt, others, editing, glyphs, height, onClos
         const active = row.at === index;
         const adding = row.at === steps.length;
         return (
-          <Text key={row.at} wrap="truncate-end" inverse={active} color={adding ? "#a78bfa" : undefined}>
+          <Text key={row.at} wrap="truncate-end" inverse={active} color={adding ? TONE.accent : undefined}>
             {active ? glyphs.pointer : " "} {adding ? " + " : `${String(row.at + 1).padStart(2)} `} {row.text}
           </Text>
         );

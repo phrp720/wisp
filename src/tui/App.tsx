@@ -1,19 +1,25 @@
+import { dirname } from "node:path";
+
 import { Box, Text, useApp, useInput, useStdout } from "ink";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { cleanOutput } from "../core/ansi.js";
+import { baseLabel, type HistoryEntry } from "../core/history.js";
+import { RESTART_MARK } from "../core/shell.js";
 import { describe } from "../core/errors.js";
 import { tildify } from "../core/paths.js";
 import type { RunStatus } from "../core/processes.js";
 import { containerMood, shortStatus, type Container, type ContainerStats } from "../core/docker.js";
 import { boltStatus, collectBoltTargets, composeFiles, retryPlan } from "../core/switch.js";
-import type { Diagnostic, StepKind, SwitchResult, SwitchTarget, TargetResult, WorkspaceRead } from "../core/types.js";
+import type { Bolt, Diagnostic, StepKind, SwitchResult, SwitchTarget, TargetResult, WorkspaceRead } from "../core/types.js";
 import { describeWait } from "../core/wait.js";
 import { glyphs as defaultGlyphs, type Glyphs } from "./glyphs.js";
 import { BoltEditor } from "./editor.js";
-import { HistoryScreen } from "./history.js";
-import { Confirm, Form } from "./forms.js";
-import { describeStep, ordered, search, windowed, type Library, type SearchHit, type Services, type SetupSuggestion } from "./model.js";
+import { BoltView, flow } from "./boltview.js";
+import { TONE } from "./tones.js";
+import { HistoryScreen, SearchLine } from "./history.js";
+import { Choice, Confirm, Form } from "./forms.js";
+import { describeStep, matchesAll, ordered, search, windowed, type Library, type SearchHit, type Services, type SetupSuggestion } from "./model.js";
 
 type Focus = "workspaces" | "bolts";
 
@@ -39,6 +45,9 @@ type View =
       full: boolean;
       /** A run to open on, once it shows up in the list. */
       focus?: string;
+      /** Narrows the list to what matches; `typing` while it is being written. */
+      query?: string;
+      typing?: boolean;
     }
   | { kind: "help" }
   | { kind: "history" }
@@ -46,10 +55,13 @@ type View =
   | { kind: "new-bolt"; file: string; workspace: string }
   | { kind: "new-workspace" }
   | { kind: "delete-bolt"; file: string; bolt: string }
+  | { kind: "view"; file: string; bolt: string }
+  /** Stopping a bolt that needed others: those too, or only it? */
+  | { kind: "stop-bolt"; file: string; bolt: string; needs: string[]; sharedWith: string[] }
   | { kind: "setup"; suggestion: SetupSuggestion };
 
 /** Views that read the keyboard themselves: forms, the editor, confirmations. */
-const SELF_DRIVEN = new Set(["editor", "new-bolt", "new-workspace", "delete-bolt", "setup", "history"]);
+const SELF_DRIVEN = new Set(["editor", "new-bolt", "new-workspace", "delete-bolt", "setup", "history", "view", "stop-bolt"]);
 
 /**
  * The run in progress, or the last one. Kept apart from the screen showing it, so that
@@ -74,6 +86,13 @@ interface RunState {
   stopped?: string;
 }
 
+/** One line of the activity log. */
+interface Activity {
+  at: number;
+  text: string;
+  tone: "good" | "bad" | "info";
+}
+
 /** A notice at the bottom of the screen: what just changed, and whether that is bad news. */
 interface Notice {
   text: string;
@@ -81,7 +100,25 @@ interface Notice {
 }
 
 /** One row of the panes: a command Specter runs, or a container Docker runs for it. */
-type PaneItem = { type: "run"; run: RunStatus } | { type: "container"; container: Container } | { type: "current" };
+type PaneItem =
+  | { type: "run"; run: RunStatus; group: string }
+  | { type: "container"; container: Container; group: string }
+  | { type: "current" }
+  | { type: "group"; group: PaneGroup };
+
+/**
+ * A bolt in the Running list, with what it started under it — the way Dockge shows a stack
+ * with its containers. Commands go under the bolt that started them; containers under the
+ * bolt whose compose step starts them; anything else under its workspace.
+ */
+interface PaneGroup {
+  key: string;
+  /** The workspace file, to find the bolt again for stopping or restarting it. */
+  workspace?: string;
+  workspaceName: string;
+  bolt?: string;
+  title: string;
+}
 
 const KIND: Record<StepKind, string> = {
   app: "app",
@@ -124,6 +161,10 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
   const [dockerError, setDockerError] = useState<string>();
   const [stats, setStats] = useState<Map<string, ContainerStats>>(new Map());
   const [notice, setNotice] = useState<Notice>();
+  // Past runs, for the last result beside each bolt and the recent runs under them.
+  const [recent, setRecent] = useState<HistoryEntry[]>([]);
+  // Whether the finished run is the one being looked at in Running, so it does not vanish mid-read.
+  const watchingDone = useRef(false);
   // What was true at the last look, to tell what has changed since.
   const seenRuns = useRef<Map<string, boolean> | undefined>(undefined);
   const seenContainers = useRef<Map<string, string> | undefined>(undefined);
@@ -132,14 +173,42 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
   const savedAt = useRef(0);
 
   /** Say what changed, in a line that stays a few seconds. */
-  const notify = useCallback((text: string, tone: Notice["tone"] = "info") => {
-    setNotice({ text, tone });
+  // What Specter did and what happened, newest first — like lazygit's command log: notices
+  // flash by, this keeps them. Shown under the Running list.
+  const [events, setEvents] = useState<Activity[]>([]);
+  const record = useCallback((text: string, tone: Notice["tone"] = "info") => {
+    setEvents((entries) => [{ at: Date.now(), text: text.replace(/ — (press|⏎) .*$/, ""), tone }, ...entries].slice(0, 100));
   }, []);
+  const notify = useCallback(
+    (text: string, tone: Notice["tone"] = "info") => {
+      setNotice({ text, tone });
+      record(text, tone);
+    },
+    [record],
+  );
+  const say = (text: string) => {
+    setMessage(text);
+    record(text, /failed|error/i.test(text) ? "bad" : "info");
+  };
   useEffect(() => {
     if (!notice) return;
     const timer = setTimeout(() => setNotice(undefined), 9000);
     return () => clearTimeout(timer);
   }, [notice]);
+
+  // Runs started from here: when they start and how they end.
+  const loggedRun = useRef<RunState | undefined>(undefined);
+  useEffect(() => {
+    if (!active || active.dryRun) return;
+    if (loggedRun.current?.title !== active.title || loggedRun.current?.read !== active.read) {
+      if (!active.done) record(`ran ${active.bolt}`, "info");
+    }
+    if (active.done && !(loggedRun.current === active || (loggedRun.current?.done && loggedRun.current.title === active.title && loggedRun.current.read === active.read))) {
+      const failed = active.steps.find((step) => step.result && !step.result.ok && !step.result.skipped);
+      record(active.stopped ? `${active.bolt} stopped — ${active.stopped}` : failed || active.error ? `${active.bolt} failed${failed ? ` at ${failed.target.label}` : ""}` : `${active.bolt} ${active.job ? "passed" : "is up"}`, active.stopped || failed || active.error ? "bad" : "good");
+    }
+    loggedRun.current = active;
+  }, [active, record]);
 
   const reads = useMemo(() => (library ? ordered(library) : []), [library]);
   const current = reads[Math.min(wsIndex, Math.max(0, reads.length - 1))];
@@ -191,24 +260,27 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
   const watching = true;
   const paneItems: PaneItem[] =
     view.kind === "processes"
-      ? [
-          ...(active ? [{ type: "current" as const }] : []),
-          ...visibleRuns(runs, view.all).map((run) => ({ type: "run" as const, run })),
-          ...containers
-            .filter((container) => view.all || container.state === "running" || container.state === "restarting" || container.exitCode !== 0)
-            .map((container) => ({ type: "container" as const, container })),
-        ]
+      ? filterPanes(
+          // Running shows what runs. The run in progress sits at the top while it goes; once
+          // it is done it is History's — kept here only while you are reading its output.
+          groupPanes(active && (!active.done || watchingDone.current) ? [{ type: "current" }] : [], visibleRuns(runs, view.all), containers.filter((container) => view.all || container.state === "running" || container.state === "restarting" || container.exitCode !== 0), reads),
+          view.query ?? "",
+        )
       : [];
   const processIndex =
     view.kind === "processes"
       ? (() => {
           const focused = view.focus ? paneItems.findIndex((item) => paneKey(item) === view.focus) : -1;
-          return focused >= 0 ? focused : Math.max(0, Math.min(view.index, paneItems.length - 1));
+          if (focused >= 0) return focused;
+          // Opening the screen lands on the first task, whose output is what you came for.
+          if (view.index < 0) return Math.max(0, paneItems.findIndex((item) => item.type !== "group"));
+          return Math.max(0, Math.min(view.index, paneItems.length - 1));
         })()
       : 0;
   const selectedItem = view.kind === "processes" ? paneItems[processIndex] : undefined;
   const selectedRun = selectedItem?.type === "run" ? selectedItem.run : undefined;
   const watchingActive = selectedItem?.type === "current";
+  watchingDone.current = view.kind === "processes" && watchingActive;
   const selectedContainer = selectedItem?.type === "container" ? selectedItem.container : undefined;
   useEffect(() => {
     if (!selectedContainer) return;
@@ -308,6 +380,20 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
       clearInterval(timer);
     };
   }, [panesOpen, containers.map((container) => `${container.name}:${container.state}`).join("|"), services]);
+
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      const next = await services.history().catch(() => []);
+      if (alive) setRecent(next);
+    };
+    void load();
+    const timer = setInterval(load, 5000);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [services, active?.done]);
 
   // Workspace files edited elsewhere — in an editor, by a `git pull` — are read again.
   const watched = useMemo(() => reads.map((read) => read.workspace.file), [reads]);
@@ -451,9 +537,50 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
 
   // Activity opens on what is running, or — when nothing is — on what ran.
   const history_ = (): View => ({ kind: "history" });
+  /**
+   * Stop a bolt, and with `deps` the bolts it needed. Asked first when it needed any: stopping
+   * Work on web alone leaves the database up, which is right when something else uses it and
+   * a surprise when nothing does.
+   */
+  const stopBolt = (read: WorkspaceRead, target: Bolt, deps: boolean) => {
+    setMessage(`Stopping ${target.label}${deps ? " and what it needed" : ""}…`);
+    void services
+      .down(read, target, { deps })
+      .then(async (result) => {
+        for (const run of result.stopped) expected.current.add(run.id);
+        const torn = result.teardown ? ` · teardown ${result.teardown.ok ? "done" : "failed"}` : "";
+        say(`${target.label}${deps ? " and what it needed" : ""}: stopped ${result.stopped.length}${torn}`);
+        setRuns(await services.runs());
+      })
+      .catch((error: unknown) => setMessage(describe(error)));
+  };
+  const askStop = (read: WorkspaceRead, target: Bolt) => {
+    const needs = flow(read, target, reads).filter((name) => name !== target.label);
+    if (needs.length === 0) return stopBolt(read, target, false);
+    // Other bolts with something up that need the same ones: stopping those would break them.
+    const sharedWith = reads.flatMap((other) =>
+      other.workspace.bolts
+        .filter((candidate) => candidate.label !== target.label && runs.some((run) => run.alive && run.workspace === other.workspace.file && run.bolt === candidate.label))
+        .filter((candidate) => flow(other, candidate, reads).some((name) => needs.includes(name) && name !== candidate.label))
+        .map((candidate) => candidate.label),
+    );
+    setView({ kind: "stop-bolt", file: read.workspace.file, bolt: target.label, needs, sharedWith });
+  };
+
+  /** 1–4 go straight to a panel, as lazygit's numbers do: workspaces, bolts, running, history. */
+  const jump = (input: string): boolean => {
+    if (input === "1" || input === "2") {
+      setView({ kind: "browse" });
+      setFocus(input === "1" ? "workspaces" : "bolts");
+      return true;
+    }
+    if (input === "3") return setView(activity()), true;
+    if (input === "4") return setView(history_()), true;
+    return false;
+  };
   const activity = (focus?: string): View => ({
     kind: "processes",
-    index: 0,
+    index: -1,
     all: false,
     scroll: 0,
     full: false,
@@ -498,19 +625,8 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
       return;
     }
 
-    if (view.kind === "trust") {
-      if (input === "y" || input === "Y") {
-        const read = view.read;
-        void services
-          .trust(read.workspace.file, read.hash)
-          .then(() => reload(read.workspace.file))
-          .then(() => setMessage(`trusted ${read.workspace.name} — its commands will run`))
-          .catch((error: unknown) => setMessage(describe(error)));
-      } else {
-        setMessage("not trusted");
-      }
-      return setView({ kind: "browse" });
-    }
+    // The trust dialog's buttons take its keys.
+    if (view.kind === "trust") return;
 
     if (view.kind === "help") return setView({ kind: "browse" });
 
@@ -526,6 +642,7 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
       // is the first pane there.
       if (input === "p") return setView(activity("current"));
       if (input === "h") return setView(history_());
+      if (jump(input)) return;
       if (!run || !run.done) {
         if (input === "x") stopActive("you stopped it");
         if (key.escape) return setView({ kind: "browse" });
@@ -550,12 +667,50 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
 
     if (view.kind === "processes") {
       // Two screens, one key each: p for what's running, h for what ran.
+      // Typing a search: letters go into it; ⏎ or ↓ keeps it and goes back to the list.
+      if (view.typing) {
+        if (key.escape) return setView({ ...view, query: "", typing: false, index: -1 });
+        if (key.return || key.downArrow || key.tab) return setView({ ...view, typing: false });
+        if (key.backspace || key.delete) return setView({ ...view, query: (view.query ?? "").slice(0, -1), index: -1 });
+        if (input && !key.ctrl && !key.meta) return setView({ ...view, query: `${view.query ?? ""}${input}`, index: -1 });
+        return;
+      }
+      // Fast typing arrives as one chunk: "/md" is "/" and the start of the search.
+      if (input.startsWith("/")) {
+        const { focus: _drop, ...plain } = view;
+        return setView({ ...plain, typing: true, query: `${view.query ?? ""}${input.slice(1)}`, index: -1 });
+      }
+      if (key.escape && view.query) return setView({ ...view, query: "", index: -1 });
       if (input === "h") return setView(history_());
+      if (jump(input)) return;
       const list = paneItems;
-      const focused = view.focus ? list.findIndex((item) => paneKey(item) === view.focus) : -1;
-      const at = focused >= 0 ? focused : Math.max(0, Math.min(view.index, list.length - 1));
+      const at = processIndex;
       const { focus: _focus, ...rest } = view;
       const item = list[at];
+      // A bolt: stop all of it, restart it, or go into its first task.
+      if (item?.type === "group") {
+        const read = reads.find((candidate) => candidate.workspace.file === item.group.workspace);
+        const boltDef = read?.workspace.bolts.find((entry) => entry.label === item.group.bolt);
+        if (key.return) return setView({ ...rest, index: at + 1, scroll: 0 });
+        if (input === "x" && read && boltDef) return askStop(read, boltDef);
+        if (input === "r" && read && boltDef) {
+          const restart = true;
+          setMessage(`${restart ? "Restarting" : "Stopping"} ${boltDef.label}…`);
+          void services
+            .down(read, boltDef)
+            .then(async (result) => {
+              for (const stopped of result.stopped) expected.current.add(stopped.id);
+              setRuns(await services.runs());
+              if (restart) {
+                if (result.stopped.length > 0) await new Promise((done) => setTimeout(done, 500));
+                await runBolt(read, boltDef.label, false);
+              } else say(`${boltDef.label}: stopped ${result.stopped.length}`);
+            })
+            .catch((error: unknown) => setMessage(describe(error)));
+          return;
+        }
+        if (input === "x" || input === "r") return setMessage("These were not started by a bolt — stop them one by one");
+      }
       // The run itself: open its steps, stop it, or retry what failed.
       if (item?.type === "current") {
         const run = activeRef.current;
@@ -571,7 +726,7 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
         setMessage(`${action === "restart" ? "Restarting" : action === "stop" ? "Stopping" : "Starting"} ${name}…`);
         void services
           .containerAction(item.container.name, action)
-          .then(() => setMessage(`${name}: ${action === "stop" ? "stopped" : action === "start" ? "started" : "restarted"}`))
+          .then(() => say(`${name}: ${action === "stop" ? "stopped" : action === "start" ? "started" : "restarted"}`))
           .catch((error: unknown) => setMessage(describe(error)));
         return;
       }
@@ -591,7 +746,7 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
         void services
           .restart(run)
           .then(async (result) => {
-            setMessage(result.ok ? `restarted ${run.label}` : `${run.label} failed to start: ${result.error ?? ""}`);
+            say(result.ok ? `restarted ${run.label}` : `${run.label} failed to start: ${result.error ?? ""}`);
             setRuns(await services.runs());
             expected.current.add(result.run.id);
             setView((prior) => (prior.kind === "processes" ? { ...prior, focus: result.run.id, scroll: 0 } : prior));
@@ -609,7 +764,7 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
             stopActive(`you stopped ${run.label}`);
             notify(`Stopped ${run.label} — and the run that started it, so nothing else starts`, "info");
           }
-          setMessage(services.stop(run) ? `stopped ${run.label}` : `${run.label} had already stopped`);
+          say(services.stop(run) ? `stopped ${run.label}` : `${run.label} had already stopped`);
           void services.runs().then(setRuns);
         }
         return;
@@ -621,9 +776,10 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
     // Browsing.
     if (input === "?") return setView({ kind: "help" });
     if (input === "N") return setView({ kind: "new-workspace" });
-    if (input === "/") return setView({ kind: "search", query: "", index: 0 });
+    if (input.startsWith("/")) return setView({ kind: "search", query: input.slice(1), index: 0 });
     if (input === "p") return setView(activity());
     if (input === "h") return setView(history_());
+    if (view.kind === "browse" && jump(input)) return;
     if (input === "r") {
       void reload(current?.workspace.file).then(() => setMessage("reloaded"));
       return;
@@ -656,6 +812,7 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
     }
     if (input === "a") return setView({ kind: "new-bolt", file: current.workspace.file, workspace: current.workspace.name });
     if (input === "D" && bolt) return setView({ kind: "delete-bolt", file: current.workspace.file, bolt: bolt.label });
+    if (input === "v" && bolt) return setView({ kind: "view", file: current.workspace.file, bolt: bolt.label });
     if ((input === "K" || input === "J") && bolt && focus === "bolts") {
       const by = input === "K" ? -1 : 1;
       savedAt.current = Date.now();
@@ -666,14 +823,15 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
         .catch((error: unknown) => setMessage(describe(error)));
       return;
     }
-    if ((input === "x" || input === "R") && bolt) {
-      const restart = input === "R";
+    if (input === "x" && bolt) return askStop(current, bolt);
+    if (input === "R" && bolt) {
+      const restart = true;
       void services
         .down(current, bolt)
         .then(async (result) => {
           for (const run of result.stopped) expected.current.add(run.id);
           const torn = result.teardown ? ` · teardown ${result.teardown.ok ? "done" : "failed"}` : "";
-          setMessage(`${bolt.label}: stopped ${result.stopped.length}${torn}`);
+          say(`${bolt.label}: stopped ${result.stopped.length}${torn}`);
           setRuns(await services.runs());
           if (restart) {
             if (result.stopped.length > 0) await new Promise((done) => setTimeout(done, 500));
@@ -699,7 +857,14 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
 
   return (
     <Box flexDirection="column" width={columns} height={rows}>
-      <Header services={services} glyphs={glyphs} columns={columns} here={hereLabel} />
+      <Header
+        services={services}
+        glyphs={glyphs}
+        columns={columns}
+        here={hereLabel}
+        running={runs.filter((run) => run.alive).length + containers.filter((container) => container.state === "running").length}
+        failing={containers.filter((container) => container.health === "unhealthy" || ((container.state === "exited" || container.state === "dead") && container.exitCode !== 0)).map((container) => `${container.service} ${containerMood(container).word}`)}
+      />
 
       {loadError ? (
         <Box borderStyle={glyphs.border} borderColor="red" height={bodyHeight} paddingX={1}>
@@ -816,6 +981,45 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
             return undefined;
           }}
         />
+      ) : view.kind === "view" && reads.some((candidate) => candidate.workspace.file === view.file) ? (
+        <BoltView
+          read={reads.find((candidate) => candidate.workspace.file === view.file) as WorkspaceRead}
+          bolt={view.bolt}
+          reads={reads}
+          runs={runs}
+          containers={containers}
+          history={recent}
+          glyphs={glyphs}
+          height={bodyHeight}
+          onClose={() => setView({ kind: "browse" })}
+          onRun={() => {
+            const target = reads.find((candidate) => candidate.workspace.file === view.file);
+            if (target) void runBolt(target, view.bolt, false);
+          }}
+          onEdit={() => setView({ kind: "editor", file: view.file, bolt: view.bolt })}
+        />
+      ) : view.kind === "stop-bolt" ? (
+        <Box flexDirection="column" height={bodyHeight} borderStyle={glyphs.border} borderColor={TONE.busy} paddingX={1}>
+          <Text bold>{`Stop ${view.bolt}?`}</Text>
+          <Text> </Text>
+          <Text wrap="wrap">{`It needed ${view.needs.join(" and ")} — ${view.needs.length === 1 ? "that keeps" : "those keep"} running unless you stop ${view.needs.length === 1 ? "it" : "them"} too.`}</Text>
+          {view.sharedWith.length > 0 ? (
+            <Text color={TONE.busy} wrap="wrap">{`${view.sharedWith.join(" and ")} ${view.sharedWith.length === 1 ? "is" : "are"} up and ${view.sharedWith.length === 1 ? "needs" : "need"} ${view.needs.length === 1 ? "it" : "them"} too — stopping ${view.needs.length === 1 ? "it" : "them"} would break ${view.sharedWith.length === 1 ? "it" : "them"}.`}</Text>
+          ) : null}
+          <Text> </Text>
+          <Choice
+            yes={`Also stop ${view.needs.join(", ")}`}
+            no={`Only ${view.bolt}`}
+            danger={view.sharedWith.length > 0}
+            onAnswer={(deps) => {
+              const read = reads.find((candidate) => candidate.workspace.file === view.file);
+              const target = read?.workspace.bolts.find((entry) => entry.label === view.bolt);
+              setView({ kind: "browse" });
+              if (read && target) stopBolt(read, target, deps);
+            }}
+            onCancel={() => setView({ kind: "browse" })}
+          />
+        </Box>
       ) : view.kind === "delete-bolt" ? (
         <Confirm
           title={`Delete the bolt "${view.bolt}"?`}
@@ -832,7 +1036,7 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
               .then(() => reload(view.file))
               .then(() => {
                 setBoltIndex(Math.max(0, boltIndex - 1));
-                setMessage(`Deleted "${view.bolt}"`);
+                say(`Deleted "${view.bolt}"`);
               })
               .catch((error: unknown) => setMessage(describe(error)));
           }}
@@ -845,6 +1049,7 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
           columns={columns}
           onClose={() => setView({ kind: "browse" })}
           onRunning={() => setView(activity())}
+          onJump={(input) => void jump(input)}
           onRetry={(entry) => {
             const read = reads.find((candidate) => candidate.workspace.file === entry.workspace);
             if (!read) return setMessage(`${entry.workspaceName} is not in the list any more`);
@@ -868,9 +1073,23 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
       ) : view.kind === "check" ? (
         <CheckPanel view={view} glyphs={glyphs} height={bodyHeight} />
       ) : view.kind === "trust" ? (
-        <TrustPanel read={view.read} glyphs={glyphs} height={bodyHeight} />
+        <TrustPanel
+          read={view.read}
+          glyphs={glyphs}
+          height={bodyHeight}
+          onAnswer={(yes) => {
+            const read = view.read;
+            setView({ kind: "browse" });
+            if (!yes) return setMessage("not trusted");
+            void services
+              .trust(read.workspace.file, read.hash)
+              .then(() => reload(read.workspace.file))
+              .then(() => say(`trusted ${read.workspace.name} — its commands will run`))
+              .catch((error: unknown) => setMessage(describe(error)));
+          }}
+        />
       ) : view.kind === "processes" ? (
-        <PanesPanel items={paneItems} active={active} tick={tick} stats={stats} dockerError={dockerError} all={view.all} index={processIndex} log={watchingActive ? (active?.output ?? []).join("\n") : log} scroll={view.scroll} full={view.full} glyphs={glyphs} height={bodyHeight} columns={columns} />
+        <PanesPanel items={paneItems} activity={events} history={recent} query={view.query ?? ""} typing={Boolean(view.typing)} runs={runs} containers={containers} active={active} tick={tick} stats={stats} dockerError={dockerError} all={view.all} index={processIndex} log={watchingActive ? (active?.output ?? []).join("\n") : log} scroll={view.scroll} full={view.full} glyphs={glyphs} height={bodyHeight} columns={columns} />
       ) : view.kind === "help" ? (
         <HelpPanel glyphs={glyphs} height={bodyHeight} />
       ) : view.kind === "search" ? (
@@ -880,7 +1099,18 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
       ) : (
         <Box height={bodyHeight}>
           <WorkspaceList reads={reads} index={wsIndex} here={library.here} focused={focus === "workspaces"} glyphs={glyphs} height={bodyHeight} width={Math.min(32, Math.max(18, Math.floor(columns * 0.28)))} />
-          {current ? <WorkspacePanel read={current} boltIndex={boltIndex} focused={focus === "bolts"} glyphs={glyphs} height={bodyHeight} runs={runs} containers={containers} /> : null}
+          {current ? (
+            <WorkspacePanel
+              read={current}
+              boltIndex={boltIndex}
+              focused={focus === "bolts"}
+              glyphs={glyphs}
+              height={bodyHeight}
+              runs={runs}
+              containers={containers}
+              history={recent.filter((entry) => entry.workspace === current.workspace.file)}
+            />
+          ) : null}
         </Box>
       )}
 
@@ -889,7 +1119,7 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
   );
 }
 
-function Header({ services, glyphs, columns, here }: { services: Services; glyphs: Glyphs; columns: number; here?: string | undefined }) {
+function Header({ services, glyphs, columns, here, running, failing }: { services: Services; glyphs: Glyphs; columns: number; here?: string | undefined; running: number; failing: string[] }) {
   const { environment } = services;
   // Where a command will go, said up front: it is the one thing that differs by place.
   const badges: string[] = [];
@@ -898,9 +1128,11 @@ function Header({ services, glyphs, columns, here }: { services: Services; glyph
     <Box width={columns} height={1} paddingX={1} justifyContent="space-between" overflow="hidden">
       <Box flexShrink={1} overflow="hidden">
         <Text wrap="truncate-end">
-          <Text bold color="#a78bfa">
+          <Text bold color={TONE.accent}>
             {glyphs.border === "round" ? "🔮 " : ""}specter
           </Text>
+          {running > 0 ? <Text color="green">{`  ${glyphs.dot} ${running} running`}</Text> : null}
+          {failing.length === 1 ? <Text color="red">{`  ${glyphs.dot} ${failing[0]} — p to see why`}</Text> : failing.length > 1 ? <Text color="red">{`  ${glyphs.dot} ${failing.length} need attention — p`}</Text> : null}
           {badges.length > 0 ? <Text color="yellow">{`  ${badges.join(" · ")}`}</Text> : null}
         </Text>
       </Box>
@@ -915,17 +1147,19 @@ function Header({ services, glyphs, columns, here }: { services: Services; glyph
 
 function Footer({ view, message, notice }: { view: View; message?: string | undefined; notice?: Notice | undefined }) {
   const keys: Record<View["kind"], string> = {
-    browse: "⏎ run · e edit · a add bolt · p running · h history · x stop · / search · ? all keys · q quit",
+    browse: "⏎ run · v view · e edit · a add · p running · h history · x stop · / search · ? keys · q quit",
     editor: "",
     "new-bolt": "",
     "new-workspace": "",
     "delete-bolt": "",
+    view: "",
+    "stop-bolt": "",
     setup: "⏎ set it up · esc not now",
     search: "type to search  ↑↓ choose  ⏎ run  esc back",
     run: "",
     check: "↑↓ scroll  t trust  esc back",
-    trust: "y trust  any other key cancels",
-    processes: "↑↓ choose · r restart · x stop · s start · f full screen · pgup/pgdn scroll · h history · esc back",
+    trust: "←→ choose · ⏎ confirm · esc cancel",
+    processes: "↑↓ choose · / search · a show stopped too · r restart · x stop · s start · f full screen · pgup/pgdn scroll · esc back",
     history: "",
     help: "any key to go back",
   };
@@ -964,8 +1198,10 @@ function WorkspaceList(props: { reads: WorkspaceRead[]; index: number; here?: st
   const { items } = windowed(rows, selectedRow, height - 3);
 
   return (
-    <Box flexDirection="column" width={width} flexShrink={0} borderStyle={glyphs.border} borderColor={focused ? "#a78bfa" : "gray"} paddingX={1} overflow="hidden">
-      <Text bold dimColor={!focused}>Workspaces</Text>
+    <Box flexDirection="column" width={width} flexShrink={0} borderStyle={glyphs.border} borderColor={focused ? TONE.accent : "gray"} paddingX={1} overflow="hidden">
+      <Text bold dimColor={!focused}>
+        <Text dimColor>1 </Text>Workspaces
+      </Text>
       {items.map((row) => {
         if ("heading" in row) {
           return (
@@ -978,11 +1214,13 @@ function WorkspaceList(props: { reads: WorkspaceRead[]; index: number; here?: st
         const selected = at === index;
         const warn = !read.workspace.personal && read.withheld.length > 0 && !read.workspace.trusted;
         return (
-          <Text key={read.workspace.file} wrap="truncate-end" inverse={selected && focused} bold={selected}>
+          // Only the name is highlighted: inverting coloured pieces separately makes a patchwork.
+          // "!" marks a file not allowed to run its commands yet — the panel beside says why.
+          <Text key={read.workspace.file} wrap="truncate-end" bold={selected}>
             {selected ? glyphs.pointer : " "}{" "}
             {read.workspace.icon && glyphs.border === "round" ? `${read.workspace.icon} ` : ""}
-            <Text color={read.workspace.color}>{read.workspace.name}</Text>
-            {warn ? <Text color="yellow"> · not allowed</Text> : null}
+            <Text color={selected && focused ? undefined : read.workspace.color} inverse={selected && focused}>{read.workspace.name}</Text>
+            {warn ? <Text color={TONE.busy} bold>{" !"}</Text> : null}
           </Text>
         );
       })}
@@ -990,8 +1228,9 @@ function WorkspaceList(props: { reads: WorkspaceRead[]; index: number; here?: st
   );
 }
 
-function WorkspacePanel(props: { read: WorkspaceRead; boltIndex: number; focused: boolean; glyphs: Glyphs; height: number; runs: RunStatus[]; containers: Container[] }) {
-  const { read, boltIndex, focused, glyphs, height, runs, containers } = props;
+function WorkspacePanel(props: { read: WorkspaceRead; boltIndex: number; focused: boolean; glyphs: Glyphs; height: number; runs: RunStatus[]; containers: Container[]; history: HistoryEntry[] }) {
+  const { read, boltIndex, focused, glyphs, height, runs, containers, history } = props;
+  const lastRun = (label: string) => history.find((entry) => baseLabel(entry.bolt) === label);
   const { workspace } = read;
   const held = new Map(read.withheld.map((item) => [item.id, item]));
   const bolts = workspace.bolts;
@@ -1007,7 +1246,9 @@ function WorkspacePanel(props: { read: WorkspaceRead; boltIndex: number; focused
     : [];
 
   // Lines above and between the lists, so the lists take what is left.
-  const fixed = 7;
+  // Room kept at the bottom for the workspace's recent runs, when it has any.
+  const recentShown = history.slice(0, Math.max(0, Math.min(4, Math.floor((height - 14) / 2))));
+  const fixed = 7 + (recentShown.length > 0 ? recentShown.length + 2 : 0);
   const listRoom = Math.max(2, height - 2 - fixed);
   const boltRoom = Math.max(1, Math.min(bolts.length, Math.ceil(listRoom / 2)));
   const stepRoom = Math.max(1, listRoom - boltRoom);
@@ -1018,7 +1259,7 @@ function WorkspacePanel(props: { read: WorkspaceRead; boltIndex: number; focused
   ];
 
   return (
-    <Box flexDirection="column" flexGrow={1} flexShrink={1} minWidth={0} borderStyle={glyphs.border} borderColor={focused ? "#a78bfa" : "gray"} paddingX={1} overflow="hidden">
+    <Box flexDirection="column" flexGrow={1} flexShrink={1} minWidth={0} borderStyle={glyphs.border} borderColor={focused ? TONE.accent : "gray"} paddingX={1} overflow="hidden">
       <Text wrap="truncate-end">
         {workspace.icon && glyphs.border === "round" ? `${workspace.icon} ` : ""}
         <Text bold color={workspace.color}>{workspace.name}</Text>
@@ -1038,28 +1279,39 @@ function WorkspacePanel(props: { read: WorkspaceRead; boltIndex: number; focused
         {errors > 0 ? <Text color="red">{`  ${errors} problem${errors === 1 ? "" : "s"} — c to check`}</Text> : null}
       </Text>
       <Text> </Text>
-      <Text bold dimColor={!focused}>{`${glyphs.bolt}Bolts`}</Text>
+      <Text bold dimColor={!focused}>
+        <Text dimColor>2 </Text>
+        {`${glyphs.bolt}Bolts`}
+      </Text>
       {bolts.length === 0 ? (
         <Text dimColor>No bolts yet — press a to add the first one.</Text>
       ) : (
         shownBolts.map((entry, position) => {
           const at = offset + position;
           const isSelected = at === boltIndex;
-          const count = collectBoltTargets(workspace, entry).length;
-          const waitingCount = entry.steps.filter((step) => (step.kind === "asset" && held.has(step.id)) || (step.kind === "compose" && held.has(`compose:${step.file}`))).length;
+          // Every step it has, allowed to run yet or not: the preview below lists them all.
+          const count = entry.steps.length;
           const status = boltStatus(workspace, entry, runs, containers);
           const up = status.failing > 0 ? "failing" : status.running > 0 ? (status.running === status.commands ? "up" : "partial") : undefined;
           return (
-            <Text key={entry.id} wrap="truncate-end" inverse={isSelected && focused} bold={isSelected}>
-              {isSelected ? glyphs.pointer : " "} <Text color={entry.color}>{entry.label}</Text>
+            <Text key={entry.id} wrap="truncate-end" bold={isSelected}>
+              {isSelected ? glyphs.pointer : " "} <Text color={isSelected && focused ? undefined : entry.color} inverse={isSelected && focused}>{entry.label}</Text>
               {entry.job ? <Text color="cyan"> job</Text> : null}
               {up ? (
                 <Text color={up === "up" ? "green" : up === "failing" ? "red" : "yellow"}>
                   {` ${glyphs.dot} ${up === "up" ? "running" : up === "failing" ? "something stopped" : `${status.running} of ${status.commands} running`}`}
                 </Text>
               ) : null}
+              {(() => {
+                const last = lastRun(entry.label);
+                if (!last || up) return null;
+                return last.ok ? (
+                  <Text color="green" dimColor>{`  ${glyphs.ok} ${since(last.startedAt)}`}</Text>
+                ) : (
+                  <Text color="red">{`  ${glyphs.fail} failed ${since(last.startedAt)}`}</Text>
+                );
+              })()}
               <Text dimColor>{`  ${count} step${count === 1 ? "" : "s"}`}</Text>
-              {waitingCount > 0 ? <Text color="yellow">{` · ${waitingCount} waiting for trust`}</Text> : null}
             </Text>
           );
         })
@@ -1084,8 +1336,32 @@ function WorkspacePanel(props: { read: WorkspaceRead; boltIndex: number; focused
           {stepLines.length > stepRoom ? <Text dimColor>{`  … ${stepLines.length - stepRoom} more`}</Text> : null}
         </>
       ) : null}
+      {recentShown.length > 0 ? (
+        <>
+          <Box flexGrow={1} />
+          <Text bold dimColor>Recent runs</Text>
+          {recentShown.map((entry) => {
+            const failedAt = entry.steps.find((step) => !step.ok && !step.skipped);
+            return (
+              <Text key={entry.id} wrap="truncate-end">
+                {entry.ok ? <Text color="green">{glyphs.ok}</Text> : <Text color="red">{glyphs.fail}</Text>} {entry.bolt}
+                <Text dimColor>{` #${entry.number ?? "?"} · ${failedAt ? `failed at ${failedAt.label} · ` : ""}${since(entry.startedAt)} · h for details`}</Text>
+              </Text>
+            );
+          })}
+        </>
+      ) : null}
     </Box>
   );
+}
+
+/** How long ago, as briefly as it reads. */
+function since(iso: string): string {
+  const seconds = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 1000));
+  if (seconds < 60) return "just now";
+  if (seconds < 3600) return `${Math.round(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.round(seconds / 3600)}h ago`;
+  return `${Math.round(seconds / 86400)}d ago`;
 }
 
 function RunPanel({ view, glyphs, height, tick }: { view: RunState; glyphs: Glyphs; height: number; tick: number }) {
@@ -1101,9 +1377,9 @@ function RunPanel({ view, glyphs, height, tick }: { view: RunState; glyphs: Glyp
   const { items } = windowed(view.steps, Math.max(0, view.steps.findIndex((step) => step.state === "running")), height - 6 - (outputRoom ? outputRoom + 1 : 0));
 
   return (
-    <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor={view.done ? (failed > 0 || view.error ? "red" : "green") : "#a78bfa"} paddingX={1}>
+    <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor={view.done ? (failed > 0 || view.error ? "red" : "green") : TONE.accent} paddingX={1}>
       <Text bold>
-        {view.dryRun ? <Text color="yellow">dry run </Text> : view.done ? null : <Text color="#a78bfa">running </Text>}
+        {view.dryRun ? <Text color="yellow">dry run </Text> : view.done ? null : <Text color={TONE.accent}>running </Text>}
         {view.title}
       </Text>
       <Text> </Text>
@@ -1113,7 +1389,7 @@ function RunPanel({ view, glyphs, height, tick }: { view: RunState; glyphs: Glyp
           step.state === "pending"
             ? <Text dimColor>{glyphs.pending}</Text>
             : step.state === "running"
-              ? <Text color="#a78bfa">{glyphs.running[tick % glyphs.running.length]}</Text>
+              ? <Text color={TONE.accent}>{glyphs.running[tick % glyphs.running.length]}</Text>
               : result?.skipped
                 ? <Text dimColor>{glyphs.skip}</Text>
                 : !result?.ok
@@ -1168,6 +1444,10 @@ function CheckPanel({ view, glyphs, height }: { view: Extract<View, { kind: "che
   const lines: { key: string; node: ReactNode }[] = [];
   const diagnostics = [...read.diagnostics].sort((left, right) => rank[left.level] - rank[right.level]);
 
+  // Said outright when there is nothing to fix: silence reads as "still checking".
+  if (diagnostics.every((entry) => entry.level === "note")) {
+    lines.push({ key: "good", node: <Text color="green">{`${glyphs.ok} Nothing wrong with this file.`}</Text> });
+  }
   for (const [index, entry] of diagnostics.entries()) {
     lines.push({ key: `d${index}`, node: <DiagnosticLine entry={entry} glyphs={glyphs} /> });
     if (entry.hint) lines.push({ key: `h${index}`, node: <Text dimColor wrap="truncate-end">{`    ${entry.hint}`}</Text> });
@@ -1176,19 +1456,18 @@ function CheckPanel({ view, glyphs, height }: { view: Extract<View, { kind: "che
     lines.push({ key: "gap", node: <Text> </Text> });
     lines.push({ key: "runs", node: <Text bold>{`Runs code ${read.workspace.trusted ? "(allowed)" : "(waiting for trust — t)"}`}</Text> });
     for (const command of read.declaredCommands) {
-      lines.push({ key: `c${command.id}`, node: <Text wrap="truncate-end"><Text dimColor>{"  run    "}</Text><Text color="cyan">{command.run}</Text>{command.cwd ? <Text dimColor>{` in ${tildify(command.cwd)}`}</Text> : null}</Text> });
+      lines.push({ key: `c${command.id}`, node: <Text wrap="truncate-end"><Text dimColor>{"  run    "}</Text><Text color="cyan">{command.run}</Text>{command.cwd && command.cwd !== dirname(read.workspace.file) ? <Text dimColor>{` in ${tildify(command.cwd).replace(`${tildify(dirname(read.workspace.file))}/`, "")}`}</Text> : null}</Text> });
     }
     for (const item of read.withheld.filter((entry) => entry.kind !== "command")) {
       lines.push({ key: `w${item.id}`, node: <Text wrap="truncate-end"><Text dimColor>{`  ${KIND[item.kind].padEnd(6)} `}</Text><Text color="cyan">{tildify(item.value)}</Text><Text dimColor>{` (${item.reason})`}</Text></Text> });
     }
   }
-  if (lines.length === 0) lines.push({ key: "ok", node: <Text color="green">{`${glyphs.ok} nothing to report`}</Text> });
 
   const room = height - 4;
   const scroll = Math.min(view.scroll, Math.max(0, lines.length - room));
   return (
     <Box flexDirection="column" height={height} borderStyle={glyphs.border} paddingX={1}>
-      <Text bold>{`check ${read.workspace.name}`}</Text>
+      <Text bold>{`Check ${read.workspace.name}`}</Text>
       <Text> </Text>
       {lines.slice(scroll, scroll + room).map((line) => (
         <Box key={line.key}>{line.node}</Box>
@@ -1206,7 +1485,7 @@ function DiagnosticLine({ entry, glyphs }: { entry: Diagnostic; glyphs: Glyphs }
   );
 }
 
-function TrustPanel({ read, glyphs, height }: { read: WorkspaceRead; glyphs: Glyphs; height: number }) {
+function TrustPanel({ read, glyphs, height, onAnswer }: { read: WorkspaceRead; glyphs: Glyphs; height: number; onAnswer: (yes: boolean) => void }) {
   return (
     <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor="yellow" paddingX={1}>
       <Text bold>{`Trust ${read.workspace.name}?`}</Text>
@@ -1214,7 +1493,7 @@ function TrustPanel({ read, glyphs, height }: { read: WorkspaceRead; glyphs: Gly
       {read.trust === "stale" ? <Text color="yellow">this file has changed since you last trusted it</Text> : null}
       <Text> </Text>
       <Text>{`It would be allowed to run ${read.withheld.length} thing${read.withheld.length === 1 ? "" : "s"}:`}</Text>
-      {windowed(read.withheld, 0, height - 10).items.map((item) => (
+      {windowed(read.withheld, 0, height - 12).items.map((item) => (
         <Text key={item.id} wrap="truncate-end">
           <Text dimColor>{`  ${KIND[item.kind].padEnd(6)} `}</Text>
           <Text color="cyan">{tildify(item.value)}</Text>
@@ -1224,7 +1503,8 @@ function TrustPanel({ read, glyphs, height }: { read: WorkspaceRead; glyphs: Gly
       ))}
       <Text> </Text>
       <Text dimColor>These run on your machine, as you. Any later edit to the file asks again.</Text>
-      <Text bold color="yellow">y to trust this exact file · any other key cancels</Text>
+      <Text> </Text>
+      <Choice yes="Trust this file" no="Cancel" danger onAnswer={onAnswer} />
     </Box>
   );
 }
@@ -1240,6 +1520,12 @@ function TrustPanel({ read, glyphs, height }: { read: WorkspaceRead; glyphs: Gly
  */
 function PanesPanel(props: {
   items: PaneItem[];
+  activity: Activity[];
+  history: HistoryEntry[];
+  query: string;
+  typing: boolean;
+  runs: RunStatus[];
+  containers: Container[];
   active: RunState | undefined;
   tick: number;
   stats: Map<string, ContainerStats>;
@@ -1253,8 +1539,10 @@ function PanesPanel(props: {
   height: number;
   columns: number;
 }) {
-  const { items, active, tick, stats, dockerError, all, index, log, scroll, full, glyphs, height, columns } = props;
+  const { items, activity, history, query, typing, active, tick, stats, dockerError, all, index, log, scroll, full, glyphs, height, columns } = props;
   const listWidth = Math.min(42, Math.max(26, Math.floor(columns * 0.32)));
+  // The activity log takes the bottom of the list when there is room and something to say.
+  const logRoom = activity.length === 0 || height < 16 ? 0 : Math.min(activity.length + 1, 6);
   const item = items[index];
   const lines = cleanOutput(log)
     .split("\n")
@@ -1268,18 +1556,38 @@ function PanesPanel(props: {
   const rows: Row[] = [];
   let section = "";
   items.forEach((entry, at) => {
-    const heading = entry.type === "current" ? (active?.done ? "Last run" : "Running now") : entry.type === "run" ? "Commands" : `Containers · ${entry.container.project}`;
-    if (heading !== section) {
-      section = heading;
-      rows.push({ key: `h:${heading}`, node: <Text bold dimColor>{heading.toUpperCase()}</Text> });
+    if (entry.type === "current" || entry.type === "group") {
+      const heading = entry.type === "current" ? (active?.done ? "Just finished" : "Running now") : entry.group.workspaceName;
+      if (heading !== section) {
+        section = heading;
+        rows.push({ key: `h:${heading}`, node: <Text bold dimColor>{heading.toUpperCase()}</Text> });
+      }
     }
     const selected = at === index;
+    if (entry.type === "group") {
+      const tally = groupTally(items, entry.group.key);
+      const color = tally.bad > 0 ? "red" : tally.up === tally.total ? "green" : tally.up > 0 ? "yellow" : "gray";
+      rows.push({
+        key: `group:${entry.group.key}`,
+        node: (
+          <Box flexGrow={1}>
+            <Box flexGrow={1} minWidth={0}>
+              <Text wrap="truncate-end" inverse={selected} bold={Boolean(entry.group.bolt)} dimColor={!entry.group.bolt}>
+                {`${selected ? glyphs.pointer : " "} ${entry.group.bolt ? glyphs.bolt : ""}${entry.group.title}`}
+              </Text>
+            </Box>
+            <Text color={color}>{` ${glyphs.dot} ${tally.up === tally.total ? "all up" : `${tally.up} of ${tally.total}`}`}</Text>
+          </Box>
+        ),
+      });
+      return;
+    }
     if (entry.type === "current") {
       if (!active) return;
       const now = active.steps.find((step) => step.state === "running");
       const failed = active.steps.some((step) => step.result && !step.result.ok && !step.result.skipped);
       const mark = !active.done ? (
-        <Text color="#a78bfa">{glyphs.running[tick % glyphs.running.length]}</Text>
+        <Text color={TONE.accent}>{glyphs.running[tick % glyphs.running.length]}</Text>
       ) : failed || active.error || active.stopped ? (
         <Text color="red">{glyphs.fail}</Text>
       ) : (
@@ -1306,10 +1614,12 @@ function PanesPanel(props: {
         node: (
           <Box flexDirection="column">
             <Text wrap="truncate-end" inverse={selected} bold={selected}>
-              {run.alive ? <Text color="green">{glyphs.dot}</Text> : <Text color="red">{glyphs.dot}</Text>} {run.label}
-              <Text dimColor>{` ${run.workspaceName}`}</Text>
+              {"   "}<Text color={run.alive ? TONE.up : TONE.stopped}>{glyphs.dot}</Text> {run.label}
+              <Text dimColor>{startedBy(run, history, entry.type === "run" ? groupBolt(items, entry.group) : undefined).replace(/^ from .* #/, " #")}</Text>
             </Text>
-            <Text wrap="truncate-end" dimColor>{`  ${run.alive ? (run.kind === "window" ? `in ${run.where ?? "a window"}` : (selected ? lastLine(lines) : undefined) ?? "running") : "stopped"}`}</Text>
+            <Text wrap="truncate-end" dimColor={!(selected && restartsOf(lines).gaveUp)} color={selected && restartsOf(lines).gaveUp ? "red" : undefined}>
+              {`     ${run.alive ? [`up ${since(run.startedAt).replace(" ago", "").replace("just now", "<1m")}`, run.kind === "window" ? `in ${run.where ?? "a window"}` : "", selected && restartsOf(lines).count > 0 ? `restarted ${restartsOf(lines).count}×` : ""].filter(Boolean).join(" · ") : selected && restartsOf(lines).gaveUp ? "stopped — gave up restarting" : "stopped"}`}
+            </Text>
           </Box>
         ),
       });
@@ -1324,9 +1634,10 @@ function PanesPanel(props: {
         node: (
           <Box flexDirection="column">
             <Text wrap="truncate-end" inverse={selected} bold={selected}>
-              <Text color={color}>{glyphs.dot}</Text> {container.service}
+              {"   "}<Text color={color}>{glyphs.dot}</Text> {container.service}
+              <Text dimColor>{" container"}</Text>
             </Text>
-            <Text wrap="truncate-end" color={mood.tone === "bad" ? "red" : undefined} dimColor={mood.tone !== "bad"}>{`  ${details.join(" · ")}`}</Text>
+            <Text wrap="truncate-end" color={mood.tone === "bad" ? "red" : undefined} dimColor={mood.tone !== "bad"}>{`     ${details.join(" · ")}`}</Text>
           </Box>
         ),
       });
@@ -1338,7 +1649,12 @@ function PanesPanel(props: {
       <Text wrap="truncate-end">
         <Text bold>{active.bolt}</Text>
         <Text dimColor>{`  ${active.outputOf ? `output of ${active.outputOf}  ` : ""}`}</Text>
-        {!active.done ? <Text color="#a78bfa">running — x stops it</Text> : active.stopped ? <Text color="red">stopped</Text> : <Text dimColor>finished — ⏎ for its steps</Text>}
+        {!active.done ? <Text color={TONE.accent}>running — x stops it</Text> : active.stopped ? <Text color="red">stopped</Text> : <Text dimColor>finished — ⏎ for its steps</Text>}
+      </Text>
+    ) : item?.type === "group" ? (
+      <Text wrap="truncate-end">
+        <Text bold>{item.group.title}</Text>
+        <Text dimColor>{`  ${item.group.workspaceName}`}</Text>
       </Text>
     ) : item?.type === "container" ? (
       <Text wrap="truncate-end">
@@ -1350,8 +1666,9 @@ function PanesPanel(props: {
     ) : item?.type === "run" ? (
       <Text wrap="truncate-end">
         <Text bold>{item.run.label}</Text>
-        <Text dimColor>{`  ${item.run.command}  `}</Text>
-        {item.run.alive ? <Text color="green">{`${glyphs.dot} running`}</Text> : <Text color="red">{`${glyphs.dot} stopped`}</Text>}
+        <Text dimColor>{`${startedBy(item.run, history, undefined, true)}  ${item.run.command}  `}</Text>
+        {item.run.alive ? <Text color="green">{`${glyphs.dot} running`}</Text> : <Text color={TONE.stopped}>{`${glyphs.dot} stopped`}</Text>}
+        {restartsOf(lines).count > 0 ? <Text color="yellow">{`  restarted ${restartsOf(lines).count}×`}</Text> : null}
       </Text>
     ) : (
       <Text bold>Output</Text>
@@ -1360,13 +1677,29 @@ function PanesPanel(props: {
   return (
     <Box height={height}>
       {full ? null : (
-        <Box flexDirection="column" width={listWidth} flexShrink={0} borderStyle={glyphs.border} borderColor="#a78bfa" paddingX={1} overflow="hidden">
-          <Text bold>{all ? "Running and stopped" : "Running"}</Text>
-          {items.length === 0 ? <Text dimColor>{all ? "Nothing has run yet." : "Nothing is running. Run a bolt with ⏎, or a shows stopped ones."}</Text> : null}
+        <Box flexDirection="column" width={listWidth} flexShrink={0} borderStyle={glyphs.border} borderColor={TONE.accent} paddingX={1} overflow="hidden">
+          <Text bold>
+            <Text dimColor>3 </Text>
+            {all ? "Running and stopped" : "Running"}
+          </Text>
+          {typing || query ? <SearchLine query={query} typing={typing} /> : null}
+          {items.length === 0 ? <Text dimColor>{query ? `Nothing matches “${query}”. esc clears it.` : all ? "Nothing has run yet." : "Nothing is running. Run a bolt with ⏎, or a shows stopped ones."}</Text> : null}
           {dockerError ? <Text color="yellow" wrap="wrap">{`Docker: ${dockerError}`}</Text> : null}
-          {windowed(rows, Math.max(0, rows.findIndex((row) => row.key === (item ? paneKey(item) : ""))), height - 3).items.map((row) => (
+          {windowed(rows, Math.max(0, rows.findIndex((row) => row.key === (item ? paneKey(item) : ""))), height - (typing || query ? 4 : 3) - logRoom).items.map((row) => (
             <Box key={row.key}>{row.node}</Box>
           ))}
+          <Box flexGrow={1} />
+          {logRoom > 0 ? (
+            <Box flexDirection="column">
+              <Text bold dimColor>ACTIVITY</Text>
+              {activity.slice(0, logRoom - 1).map((entry) => (
+                <Text key={`${entry.at}:${entry.text}`} wrap="truncate-end">
+                  <Text dimColor>{`${clock(entry.at)} `}</Text>
+                  <Text color={entry.tone === "bad" ? TONE.failed : entry.tone === "good" ? TONE.up : undefined} dimColor={entry.tone === "info"}>{entry.text}</Text>
+                </Text>
+              ))}
+            </Box>
+          ) : null}
         </Box>
       )}
       <Box
@@ -1378,8 +1711,10 @@ function PanesPanel(props: {
         borderStyle={glyphs.border}
         borderColor={
           item?.type === "current"
-            ? active && !active.done ? "#a78bfa" : "gray"
-            : item && (item.type === "run" ? item.run.alive : containerMood(item.container).tone === "good") ? "green" : "gray"
+            ? active && !active.done ? TONE.accent : "gray"
+            : item?.type === "group"
+              ? groupTally(items, item.group.key).bad > 0 ? "red" : TONE.accent
+              : item && (item.type === "run" ? item.run.alive : containerMood(item.container).tone === "good") ? "green" : "gray"
         }
         paddingX={1}
       >
@@ -1388,10 +1723,155 @@ function PanesPanel(props: {
           {scroll > 0 ? <Text color="yellow">{`  ↑ ${scroll} lines back — G to follow`}</Text> : null}
         </Text>
         {item?.type === "run" && !item.run.log ? <Text dimColor>{`It runs in ${item.run.where ?? "a terminal window"} — its output is there.`}</Text> : null}
-        {shown.map((line, at) => (
-          <Text key={at} wrap="truncate-end">{line || " "}</Text>
-        ))}
+        {item?.type === "group" ? (
+          <GroupSummary items={items} group={item.group} history={history} stats={stats} glyphs={glyphs} />
+        ) : (
+          shown.map((line, at) => (
+            <Text key={at} wrap="truncate-end">{line || " "}</Text>
+          ))
+        )}
       </Box>
+    </Box>
+  );
+}
+
+/**
+ * The Running list, structured: the run in progress first, then each workspace's bolts
+ * with what they started under them.
+ */
+function groupPanes(head: PaneItem[], runs: RunStatus[], containers: Container[], reads: WorkspaceRead[]): PaneItem[] {
+  const groups = new Map<string, { group: PaneGroup; members: PaneItem[] }>();
+  const add = (group: PaneGroup, member: PaneItem) => {
+    const found = groups.get(group.key) ?? { group, members: [] };
+    found.members.push(member);
+    groups.set(group.key, found);
+  };
+  const nameOf = (file: string, fallback: string) => reads.find((read) => read.workspace.file === file)?.workspace.name ?? fallback;
+
+  for (const run of runs) {
+    const bolt = run.bolt;
+    const key = `${run.workspace}#${bolt ?? ""}`;
+    add({ key, workspace: run.workspace, workspaceName: nameOf(run.workspace, run.workspaceName), ...(bolt ? { bolt } : {}), title: bolt ?? "Not from a bolt" }, { type: "run", run, group: key });
+  }
+  for (const container of containers) {
+    // The bolt whose compose step starts this file is the container's owner.
+    let owner: { read: WorkspaceRead; bolt: string } | undefined;
+    for (const read of reads) {
+      for (const bolt of read.workspace.bolts) {
+        if (bolt.steps.some((step) => step.kind === "compose" && step.file === container.file)) owner = owner ?? { read, bolt: bolt.label };
+      }
+    }
+    const key = owner ? `${owner.read.workspace.file}#${owner.bolt}` : `compose#${container.project}`;
+    add(
+      owner
+        ? { key, workspace: owner.read.workspace.file, workspaceName: owner.read.workspace.name, bolt: owner.bolt, title: owner.bolt }
+        : { key, workspaceName: container.project, title: `${container.project} (docker compose)` },
+      { type: "container", container, group: key },
+    );
+  }
+
+  // Within a workspace, its bolts by name, and what no bolt started last.
+  const ordered = [...groups.values()].sort(
+    (left, right) =>
+      left.group.workspaceName.localeCompare(right.group.workspaceName) ||
+      Number(!left.group.bolt) - Number(!right.group.bolt) ||
+      left.group.title.localeCompare(right.group.title),
+  );
+  return [...head, ...ordered.flatMap(({ group, members }) => [{ type: "group" as const, group }, ...members])];
+}
+
+/**
+ * The Running list narrowed to a search. A bolt that matches keeps all of its tasks; a task
+ * that matches keeps its bolt, so you still see where it belongs.
+ */
+function filterPanes(items: PaneItem[], query: string): PaneItem[] {
+  if (!query.trim()) return items;
+  const textOf = (item: PaneItem): string[] =>
+    item.type === "group"
+      ? [item.group.title, item.group.workspaceName]
+      : item.type === "run"
+        ? [item.run.label, item.run.command, item.run.workspaceName, item.run.alive ? "running" : "stopped"]
+        : item.type === "container"
+          ? [item.container.service, item.container.name, item.container.image, item.container.project, containerMood(item.container).word, "container"]
+          : [];
+  const groups = items.filter((item): item is PaneItem & { type: "group" } => item.type === "group");
+  const keep = new Set<PaneItem>();
+  for (const group of groups) {
+    const members = groupMembers(items, group.group.key);
+    if (matchesAll(query, ...textOf(group))) {
+      keep.add(group);
+      for (const member of members) keep.add(member);
+      continue;
+    }
+    const hits = members.filter((member) => matchesAll(query, ...textOf(member), group.group.title, group.group.workspaceName));
+    if (hits.length > 0) {
+      keep.add(group);
+      for (const hit of hits) keep.add(hit);
+    }
+  }
+  return items.filter((item) => keep.has(item));
+}
+
+/** The bolt a group in the Running list stands for. */
+function groupBolt(items: PaneItem[], key: string): string | undefined {
+  const found = items.find((item): item is PaneItem & { type: "group" } => item.type === "group" && item.group.key === key);
+  return found?.group.bolt;
+}
+
+/**
+ * Which run started a task, as History numbers it: " #4" under its own bolt, or
+ * " from Work on web #2" when another bolt's run brought it up as a dependency. `long`
+ * always names the bolt. Nothing while that run is still going and not in History yet.
+ */
+function startedBy(run: RunStatus, history: HistoryEntry[], bolt: string | undefined, long = false): string {
+  const entry = run.historyId ? history.find((candidate) => candidate.id === run.historyId) : undefined;
+  if (!entry?.number) return "";
+  const name = entry.bolt.replace(/ \((retry|down)\)$/, "");
+  return !long && name === bolt ? ` #${entry.number}` : ` from ${name} #${entry.number}`;
+}
+
+/** The tasks under a bolt in the Running list. */
+function groupMembers(items: PaneItem[], key: string): (PaneItem & { type: "run" | "container" })[] {
+  return items.filter((item): item is PaneItem & { type: "run" | "container" } => (item.type === "run" || item.type === "container") && item.group === key);
+}
+
+/** How many of a bolt's tasks are up, and how many are in trouble. */
+function groupTally(items: PaneItem[], key: string): { up: number; bad: number; total: number } {
+  const members = groupMembers(items, key);
+  const up = members.filter((item) => (item.type === "run" ? item.run.alive : item.container.state === "running")).length;
+  const bad = members.filter((item) => (item.type === "run" ? false : containerMood(item.container).tone === "bad")).length;
+  return { up, bad, total: members.length };
+}
+
+/** A bolt selected in the Running list: what it started, at a glance, and what keys do. */
+function GroupSummary({ items, group, history, stats, glyphs }: { items: PaneItem[]; group: PaneGroup; history: HistoryEntry[]; stats: Map<string, ContainerStats>; glyphs: Glyphs }) {
+  const members = groupMembers(items, group.key);
+  return (
+    <Box flexDirection="column" marginTop={1}>
+      {members.map((member) => {
+        if (member.type === "run") {
+          const run = member.run;
+          return (
+            <Text key={run.id} wrap="truncate-end">
+              <Text color={run.alive ? TONE.up : TONE.stopped}>{glyphs.dot}</Text> <Text bold>{run.label.padEnd(16)}</Text>
+              <Text dimColor>{`${(run.alive ? `up ${since(run.startedAt).replace(" ago", "").replace("just now", "<1m")}` : "stopped").padEnd(10)}  ${(startedBy(run, history, group.bolt, true).trim() || "").padEnd(18)}  ${run.command}`}</Text>
+            </Text>
+          );
+        }
+        const container = member.container;
+        const mood = containerMood(container);
+        const usage = stats.get(container.name);
+        return (
+          <Text key={container.name} wrap="truncate-end">
+            <Text color={mood.tone === "good" ? "green" : mood.tone === "bad" ? "red" : "yellow"}>{glyphs.dot}</Text> <Text bold>{container.service.padEnd(16)}</Text>
+            <Text dimColor>{`${mood.word.padEnd(10)}  ${[container.ports.join(", "), usage ? `${usage.cpu} ${usage.memory}` : ""].filter(Boolean).join(" · ")}`}</Text>
+          </Text>
+        );
+      })}
+      <Text> </Text>
+      <Text dimColor>
+        {group.bolt ? "x stops all of it · r restarts it · ⏎ or ↓ to a task for its output" : "Not started by a bolt — choose one to stop it or see its output."}
+      </Text>
     </Box>
   );
 }
@@ -1399,7 +1879,24 @@ function PanesPanel(props: {
 /** How a pane is found again after the list changes under it. */
 function paneKey(item: PaneItem): string {
   if (item.type === "current") return "current";
+  if (item.type === "group") return `group:${item.group.key}`;
   return item.type === "run" ? item.run.id : `container:${item.container.name}`;
+}
+
+/** How often a command has been brought back, read from the marks its restart loop logs. */
+function restartsOf(lines: string[]): { count: number; gaveUp: boolean } {
+  let count = 0;
+  let gaveUp = false;
+  for (const line of lines) {
+    if (line.includes(RESTART_MARK)) count += 1;
+    if (line.includes("[specter]") && line.includes("gave up after")) gaveUp = true;
+  }
+  return { count, gaveUp };
+}
+
+function restartNote(lines: string[]): string | undefined {
+  const { count } = restartsOf(lines);
+  return count > 0 ? `restarted ${count}× — ${lastLine(lines) ?? ""}` : undefined;
 }
 
 function lastLine(lines: string[]): string | undefined {
@@ -1413,9 +1910,9 @@ function lastLine(lines: string[]): string | undefined {
 function SearchPanel({ hits, index, query, glyphs, height }: { hits: SearchHit[]; index: number; query: string; glyphs: Glyphs; height: number }) {
   const { items, offset } = windowed(hits, index, height - 4);
   return (
-    <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor="#a78bfa" paddingX={1}>
+    <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor={TONE.accent} paddingX={1}>
       <Text>
-        <Text color="#a78bfa">/ </Text>
+        <Text color={TONE.accent}>/ </Text>
         {query}
         <Text inverse> </Text>
       </Text>
@@ -1436,12 +1933,8 @@ function SearchPanel({ hits, index, query, glyphs, height }: { hits: SearchHit[]
 
 /** "I looked at this folder, and here's what I'd set up" — the first thing a new project sees. */
 function SetupPanel({ suggestion, glyphs, height, onAnswer }: { suggestion: SetupSuggestion; glyphs: Glyphs; height: number; onAnswer: (yes: boolean) => void }) {
-  useInput((input, key) => {
-    if (key.return || input === "y") onAnswer(true);
-    else if (key.escape || input === "n" || input === "q") onAnswer(false);
-  });
   return (
-    <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor="#a78bfa" paddingX={1} overflow="hidden">
+    <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor={TONE.accent} paddingX={1} overflow="hidden">
       <Text bold>{`Set up ${suggestion.name}?`}</Text>
       <Text dimColor wrap="truncate-start">{tildify(suggestion.dir)}</Text>
       <Text> </Text>
@@ -1454,7 +1947,7 @@ function SetupPanel({ suggestion, glyphs, height, onAnswer }: { suggestion: Setu
       {suggestion.bolts.map((bolt) => (
         <Box key={bolt.label} flexDirection="column">
           <Text wrap="truncate-end">
-            <Text bold color="#a78bfa">{`  ${glyphs.pointer} ${bolt.label}`}</Text>
+            <Text bold color={TONE.accent}>{`  ${glyphs.pointer} ${bolt.label}`}</Text>
             {bolt.job ? <Text color="cyan"> — a job: stops at the first failure</Text> : null}
           </Text>
           <Text wrap="truncate-end" dimColor>{`      ${bolt.steps.join(", then ")}`}</Text>
@@ -1462,43 +1955,71 @@ function SetupPanel({ suggestion, glyphs, height, onAnswer }: { suggestion: Setu
       ))}
       <Box flexGrow={1} />
       <Text dimColor>It's saved as .specter.json in this folder — you can change all of it afterwards with e.</Text>
-      <Text bold>⏎ set it up · esc not now</Text>
+      <Choice yes="Set it up" no="Not now" onAnswer={onAnswer} />
     </Box>
   );
 }
 
 function HelpPanel({ glyphs, height }: { glyphs: Glyphs; height: number }) {
-  const keys: [string, string][] = [
-    ["↑↓  j k", "move"],
-    ["←→  tab", "switch between workspaces and bolts"],
-    ["⏎", "run the selected bolt"],
-    ["n", "dry run: show what it would do, change nothing"],
-    ["/", "search every workspace and bolt"],
-    ["c", "check the file for problems"],
-    ["t", "review and trust what the file would run"],
-    ["x  R", "stop what the selected bolt started · restart it"],
-    ["e", "edit the selected bolt: its steps, its name, whether it's a job"],
-    ["a  D", "add a new bolt · delete the selected one"],
-    ["K  J", "move the selected bolt up · down"],
-    ["N", "a new workspace of your own"],
-    ["E", "open the file itself in your text editor"],
-    ["p", "what's running — commands and containers, with live output"],
-    ["h", "history — every run, how it went, and what failed"],
-    ["r", "reload"],
-    ["q", "quit"],
+  // Grouped by what you are doing, so the key you need is where you would look for it.
+  const sections: [string, [string, string][]][] = [
+    [
+      "Run",
+      [
+        ["⏎", "run the selected bolt"],
+        ["n", "dry run — see what it would do, change nothing"],
+        ["v", "view the bolt whole — its order, what it needs, what's up"],
+        ["x  R", "stop what it started · restart it"],
+      ],
+    ],
+    [
+      "Look",
+      [
+        ["p", "what's running — commands and containers, live"],
+        ["h", "history — every run, like a CI"],
+        ["/", "search every workspace and bolt"],
+        ["c", "check the file for problems"],
+      ],
+    ],
+    [
+      "Edit",
+      [
+        ["e", "edit the selected bolt — its steps, name, kind"],
+        ["a  D", "add a bolt · delete the selected one"],
+        ["K  J", "move the selected bolt up · down"],
+        ["N", "a new workspace of your own"],
+        ["E", "open the file itself in your text editor"],
+      ],
+    ],
+    [
+      "Move",
+      [
+        ["↑↓  j k", "move"],
+        ["1 2 3 4", "workspaces · bolts · running · history"],
+        ["←→  tab", "between workspaces and bolts"],
+        ["t", "review and allow what a file would run"],
+        ["r  q", "reload · quit"],
+      ],
+    ],
   ];
   return (
     <Box flexDirection="column" height={height} borderStyle={glyphs.border} paddingX={1}>
       <Text bold>Keys</Text>
-      <Text> </Text>
-      {keys.map(([combo, meaning]) => (
-        <Text key={combo}>
-          <Text color="#a78bfa">{combo.padEnd(14)}</Text>
-          {meaning}
-        </Text>
-      ))}
-      <Text> </Text>
-      <Text dimColor>`specter --help` for the command line, `specter spec` for the file format.</Text>
+      <Box flexWrap="wrap">
+        {sections.map(([title, keys]) => (
+          <Box key={title} flexDirection="column" width="50%" marginTop={1} paddingRight={2}>
+            <Text color={TONE.accent} bold>{title.toUpperCase()}</Text>
+            {keys.map(([combo, meaning]) => (
+              <Text key={combo} wrap="truncate-end">
+                <Text bold>{combo.padEnd(9)}</Text>
+                <Text>{meaning}</Text>
+              </Text>
+            ))}
+          </Box>
+        ))}
+      </Box>
+      <Box flexGrow={1} />
+      <Text dimColor>`specter --help` for the command line, `specter spec` for the file format · any key to go back</Text>
     </Box>
   );
 }
@@ -1581,4 +2102,10 @@ function markFirst(steps: StepState[], target: SwitchTarget, change: (step: Step
   );
   if (index === -1) return steps;
   return steps.map((step, at) => (at === index ? change(step) : step));
+}
+
+/** A time of day, 24-hour: when something in the activity log happened. */
+function clock(at: number): string {
+  const date = new Date(at);
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }

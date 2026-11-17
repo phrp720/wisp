@@ -2,6 +2,7 @@ import { Box, Text, useInput, type Key } from "ink";
 import { useRef, useState } from "react";
 
 import type { Glyphs } from "./glyphs.js";
+import { TONE } from "./tones.js";
 
 /** One field of a form: text by default, or a choice between a few options. */
 export interface FieldSpec {
@@ -120,7 +121,7 @@ export function Form({ title, intro, fields, initial = {}, submitLabel = "save",
   });
 
   return (
-    <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor="#a78bfa" paddingX={1}>
+    <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor={TONE.accent} paddingX={1}>
       <Text bold>{title}</Text>
       {intro ? <Text dimColor wrap="wrap">{intro}</Text> : null}
       <Text> </Text>
@@ -130,7 +131,7 @@ export function Form({ title, intro, fields, initial = {}, submitLabel = "save",
         return (
           <Box key={entry.key} flexDirection="column" marginBottom={1}>
             <Text>
-              <Text color={active ? "#a78bfa" : undefined} bold={active}>{`${active ? glyphs.pointer : " "} ${entry.label.padEnd(14)}`}</Text>
+              <Text color={active ? TONE.accent : undefined} bold={active}>{`${active ? glyphs.pointer : " "} ${entry.label.padEnd(14)}`}</Text>
               {entry.choices ? (
                 <Text>
                   {entry.choices.map((option) => (
@@ -238,7 +239,7 @@ export function Picker(props: {
   });
 
   return (
-    <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor="#a78bfa" paddingX={1}>
+    <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor={TONE.accent} paddingX={1}>
       <Text bold>{title}</Text>
       {intro ? <Text dimColor>{intro}</Text> : null}
       <Text> </Text>
@@ -246,7 +247,7 @@ export function Picker(props: {
         const active = at === index;
         return (
           <Text key={option.key} wrap="truncate-end">
-            <Text color={active ? "#a78bfa" : undefined} bold={active} inverse={active}>{` ${at + 1}. ${option.title} `}</Text>
+            <Text color={active ? TONE.accent : undefined} bold={active} inverse={active}>{` ${at + 1}. ${option.title} `}</Text>
             {option.detail ? <Text dimColor>{`  ${option.detail}`}</Text> : null}
           </Text>
         );
@@ -260,13 +261,60 @@ export function Picker(props: {
 /** "Are you sure?", with what would happen said plainly, and only y saying yes. */
 export function Confirm(props: { title: string; detail?: string; yes: string; glyphs: Glyphs; height: number; onAnswer: (yes: boolean) => void }) {
   const { title, detail, yes, glyphs, height, onAnswer } = props;
-  useInput((input) => onAnswer(input === "y" || input === "Y"));
   return (
     <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor="yellow" paddingX={1}>
       <Text bold>{title}</Text>
       {detail ? <Text dimColor wrap="wrap">{detail}</Text> : null}
       <Text> </Text>
-      <Text bold color="yellow">{`y to ${yes} · any other key to keep it`}</Text>
+      <Choice yes={`Yes, ${yes}`} no="No, keep it" danger onAnswer={onAnswer} />
+    </Box>
+  );
+}
+
+/**
+ * Two buttons side by side, as a dialog has: ←→ or tab moves between them, ⏎ presses the
+ * one picked, esc is always "no". y and n still work, for those who know them. A choice that
+ * deletes or allows something starts on "no", so a stray ⏎ does nothing harmful.
+ */
+export function Choice(props: { yes: string; no: string; danger?: boolean; onAnswer: (yes: boolean) => void; onCancel?: () => void }) {
+  const { yes, no, danger = false, onAnswer, onCancel } = props;
+  const [onYes, setOnYes] = useState(!danger);
+  const picked = useRef(onYes);
+  picked.current = onYes;
+  const answered = useRef(false);
+  // The key that answers is the dialog's alone. Every screen hears each key; answering at
+  // once would close the dialog before the screen behind it hears the same ⏎, and it would
+  // act on it too — run the bolt under the dialog. So the answer lands after the key is done.
+  const answer = (yes: boolean) => {
+    if (answered.current) return;
+    answered.current = true;
+    setTimeout(() => onAnswer(yes), 0);
+  };
+  useInput((input, key) => {
+    if (answered.current) return;
+    if (key.leftArrow || key.rightArrow || key.tab || input === "h" || input === "l") return setOnYes((now) => !now);
+    if (key.return || input === " ") return answer(picked.current);
+    if (input === "y" || input === "Y") return answer(true);
+    // Where both buttons do something, esc is neither: it backs out.
+    if (key.escape && onCancel) {
+      answered.current = true;
+      return void setTimeout(onCancel, 0);
+    }
+    if (key.escape || input === "n" || input === "N" || input === "q") return answer(false);
+  });
+  const button = (label: string, focused: boolean, color: string) => (
+    <Text color={focused ? "black" : color} backgroundColor={focused ? color : undefined} bold={focused}>
+      {focused ? `▸ ${label} ` : `  ${label} `}
+    </Text>
+  );
+  return (
+    <Box flexDirection="column">
+      <Box>
+        {button(yes, onYes, danger ? "red" : TONE.accent)}
+        <Text>{"   "}</Text>
+        {button(no, !onYes, "gray")}
+      </Box>
+      <Text dimColor>←→ choose · ⏎ confirm · esc cancel</Text>
     </Box>
   );
 }

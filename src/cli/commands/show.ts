@@ -1,3 +1,5 @@
+import { dirname } from "node:path";
+
 import { tildify } from "../../core/paths.js";
 import { listRuns } from "../../core/processes.js";
 import { collectTargets } from "../../core/switch.js";
@@ -28,7 +30,7 @@ export const show: CommandDef<{ json?: boolean }> = {
 
     const targets = collectTargets(workspace);
     if (targets.length > 0) console.log();
-    for (const target of targets) console.log(targetLine(target));
+    for (const target of targets) console.log(targetLine(target, "  ", dirname(workspace.file)));
 
     const trust = trustLine(read);
     const health = diagnosticSummary(read);

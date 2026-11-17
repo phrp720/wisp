@@ -364,6 +364,14 @@
       },
       "os": {
         "$ref": "#/$defs/os"
+      },
+      "restart": {
+        "enum": [
+          "on-failure",
+          "always",
+          "no"
+        ],
+        "description": "Bring it back when it stops: \"on-failure\" after a crash, \"always\" whenever it exits. Restarts wait longer each time (up to 30s) and stop after 10 in a row. Left out: it stays stopped."
       }
     },
     "command": {
@@ -394,6 +402,9 @@
         },
         "os": {
           "$ref": "#/$defs/commandProperties/os"
+        },
+        "restart": {
+          "$ref": "#/$defs/commandProperties/restart"
         }
       }
     },

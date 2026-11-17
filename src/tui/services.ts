@@ -82,8 +82,8 @@ export function realServices(hooks: { suspend: () => void; resume: () => void })
 
     planRetry: (read, entry) => planRetry(read.workspace, entry, { findWorkspace: async (ref) => resolveWorkspace(ref, await everything()).workspace }),
 
-    down: (read, bolt) =>
-      downBolt(read.workspace, bolt, {}, { findWorkspace: async (ref) => resolveWorkspace(ref, await everything()).workspace }),
+    down: (read, bolt, options = {}) =>
+      downBolt(read.workspace, bolt, options.deps ? { deps: true } : {}, { findWorkspace: async (ref) => resolveWorkspace(ref, await everything()).workspace }),
 
     history: () => listHistory(),
     readLog: (path) => readFile(path, "utf8").catch(() => ""),

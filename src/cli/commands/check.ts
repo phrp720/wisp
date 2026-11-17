@@ -1,21 +1,24 @@
+import { dirname } from "node:path";
+
 import { SpecterError } from "../../core/errors.js";
 import { tildify } from "../../core/paths.js";
 import { PROJECT_FILE, checkProject, findProjectFile } from "../../core/project.js";
 import { bold, counts, cyan, dim, green, kindLabel, plural, title, yellow } from "../format.js";
 import { emitJson } from "../lib/context.js";
 import type { CommandDef } from "../lib/define.js";
-import { countDiagnostics, named, printBolts, printDiagnostics, trustLine } from "../lib/render.js";
+import { countDiagnostics, named, printBolts, printDiagnostics, trustLine, whereLine } from "../lib/render.js";
 
 export const check: CommandDef<{ json?: boolean }> = {
   name: "check",
   aliases: ["lint"],
   summary: `Check a ${PROJECT_FILE}: what it declares, what would run, and what it does not mean`,
-  args: [["[file]", `path to a ${PROJECT_FILE}; omitted walks up from here`]],
+  args: [["[path]", `a ${PROJECT_FILE}, or the folder with one; omitted walks up from here`]],
   options: [["--json", "print the findings as JSON"]],
   examples: ["specter check", "specter check ../other/.specter.json"],
 
   async run([given], options) {
-    const file = given ?? (await findProjectFile());
+    // A folder means the file in it: `specter check ../shop` as well as `../shop/.specter.json`.
+    const file = given ? await fileIn(given) : await findProjectFile();
     if (!file) throw new SpecterError(`No ${PROJECT_FILE} above this directory`, "NO_PROJECT");
 
     const read = await checkProject(file);
@@ -48,9 +51,9 @@ export const check: CommandDef<{ json?: boolean }> = {
     // always. You cannot decide about something you have to open another window to see.
     if (read.declaredCommands.length > 0 || read.withheld.length > 0) {
       console.log();
-      console.log(`${bold("Runs code")} ${dim(read.workspace.trusted ? "allowed" : "waiting for `specter trust`")}`);
+      console.log(`${bold("Runs code")} ${dim(read.workspace.trusted ? "— allowed" : "— waiting for `specter trust`")}`);
       for (const command of read.declaredCommands) {
-        const where = command.cwd ? dim(` in ${tildify(command.cwd)}`) : "";
+        const where = whereLine(command.cwd, dirname(read.workspace.file));
         const env = command.env ? dim(` with ${Object.keys(command.env).join(", ")}`) : "";
         const quiet = command.background ? dim(" (background)") : "";
         console.log(`  ${dim(kindLabel("command"))} ${named(command.label, command.run)}${where}${env}${quiet}`);
@@ -81,3 +84,10 @@ export const check: CommandDef<{ json?: boolean }> = {
     if (errors > 0) process.exitCode = 1;
   },
 };
+
+async function fileIn(path: string): Promise<string> {
+  const { stat } = await import("node:fs/promises");
+  const { join } = await import("node:path");
+  const found = await stat(path).catch(() => undefined);
+  return found?.isDirectory() ? join(path, PROJECT_FILE) : path;
+}

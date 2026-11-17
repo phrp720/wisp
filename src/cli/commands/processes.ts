@@ -11,7 +11,7 @@ import {
   tail,
   type RunStatus,
 } from "../../core/processes.js";
-import { ago, bold, cyan, dim, green, plural } from "../format.js";
+import { ago, bold, dim, green, plural, yellow } from "../format.js";
 import { emitJson } from "../lib/context.js";
 import type { CommandDef } from "../lib/define.js";
 
@@ -42,14 +42,35 @@ export const ps: CommandDef<{ all?: boolean; clear?: boolean; json?: boolean }> 
       return;
     }
 
-    for (const run of shown) {
-      const state = run.alive ? green("●") : dim("○");
-      console.log(`${state} ${bold(run.id)}  ${run.label} ${dim(`· ${run.workspaceName} · ${ago(run.startedAt)}`)}`);
-      const where = run.kind === "window" ? dim(` · ${run.where ?? "window"}`) : "";
-      console.log(`    ${cyan(run.command)}${run.cwd ? dim(` in ${tildify(run.cwd)}`) : ""}${where}`);
-    }
+    // A table, as a process manager shows one: what it is, how it is, for how long.
+    const { tail: readTail } = await import("../../core/processes.js");
+    const rows = await Promise.all(
+      shown.map(async (run) => {
+        const restarts = run.log ? ((await readTail(run.log, 2000)).match(/\[specter\] restarting/g)?.length ?? 0) : 0;
+        return [
+          run.alive ? green("● running") : dim("○ stopped"),
+          bold(run.id),
+          run.label,
+          run.workspaceName,
+          run.alive ? ago(run.startedAt) : "",
+          restarts > 0 ? yellow(`${restarts}×`) : dim("–"),
+          run.kind === "window" ? dim(run.where ?? "window") : dim("background"),
+        ];
+      }),
+    );
+    printTable(["STATUS", "ID", "NAME", "WORKSPACE", "UP", "RESTARTS", "WHERE"], rows);
+    console.log(dim(`\n\`specter logs <name> -f\` follows one · \`specter stop <name>\` stops it`));
   },
 };
+
+/** Columns padded to their widest cell, measured without colour codes. */
+function printTable(headings: string[], rows: string[][]): void {
+  const visible = (text: string) => text.replace(/\u001B\[[0-9;]*m/g, "").length;
+  const widths = headings.map((heading, at) => Math.max(heading.length, ...rows.map((row) => visible(row[at] ?? ""))));
+  const line = (cells: string[]) => cells.map((cell, at) => cell + " ".repeat((widths[at] ?? 0) - visible(cell))).join("  ").trimEnd();
+  console.log(dim(line(headings)));
+  for (const row of rows) console.log(line(row));
+}
 
 export const logs: CommandDef<{ follow?: boolean; lines?: string }> = {
   name: "logs",

@@ -120,7 +120,7 @@ A **bolt** is a named list of things to start, in order. That is the whole idea:
 | File | `{ "file": "docs/runbook.md" }` |
 | Link | `{ "url": "https://staging.acme.com" }` — on macOS, focuses the tab if it's already open |
 | App | `{ "app": "Slack" }` |
-| Command | `{ "run": "pnpm dev", "cwd": "apps/api", "env": { "PORT": 3000 } }` |
+| Command | `{ "run": "pnpm dev", "cwd": "apps/api", "env": { "PORT": 3000 } }` — add `"restart": "on-failure"` to bring it back if it crashes |
 | Wait | `{ "wait": 3 }` · `{ "wait": "localhost:5432" }` · `{ "wait": "http://localhost:3000" }` |
 | Another bolt | `{ "bolt": "Database" }` · `{ "bolt": "Database", "workspace": "infra" }` |
 | Docker services | `{ "compose": "compose.yaml", "services": ["postgres"] }` — waits until they're healthy |
