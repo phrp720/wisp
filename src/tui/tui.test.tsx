@@ -13,15 +13,15 @@ function read(file: string, main: Record<string, unknown>, trust: TrustState = "
   return interpret({ main }, { file, personal, trust, os: "darwin" });
 }
 
-const acme = read("/dev/acme/.specter.json", {
+const acme = read("/dev/acme/.wisp.json", {
   name: "Acme",
   bolts: [
     { label: "Work on api", targets: [{ folder: "apps/api" }, { run: "pnpm dev" }] },
     { label: "Work on web", targets: [{ folder: "apps/web" }] },
   ],
 });
-const infra = read("/dev/infra/.specter.json", { name: "infra", bolts: [{ label: "Database", targets: [{ run: "postgres" }] }] }, "untrusted");
-const morning = read("/home/.config/specter/workspaces/Morning.json", { name: "Morning", bolts: [{ label: "Start the day", targets: [{ url: "mail.google.com" }] }] }, "trusted", true);
+const infra = read("/dev/infra/.wisp.json", { name: "infra", bolts: [{ label: "Database", targets: [{ run: "postgres" }] }] }, "untrusted");
+const morning = read("/home/.config/wisp/workspaces/Morning.json", { name: "Morning", bolts: [{ label: "Start the day", targets: [{ url: "mail.google.com" }] }] }, "trusted", true);
 
 function services(overrides: Partial<Services> = {}, library: Library = { reads: [morning, infra, acme], here: acme.workspace.file, unreadable: [] }): Services {
   return {
@@ -233,7 +233,7 @@ describe("the TUI", () => {
   });
 
   it("shows a bolt whole with v: its order, the bolts it needs opened up, what each runs", async () => {
-    const shop = read("/dev/shop/.specter.json", {
+    const shop = read("/dev/shop/.wisp.json", {
       name: "Shop",
       bolts: [
         { label: "Work on web", targets: [{ bolt: "Database" }, { run: "pnpm dev", label: "web", cwd: "apps/web", restart: "on-failure" }, { wait: "localhost:3000" }, { url: "http://localhost:3000" }] },
@@ -279,7 +279,7 @@ describe("the TUI", () => {
   it("says so when there are no workspaces at all", async () => {
     const frame = (await open(services({}, { reads: [], unreadable: [] }))).lastFrame() ?? "";
     expect(frame).toContain("No workspaces yet");
-    expect(frame).toContain("specter init");
+    expect(frame).toContain("wisp init");
   });
 
   it("tells you on a server that commands go to the background", async () => {
@@ -321,7 +321,7 @@ describe("jobs, down and history in the TUI", () => {
   });
 
   it("asks, when the bolt needed others, whether to stop those too", async () => {
-    const shop = read("/dev/shop/.specter.json", {
+    const shop = read("/dev/shop/.wisp.json", {
       name: "Shop",
       bolts: [
         { label: "Work on web", targets: [{ bolt: "Database" }, { run: "pnpm dev", label: "web" }] },
@@ -568,7 +568,7 @@ describe("doing everything without JSON", () => {
     app.stdin.write("\r"); // to the button
     app.stdin.write("\r"); // Add step
     await tick();
-    expect(app.lastFrame()).toContain("Not something Specter can wait for");
+    expect(app.lastFrame()).toContain("Not something Wisp can wait for");
   });
 
   it("creates a new bolt from a form and opens it to add steps", async () => {
@@ -600,7 +600,7 @@ describe("doing everything without JSON", () => {
       }),
     );
     // Containers are only watched for compose files a workspace uses.
-    const withCompose = read("/dev/shop/.specter.json", { name: "Shop", bolts: [{ label: "Services", targets: [{ compose: "compose.yaml" }] }] });
+    const withCompose = read("/dev/shop/.wisp.json", { name: "Shop", bolts: [{ label: "Services", targets: [{ compose: "compose.yaml" }] }] });
     const app2 = await open(
       services(
         {
@@ -797,7 +797,7 @@ describe("long links", () => {
   });
 
   it("never push the workspace list out of shape", async () => {
-    const long = read("/dev/notes/.specter.json", { name: "Notes", bolts: [{ label: "Notion", targets: [{ url: `https://app.notion.com/p/${"x".repeat(300)}` }] }] });
+    const long = read("/dev/notes/.wisp.json", { name: "Notes", bolts: [{ label: "Notion", targets: [{ url: `https://app.notion.com/p/${"x".repeat(300)}` }] }] });
     const app = await open(services({}, { reads: [long], here: long.workspace.file, unreadable: [] }));
     const lines = (app.lastFrame() ?? "").split("\n").slice(1, -1);
     // Every row is exactly as wide as the screen: nothing spills, nothing wraps.

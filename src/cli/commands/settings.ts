@@ -1,6 +1,6 @@
 import { getOpenWithDefaults, setOpenWithDefaults } from "../../core/config.js";
 import { detectEnvironment } from "../../core/environment.js";
-import { SpecterError } from "../../core/errors.js";
+import { WispError } from "../../core/errors.js";
 import { getPlatform } from "../../platform/index.js";
 import { MULTIPLEXERS } from "../../platform/terminals.js";
 import { dim } from "../format.js";
@@ -28,11 +28,11 @@ export const openWith: CommandDef<{ folder?: string; file?: string; terminal?: s
     ["--terminal <app>", "terminal that runs commands; blank to go back to automatic"],
   ],
   examples: [
-    "specter open-with",
-    'specter open-with folder "Visual Studio Code"',
-    "specter open-with folder code          # on Linux, a command on PATH",
-    "specter open-with terminal ghost       # a prefix is enough",
-    "specter open-with terminal tmux",
+    "wisp open-with",
+    'wisp open-with folder "Visual Studio Code"',
+    "wisp open-with folder code          # on Linux, a command on PATH",
+    "wisp open-with terminal ghost       # a prefix is enough",
+    "wisp open-with terminal tmux",
   ],
 
   async run(args, flags) {
@@ -44,8 +44,8 @@ export const openWith: CommandDef<{ folder?: string; file?: string; terminal?: s
       const multiplexer = (MULTIPLEXERS as readonly string[]).find((entry) => entry === name);
       const terminal = multiplexer ?? platform.findTerminal(options.terminal);
       if (!terminal) {
-        throw new SpecterError(
-          `Specter cannot drive "${options.terminal}". Known: ${[...platform.knownTerminals(), ...MULTIPLEXERS].join(", ")}`,
+        throw new WispError(
+          `Wisp cannot drive "${options.terminal}". Known: ${[...platform.knownTerminals(), ...MULTIPLEXERS].join(", ")}`,
           "INVALID_INPUT",
         );
       }
@@ -81,7 +81,7 @@ function positional(args: string[]): { folder?: string; file?: string; terminal?
   if (!what) return {};
 
   const key = KINDS[what.trim().toLowerCase()];
-  if (!key) throw new SpecterError(`Say what to set: folder, file or terminal — not "${what}"`, "INVALID_INPUT");
+  if (!key) throw new WispError(`Say what to set: folder, file or terminal — not "${what}"`, "INVALID_INPUT");
 
   // Naming the kind alone asks what is set, rather than clearing it: clearing is something
   // you should have to be explicit about, and `--folder ""` is.

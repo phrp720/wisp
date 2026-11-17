@@ -15,7 +15,7 @@ export async function startTui(): Promise<void> {
   const leave = () => stdout.write(LEAVE_SCREEN + "\u001B[?25h");
   stdout.write(ENTER_SCREEN + "\u001B[?25l");
   process.once("exit", leave);
-  // Closed window, `kill`, logged out: whatever Specter was running attached goes with it,
+  // Closed window, `kill`, logged out: whatever Wisp was running attached goes with it,
   // rather than carrying on where nobody can see it.
   for (const signal of ["SIGHUP", "SIGTERM"] as const) {
     process.once(signal, () => {

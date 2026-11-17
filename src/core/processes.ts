@@ -10,14 +10,14 @@ import { underTerminal } from "./shell.js";
 import type { Invocation } from "./types.js";
 
 /**
- * A command Specter started and is keeping track of — in the background, or in a window.
+ * A command Wisp started and is keeping track of — in the background, or in a window.
  *
  * Without this a command is fire and forget: no way to see whether it is still up, no
  * way to stop it short of hunting for its PID, and running the bolt again starts a second
  * copy fighting the first for its port.
  */
 export interface Run {
-  /** Short and typeable: `specter logs 3fa9`. */
+  /** Short and typeable: `wisp logs 3fa9`. */
   id: string;
   /** `background`: detached, output in `log`. `window`: a terminal or tmux window. */
   kind: "background" | "window";
@@ -84,14 +84,14 @@ export async function listRuns(): Promise<RunStatus[]> {
     .sort((left, right) => right.startedAt.localeCompare(left.startedAt));
 }
 
-/** The run of this asset that is still going, if Specter started one. */
+/** The run of this asset that is still going, if Wisp started one. */
 export async function runningFor(workspace: string, asset: string): Promise<RunStatus | undefined> {
   return (await listRuns()).find((run) => run.alive && run.workspace === workspace && run.asset === asset);
 }
 
 /**
  * A run named by its id, its label, or any distinctive part of the label — the same rule
- * as everything else Specter lets you name. Running runs win over finished ones.
+ * as everything else Wisp lets you name. Running runs win over finished ones.
  */
 export function matchRun(query: string, runs: RunStatus[]): { match?: RunStatus; candidates: RunStatus[] } {
   const needle = query.trim().toLowerCase();
@@ -199,7 +199,7 @@ export async function startRun(request: StartRequest): Promise<StartResult> {
 
 /**
  * Remember a command handed to a window. Its shell writes its PID to `pidFile` as the
- * first thing it does, which is how Specter finds it again.
+ * first thing it does, which is how Wisp finds it again.
  */
 export async function recordWindowRun(id: string, pidFile: string, request: RunInfo & { where: string }): Promise<Run> {
   const run: Run = { ...info(request), id, kind: "window", pid: 0, pidFile, startedAt: new Date().toISOString(), where: request.where };
@@ -292,7 +292,7 @@ export function parseProcessTable(output: string): { pid: number; ppid: number; 
   });
 }
 
-/** Specter's own process group, which must never be signalled along with a run's. */
+/** Wisp's own process group, which must never be signalled along with a run's. */
 let ownPgid: number | undefined;
 function ownGroup(): number {
   if (ownPgid === undefined) {

@@ -194,7 +194,7 @@ export function HelpPanel({ glyphs, height }: { glyphs: Glyphs; height: number }
         ))}
       </Box>
       <Box flexGrow={1} />
-      <Text dimColor>`specter --help` for the command line · `specter spec` for the file format</Text>
+      <Text dimColor>`wisp --help` for the command line · `wisp spec` for the file format</Text>
     </Box>
   );
 }

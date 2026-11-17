@@ -57,7 +57,7 @@ export function SetupPanel({ suggestion, glyphs, height, onAnswer }: { suggestio
         </Box>
       ))}
       <Box flexGrow={1} />
-      <Text dimColor>It's saved as .specter.json in this folder — you can change all of it afterwards with e.</Text>
+      <Text dimColor>It's saved as .wisp.json in this folder — you can change all of it afterwards with e.</Text>
       <Choice yes="Set it up" no="Not now" onAnswer={onAnswer} />
     </Box>
   );

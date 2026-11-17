@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/phrp720/specter/main/schema/specter.schema.json",
-  "title": "Specter workspace file",
-  "description": "A .specter.json: the bolts that start a project's working context — its links, folders, files, apps and commands — with one word. Committed next to the code, so the repository carries its own context.",
+  "$id": "https://raw.githubusercontent.com/phrp720/wisp/main/schema/wisp.schema.json",
+  "title": "Wisp workspace file",
+  "description": "A .wisp.json: the bolts that start a project's working context — its links, folders, files, apps and commands — with one word. Committed next to the code, so the repository carries its own context.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -50,7 +50,7 @@
     },
     "files": {
       "type": "array",
-      "description": "Shared files. Paths are relative to this file. A file that runs when opened (.command, .exe, .sh…) waits for `specter trust`.",
+      "description": "Shared files. Paths are relative to this file. A file that runs when opened (.command, .exe, .sh…) waits for `wisp trust`.",
       "items": {
         "$ref": "#/$defs/file"
       }
@@ -64,7 +64,7 @@
     },
     "commands": {
       "type": "array",
-      "description": "Shared shell commands. These do NOT run until the reader allows this exact file with `specter trust` — any edit asks again.",
+      "description": "Shared shell commands. These do NOT run until the reader allows this exact file with `wisp trust` — any edit asks again.",
       "items": {
         "$ref": "#/$defs/command"
       }
@@ -133,7 +133,7 @@
     },
     "openWith": {
       "type": "string",
-      "description": "Which app opens this folder or file. Honoured only in your personal workspaces; a shared project file cannot choose anyone's editor — readers set their own with `specter open-with`."
+      "description": "Which app opens this folder or file. Honoured only in your personal workspaces; a shared project file cannot choose anyone's editor — readers set their own with `wisp open-with`."
     },
     "link": {
       "oneOf": [
@@ -173,7 +173,7 @@
     "pathProperty": {
       "type": "string",
       "minLength": 1,
-      "description": "Relative to this file — that is what makes it work on every machine. An absolute or ~ path works, but only where it exists; put those in .specter.local.json.",
+      "description": "Relative to this file — that is what makes it work on every machine. An absolute or ~ path works, but only where it exists; put those in .wisp.local.json.",
       "examples": [
         "apps/api",
         "README.md"
@@ -380,7 +380,7 @@
       "required": [
         "run"
       ],
-      "description": "Runs only after the reader allows this file with `specter trust`.",
+      "description": "Runs only after the reader allows this file with `wisp trust`.",
       "properties": {
         "label": {
           "$ref": "#/$defs/commandProperties/label"
@@ -538,7 +538,7 @@
         },
         {
           "$ref": "#/$defs/command",
-          "description": "A command written inline. Waits for `specter trust` like any other."
+          "description": "A command written inline. Waits for `wisp trust` like any other."
         },
         {
           "type": "object",
@@ -550,7 +550,7 @@
             "compose": {
               "type": "string",
               "minLength": 1,
-              "description": "A docker compose file, relative to this file. Its services are started with `up --wait` — the step is done when they are healthy — shown with their state and logs, and stopped by `specter down`. Waits for `specter trust`, like a command.",
+              "description": "A docker compose file, relative to this file. Its services are started with `up --wait` — the step is done when they are healthy — shown with their state and logs, and stopped by `wisp down`. Waits for `wisp trust`, like a command.",
               "examples": [
                 "compose.yaml",
                 "deployments/development/docker-compose.yml"
@@ -609,7 +609,7 @@
         "label": {
           "type": "string",
           "minLength": 1,
-          "description": "Name it after the job, not the things it holds. Any distinctive word of it runs it: `specter api`.",
+          "description": "Name it after the job, not the things it holds. Any distinctive word of it runs it: `wisp api`.",
           "examples": [
             "Work on api",
             "Incident response"
@@ -628,11 +628,11 @@
         "job": {
           "type": "boolean",
           "default": false,
-          "description": "A job runs to completion — Test, Build, Release: its commands run attached, the first failure stops it, and every run is kept in `specter history`. Bolts it depends on still start the way they normally do."
+          "description": "A job runs to completion — Test, Build, Release: its commands run attached, the first failure stops it, and every run is kept in `wisp history`. Bolts it depends on still start the way they normally do."
         },
         "down": {
           "type": "array",
-          "description": "Run by `specter down` after it has stopped what this bolt started — teardown that is not a process, like `docker compose stop`.",
+          "description": "Run by `wisp down` after it has stopped what this bolt started — teardown that is not a process, like `docker compose stop`.",
           "items": {
             "$ref": "#/$defs/step"
           }

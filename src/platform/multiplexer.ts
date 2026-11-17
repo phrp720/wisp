@@ -5,7 +5,7 @@ import type { Invocation } from "../core/types.js";
 import { run } from "./spawn.js";
 
 /** The tmux session commands go to when you are not already inside one. */
-export const TMUX_SESSION = "specter";
+export const TMUX_SESSION = "wisp";
 
 export interface MultiplexerResult {
   /** Said when the window is somewhere you will have to go and look. */
@@ -17,9 +17,9 @@ export interface MultiplexerResult {
  *
  * Inside tmux, a window in the current session — next to where you are, without switching
  * to it: a bolt that starts three commands must not leave you staring at the last one's
- * output, or pull the TUI out from under you. Outside tmux, a detached `specter` session
+ * output, or pull the TUI out from under you. Outside tmux, a detached `wisp` session
  * that collects every command, so on a server you can run a bolt, log out, and
- * `tmux attach -t specter` later to find it all still going.
+ * `tmux attach -t wisp` later to find it all still going.
  */
 export function tmuxPlan(invocation: Invocation, title: string, inside: boolean, sessionExists: boolean): string[][] {
   const line = posixCommandLine(invocation);

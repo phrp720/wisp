@@ -164,7 +164,7 @@ export function BoltEditor({ file, bolt, others, elsewhere = [], adding = false,
     return (
       <Form
         title={`Rename "${label}"`}
-        intro="Name it after the job it does. Any word of it runs it: `specter api`."
+        intro="Name it after the job it does. Any word of it runs it: `wisp api`."
         fields={[{ key: "label", label: "Name", required: true, placeholder: "Work on the API" }]}
         initial={{ label }}
         submitLabel="Rename"

@@ -12,12 +12,12 @@ import type { OS, TrustState } from "./types.js";
 let dir: string;
 
 beforeEach(async () => {
-  dir = await realpath(await mkdtemp(join(tmpdir(), "specter-project-")));
-  process.env["SPECTER_HOME"] = join(dir, "home");
+  dir = await realpath(await mkdtemp(join(tmpdir(), "wisp-project-")));
+  process.env["WISP_HOME"] = join(dir, "home");
 });
 
 afterEach(async () => {
-  delete process.env["SPECTER_HOME"];
+  delete process.env["WISP_HOME"];
   await rm(dir, { recursive: true, force: true });
 });
 
@@ -33,7 +33,7 @@ async function project(contents: unknown, at = ".", name = PROJECT_FILE): Promis
 function read(main: Record<string, unknown>, options: { os?: OS; trust?: TrustState; local?: Record<string, unknown> } = {}) {
   return interpret(
     { main, ...(options.local ? { local: options.local } : {}) },
-    { file: "/work/acme/.specter.json", personal: false, trust: options.trust ?? "untrusted", os: options.os ?? "darwin" },
+    { file: "/work/acme/.wisp.json", personal: false, trust: options.trust ?? "untrusted", os: options.os ?? "darwin" },
   );
 }
 
@@ -285,11 +285,11 @@ describe("the local override", () => {
 
 describe("personal workspaces", () => {
   it("are trusted because they are yours, and named after their file", async () => {
-    const file = await project({ commands: [{ run: "echo hi" }] }, "home/workspaces", "Morning.specter.json");
+    const file = await project({ commands: [{ run: "echo hi" }] }, "home/workspaces", "Morning.wisp.json");
     const { workspace } = await readProjectFile(file);
     expect(workspace.personal).toBe(true);
     expect(workspace.trusted).toBe(true);
-    expect(workspace.name).toBe("Morning.specter".replace(".specter", ""));
+    expect(workspace.name).toBe("Morning.wisp".replace(".wisp", ""));
   });
 
   it("may choose which app opens a folder, where a shared file may not", async () => {

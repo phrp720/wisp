@@ -9,7 +9,7 @@ export type { Platform, Tab, OpenOptions, TerminalRequest } from "./types.js";
 
 const PLATFORMS: Record<OS, Platform> = { darwin, linux, win32 };
 
-/** The platform Specter is running on. */
+/** The platform Wisp is running on. */
 export function getPlatform(os: OS = currentOS()): Platform {
   return PLATFORMS[os];
 }

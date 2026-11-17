@@ -1,10 +1,10 @@
 /** An error that carries a code, so a caller can say what to try next. */
-export class SpecterError extends Error {
+export class WispError extends Error {
   code: string;
 
-  constructor(message: string, code = "SPECTER_ERROR") {
+  constructor(message: string, code = "WISP_ERROR") {
     super(message);
-    this.name = "SpecterError";
+    this.name = "WispError";
     this.code = code;
   }
 }

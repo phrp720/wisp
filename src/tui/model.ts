@@ -10,7 +10,7 @@ import type { Unreadable } from "../core/workspaces.js";
 /** Everything the TUI shows: the workspaces, in the order the list shows them. */
 export interface Library {
   reads: WorkspaceRead[];
-  /** The project file of the directory Specter was started in, if any. */
+  /** The project file of the directory Wisp was started in, if any. */
   here?: string;
   unreadable: Unreadable[];
 }
@@ -55,7 +55,7 @@ export interface Services {
   containerLogs(name: string): Promise<string>;
   containerAction(name: string, action: "start" | "stop" | "restart"): Promise<void>;
 
-  /** What Specter would set up in the folder it was opened in, if that folder has none. */
+  /** What Wisp would set up in the folder it was opened in, if that folder has none. */
   suggestSetup(): Promise<SetupSuggestion | undefined>;
   /** Write the suggested file. Returns its path. */
   setUp(suggestion: SetupSuggestion): Promise<string>;
@@ -82,7 +82,7 @@ export interface Editing {
   createPersonalWorkspace(name: string): Promise<string>;
 }
 
-/** A `.specter.json` Specter could write for the folder it was opened in. */
+/** A `.wisp.json` Wisp could write for the folder it was opened in. */
 export interface SetupSuggestion {
   dir: string;
   name: string;

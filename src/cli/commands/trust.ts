@@ -1,6 +1,6 @@
 import { dirname } from "node:path";
 
-import { SpecterError } from "../../core/errors.js";
+import { WispError } from "../../core/errors.js";
 import { tildify } from "../../core/paths.js";
 import { PROJECT_FILE, findProjectFile, readProjectFile } from "../../core/project.js";
 import { listTrustedProjects, revokeProject, trustProject } from "../../core/trust.js";
@@ -20,14 +20,14 @@ export const trust: CommandDef<{ revoke?: boolean; list?: boolean; yes?: boolean
     ["-y, --yes", "skip the confirmation"],
     ["--json", "print the result as JSON"],
   ],
-  examples: ["specter trust", "specter trust --list", "specter trust --revoke"],
+  examples: ["wisp trust", "wisp trust --list", "wisp trust --revoke"],
 
   async run([given], options) {
     if (options.list) return listGrants(options.json ?? false);
 
-    // A folder means the file in it: `specter check ../shop` as well as `../shop/.specter.json`.
+    // A folder means the file in it: `wisp check ../shop` as well as `../shop/.wisp.json`.
     const file = given ? await fileIn(given) : await findProjectFile();
-    if (!file) throw new SpecterError(`No ${PROJECT_FILE} above this directory`, "NO_PROJECT");
+    if (!file) throw new WispError(`No ${PROJECT_FILE} above this directory`, "NO_PROJECT");
 
     if (options.revoke) {
       const had = await revokeProject(file);
@@ -70,7 +70,7 @@ export const trust: CommandDef<{ revoke?: boolean; list?: boolean; yes?: boolean
 
     if (!options.yes) {
       if (!process.stdin.isTTY) {
-        throw new SpecterError("Trusting a project file needs a terminal, or --yes if you have read it", "NEEDS_CONFIRMATION");
+        throw new WispError("Trusting a project file needs a terminal, or --yes if you have read it", "NEEDS_CONFIRMATION");
       }
       const prompt = new Prompter();
       try {

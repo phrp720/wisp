@@ -7,9 +7,9 @@ import type { CommandDef } from "../lib/define.js";
 export const list: CommandDef<{ json?: boolean }> = {
   name: "list",
   aliases: ["ls"],
-  summary: "List every workspace Specter knows: yours, and the projects you have used",
+  summary: "List every workspace Wisp knows: yours, and the projects you have used",
   options: [["--json", "print them as JSON"]],
-  examples: ["specter list", "specter list --json | jq '.[].name'"],
+  examples: ["wisp list", "wisp list --json | jq '.[].name'"],
 
   async run(_args, options) {
     const { reads, unreadable } = await discoverWorkspaces();
@@ -29,7 +29,7 @@ export const list: CommandDef<{ json?: boolean }> = {
     }
 
     if (reads.length === 0 && unreadable.length === 0) {
-      console.log(dim("No workspaces yet. `specter init` in a project, or `specter scan ~/dev` to find them."));
+      console.log(dim("No workspaces yet. `wisp init` in a project, or `wisp scan ~/dev` to find them."));
       return;
     }
 

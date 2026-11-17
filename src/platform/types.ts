@@ -21,7 +21,7 @@ export interface TerminalRequest {
 }
 
 /**
- * Everything Specter needs from an operating system's desktop.
+ * Everything Wisp needs from an operating system's desktop.
  *
  * Core decides what to open and in which order; a platform only knows how. Commands reach
  * a platform already folded into a single invocation — shell, directory and environment

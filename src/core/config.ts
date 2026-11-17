@@ -49,7 +49,7 @@ export async function setOpenWithDefaults(next: OpenWithDefaults): Promise<OpenW
 /**
  * Remember a project file, so it can be listed and run from anywhere.
  *
- * Recorded when you use one, not when Specter merely passes by: walking up out of a
+ * Recorded when you use one, not when Wisp merely passes by: walking up out of a
  * directory is not the same as choosing to work in it.
  */
 export async function recordProject(file: string, at = new Date()): Promise<void> {
@@ -79,7 +79,7 @@ export async function addKnownProjects(files: string[]): Promise<number> {
   return added;
 }
 
-/** Directories `specter scan` looks in when not given one. */
+/** Directories `wisp scan` looks in when not given one. */
 export async function setRoots(change: (roots: string[]) => string[]): Promise<string[]> {
   const config = await updateConfig((current) => ({ ...current, roots: change(current.roots ?? []) }));
   return config.roots ?? [];

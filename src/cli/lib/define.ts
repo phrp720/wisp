@@ -1,6 +1,6 @@
 import { Command } from "commander";
 
-import { SpecterError } from "../../core/errors.js";
+import { WispError } from "../../core/errors.js";
 import { dim, red } from "../format.js";
 
 /**
@@ -13,14 +13,14 @@ import { dim, red } from "../format.js";
 export interface CommandDef<Options = Record<string, never>> {
   name: string;
   aliases?: string[];
-  /** One line, sentence case, no full stop — shown in `specter --help`. */
+  /** One line, sentence case, no full stop — shown in `wisp --help`. */
   summary: string;
   args?: [name: string, description: string][];
   options?: [flags: string, description: string, fallback?: string | boolean][];
   /** Lines shown under the command's own `--help`: what is usual, not just what is possible. */
   examples?: string[];
   /**
-   * Where `specter --help` lists it. Everyday commands come first and alone, so the help
+   * Where `wisp --help` lists it. Everyday commands come first and alone, so the help
    * answers "what do I type" before it answers "what else is there".
    */
   group?: "everyday" | "more";
@@ -65,7 +65,7 @@ export function fail(error: unknown): never {
   const message = error instanceof Error ? error.message : String(error);
   console.error(`${red("✗")} ${message}`);
 
-  if (error instanceof SpecterError) {
+  if (error instanceof WispError) {
     const hint = HINTS[error.code];
     if (hint) console.error(dim(hint));
   }
@@ -75,16 +75,16 @@ export function fail(error: unknown): never {
 
 /** What to try next, for the failures that have an obvious next thing to try. */
 const HINTS: Record<string, string> = {
-  NOT_FOUND: "Run `specter list` to see what's available.",
-  NO_BOLT: "Run `specter` to see this project's bolts.",
+  NOT_FOUND: "Run `wisp list` to see what's available.",
+  NO_BOLT: "Run `wisp` to see this project's bolts.",
   AMBIGUOUS: "Name it more precisely.",
-  PROJECT_INVALID: "Run `specter check` to see what is wrong with the file.",
-  PROJECT_EXISTS: "Run `specter check` to see what the existing file declares.",
-  NO_PROJECT: "Run `specter init` to give this project a .specter.json.",
+  PROJECT_INVALID: "Run `wisp check` to see what is wrong with the file.",
+  PROJECT_EXISTS: "Run `wisp check` to see what the existing file declares.",
+  NO_PROJECT: "Run `wisp init` to give this project a .wisp.json.",
   NO_DISPLAY: "Run it with --detach to start it in the background, or from inside tmux.",
-  UNKNOWN_TERMINAL: "Set one with `specter open-with terminal <name>`, or clear it with `specter open-with --terminal \"\"`.",
+  UNKNOWN_TERMINAL: "Set one with `wisp open-with terminal <name>`, or clear it with `wisp open-with --terminal \"\"`.",
   NO_SHELL: "Set `shell` on the command, or give it a per-OS `run`.",
-  CYCLE: "Run `specter check` to see the dependencies.",
-  NOTHING_TO_RETRY: "`specter history` shows how its last runs went.",
+  CYCLE: "Run `wisp check` to see the dependencies.",
+  NOTHING_TO_RETRY: "`wisp history` shows how its last runs went.",
   HOOK_EXISTS: "Look at it first: it may be another tool's, like husky's.",
 };

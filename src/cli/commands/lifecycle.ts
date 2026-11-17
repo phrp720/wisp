@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { chmod, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 
-import { SpecterError } from "../../core/errors.js";
+import { WispError } from "../../core/errors.js";
 import { getHistory, listHistory, type HistoryEntry } from "../../core/history.js";
 import { tildify } from "../../core/paths.js";
 import { downBolt, resolveBolt, switchToWorkspace } from "../../core/switch.js";
@@ -15,7 +15,7 @@ import { named, resultLine } from "../lib/render.js";
 /** The bolt a lifecycle command means, by the same rules as running one. */
 async function target(first: string | undefined, second: string | undefined): Promise<{ read: WorkspaceRead; bolt: Bolt }> {
   const { read, bolt } = await resolveRun(first, second, undefined);
-  if (!bolt) throw new SpecterError("Name the bolt: `specter down api`", "NO_BOLT");
+  if (!bolt) throw new WispError("Name the bolt: `wisp down api`", "NO_BOLT");
   return { read, bolt: resolveBolt(read.workspace, bolt) };
 }
 
@@ -31,7 +31,7 @@ export const down: CommandDef<{ deps?: boolean; dryRun?: boolean; json?: boolean
     ["-n, --dry-run", "show what would stop, and stop nothing"],
     ["--json", "print the result as JSON"],
   ],
-  examples: ["specter down api", "specter down api --deps   # the database too"],
+  examples: ["wisp down api", "wisp down api --deps   # the database too"],
 
   async run([first, second], options) {
     const { read, bolt } = await target(first, second);
@@ -62,7 +62,7 @@ export const restart: CommandDef<{ deps?: boolean }> = {
     ["[bolt]", "which bolt"],
   ],
   options: [["--deps", "restart the bolts it depends on too"]],
-  examples: ["specter restart api"],
+  examples: ["wisp restart api"],
 
   async run([first, second], options) {
     const { read, bolt } = await target(first, second);
@@ -88,7 +88,7 @@ export const history: CommandDef<{ all?: boolean; log?: string; json?: boolean }
     ["--log <step>", "print what one step printed (its number in the details)"],
     ["--json", "print it as JSON"],
   ],
-  examples: ["specter history", "specter history check", "specter history 3f2a1b", "specter history 3f2a1b --log 2"],
+  examples: ["wisp history", "wisp history check", "wisp history 3f2a1b", "wisp history 3f2a1b --log 2"],
 
   async run([query], options) {
     const entry = query ? await getHistory(query) : undefined;
@@ -117,8 +117,8 @@ export const history: CommandDef<{ all?: boolean; log?: string; json?: boolean }
 async function showEntry(entry: HistoryEntry, options: { log?: string; json?: boolean }): Promise<void> {
   if (options.log !== undefined) {
     const step = entry.steps[Number.parseInt(options.log, 10) - 1];
-    if (!step) throw new SpecterError(`Run ${entry.id} has no step ${options.log}`, "NOT_FOUND");
-    if (!step.log) throw new SpecterError(`Step ${options.log} kept no output — it ran in its own window`, "NOT_FOUND");
+    if (!step) throw new WispError(`Run ${entry.id} has no step ${options.log}`, "NOT_FOUND");
+    if (!step.log) throw new WispError(`Step ${options.log} kept no output — it ran in its own window`, "NOT_FOUND");
     process.stdout.write(await readFile(step.log, "utf8").catch(() => ""));
     return;
   }
@@ -147,7 +147,7 @@ function duration(entry: HistoryEntry): string {
 /** Hooks git runs where checking first makes sense. */
 const HOOKS = ["pre-commit", "pre-push", "commit-msg", "post-merge", "post-checkout"];
 
-const MARKER = "# Added by specter";
+const MARKER = "# Added by wisp";
 
 export const hook: CommandDef<{ remove?: boolean; list?: boolean; force?: boolean }> = {
   name: "hook",
@@ -157,11 +157,11 @@ export const hook: CommandDef<{ remove?: boolean; list?: boolean; force?: boolea
     ["[bolt]", "the bolt it runs"],
   ],
   options: [
-    ["--list", "show the hooks Specter has installed here"],
+    ["--list", "show the hooks Wisp has installed here"],
     ["--remove", "take a hook back out"],
-    ["-f, --force", "replace a hook that Specter did not write"],
+    ["-f, --force", "replace a hook that Wisp did not write"],
   ],
-  examples: ["specter hook pre-push check", "specter hook --list", "specter hook pre-push --remove"],
+  examples: ["wisp hook pre-push check", "wisp hook --list", "wisp hook pre-push --remove"],
 
   async run([name, boltRef], options) {
     const dir = hooksDir();
@@ -173,40 +173,40 @@ export const hook: CommandDef<{ remove?: boolean; list?: boolean; force?: boolea
         const text = await readFile(join(dir, file), "utf8").catch(() => "");
         if (!text.includes(MARKER)) continue;
         found += 1;
-        const bolt = /specter use '[^']*' '([^']*)'/.exec(text)?.[1] ?? "?";
+        const bolt = /wisp use '[^']*' '([^']*)'/.exec(text)?.[1] ?? "?";
         console.log(`  ${bold(file)} ${dim("→")} ${bolt}`);
       }
-      if (found === 0) console.log(dim("No Specter hooks here. `specter hook pre-push check` adds one."));
+      if (found === 0) console.log(dim("No Wisp hooks here. `wisp hook pre-push check` adds one."));
       return;
     }
 
-    if (!HOOKS.includes(name)) throw new SpecterError(`"${name}" is not a hook Specter installs — ${HOOKS.join(", ")}`, "INVALID_INPUT");
+    if (!HOOKS.includes(name)) throw new WispError(`"${name}" is not a hook Wisp installs — ${HOOKS.join(", ")}`, "INVALID_INPUT");
     const path = join(dir, name);
     const existing = await readFile(path, "utf8").catch(() => undefined);
 
     if (options.remove) {
       if (!existing) return console.log(dim(`No ${name} hook here.`));
-      if (!existing.includes(MARKER)) throw new SpecterError(`${name} was not written by Specter — leaving it alone`, "NOT_OURS");
+      if (!existing.includes(MARKER)) throw new WispError(`${name} was not written by Wisp — leaving it alone`, "NOT_OURS");
       await rm(path);
       console.log(`${green("✓")} removed ${name}`);
       return;
     }
 
-    if (!boltRef) throw new SpecterError(`Say which bolt ${name} runs: \`specter hook ${name} check\``, "NO_BOLT");
+    if (!boltRef) throw new WispError(`Say which bolt ${name} runs: \`wisp hook ${name} check\``, "NO_BOLT");
     if (existing && !existing.includes(MARKER) && !options.force) {
-      throw new SpecterError(`There is already a ${name} hook, not written by Specter. --force replaces it`, "HOOK_EXISTS");
+      throw new WispError(`There is already a ${name} hook, not written by Wisp. --force replaces it`, "HOOK_EXISTS");
     }
 
     const here = await maybeProject();
-    if (!here) throw new SpecterError("Run this inside a project with a .specter.json", "NO_PROJECT");
+    if (!here) throw new WispError("Run this inside a project with a .wisp.json", "NO_PROJECT");
     const bolt = resolveBolt(here.workspace, boltRef);
 
     // The file by path, so the hook runs the same bolt however the repository is entered;
-    // and a clear failure when specter is missing, rather than a push that skips its checks.
+    // and a clear failure when wisp is missing, rather than a push that skips its checks.
     const script = `#!/bin/sh
-${MARKER} — \`specter hook ${name} --remove\` takes it out.
-command -v specter >/dev/null 2>&1 || { echo "specter is not on PATH — install it, or remove this hook: .git/hooks/${name}" >&2; exit 1; }
-SPECTER_TRIGGER=hook exec specter use '${here.workspace.file.replace(/'/g, `'\\''`)}' '${bolt.label.replace(/'/g, `'\\''`)}'
+${MARKER} — \`wisp hook ${name} --remove\` takes it out.
+command -v wisp >/dev/null 2>&1 || { echo "wisp is not on PATH — install it, or remove this hook: .git/hooks/${name}" >&2; exit 1; }
+WISP_TRIGGER=hook exec wisp use '${here.workspace.file.replace(/'/g, `'\\''`)}' '${bolt.label.replace(/'/g, `'\\''`)}'
 `;
     await mkdir(dir, { recursive: true });
     await writeFile(path, script, "utf8");
@@ -214,7 +214,7 @@ SPECTER_TRIGGER=hook exec specter use '${here.workspace.file.replace(/'/g, `'\\'
 
     console.log(`${green("✓")} ${name} runs ${bold(bolt.label)} ${dim(`— ${tildify(path)}`)}`);
     if (!bolt.job) console.log(yellow(`! "${bolt.label}" is not a job, so a failure would not stop the ${name}. Add "job": true to it.`));
-    if (!here.workspace.trusted && here.withheld.length > 0) console.log(yellow("! its commands wait for `specter trust` — until then the hook runs nothing"));
+    if (!here.workspace.trusted && here.withheld.length > 0) console.log(yellow("! its commands wait for `wisp trust` — until then the hook runs nothing"));
   },
 };
 
@@ -224,7 +224,7 @@ function hooksDir(): string {
   try {
     output = execFileSync("git", ["rev-parse", "--git-path", "hooks"], { encoding: "utf8" }).trim();
   } catch {
-    throw new SpecterError("This is not inside a git repository", "NO_REPOSITORY");
+    throw new WispError("This is not inside a git repository", "NO_REPOSITORY");
   }
   return isAbsolute(output) ? output : resolve(output);
 }

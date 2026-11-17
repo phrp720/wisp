@@ -13,16 +13,16 @@ import type { SwitchOptions, Workspace } from "./types.js";
 let dir: string;
 
 beforeEach(async () => {
-  dir = await realpath(await mkdtemp(join(tmpdir(), "specter-switch-")));
-  process.env["SPECTER_HOME"] = join(dir, "home");
+  dir = await realpath(await mkdtemp(join(tmpdir(), "wisp-switch-")));
+  process.env["WISP_HOME"] = join(dir, "home");
 });
 
 afterEach(async () => {
-  delete process.env["SPECTER_HOME"];
+  delete process.env["WISP_HOME"];
   await rm(dir, { recursive: true, force: true });
 });
 
-function workspace(main: Record<string, unknown>, file = "/work/acme/.specter.json", trusted = true): Workspace {
+function workspace(main: Record<string, unknown>, file = "/work/acme/.wisp.json", trusted = true): Workspace {
   return interpret({ main }, { file, personal: false, trust: trusted ? "trusted" : "untrusted", os: "darwin" }).workspace;
 }
 
@@ -74,7 +74,7 @@ describe("planBolt", () => {
   });
 
   it("runs a bolt from another workspace, and labels its steps with where they came from", async () => {
-    const infra = workspace({ name: "infra", bolts: [{ label: "db", targets: [{ run: "postgres" }] }] }, "/work/infra/.specter.json");
+    const infra = workspace({ name: "infra", bolts: [{ label: "db", targets: [{ run: "postgres" }] }] }, "/work/infra/.wisp.json");
     const api = workspace({ bolts: [{ label: "api", targets: [{ bolt: "db", workspace: "infra" }, { run: "pnpm dev" }] }] });
 
     const plan = await planBolt(api, resolveBolt(api, "api"), { findWorkspace: async () => infra });
@@ -149,7 +149,7 @@ describe("switchToWorkspace", () => {
       {
         bolts: [{ label: "go", targets: [{ app: "Slack" }, { folder: "." }, { file: "notes.md" }, { url: "acme.com" }, { run: "pnpm dev" }] }],
       },
-      join(dir, ".specter.json"),
+      join(dir, ".wisp.json"),
     );
     const platform = recorder();
     const result = await switchToWorkspace(ws, { bolt: "go" }, { platform, environment: desktop, defaults: { terminal: "Terminal" } });
@@ -211,7 +211,7 @@ describe("switchToWorkspace", () => {
   it("refuses to open an executable from an untrusted workspace", async () => {
     await writeFile(join(dir, "go"), "#!/bin/sh\n");
     await chmod(join(dir, "go"), 0o755);
-    const ws = workspace({ bolts: [{ label: "x", targets: [{ file: "go" }] }] }, join(dir, ".specter.json"), false);
+    const ws = workspace({ bolts: [{ label: "x", targets: [{ file: "go" }] }] }, join(dir, ".wisp.json"), false);
     const platform = recorder();
     const result = await switchToWorkspace(ws, { bolt: "x" }, { platform, environment: desktop, defaults: {} });
 

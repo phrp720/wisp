@@ -90,7 +90,7 @@ export interface Notice {
   tone: "good" | "bad" | "info";
 }
 
-/** One row of the panes: a command Specter runs, or a container Docker runs for it. */
+/** One row of the panes: a command Wisp runs, or a container Docker runs for it. */
 export type PaneItem =
   | { type: "run"; run: RunStatus; group: string }
   | { type: "container"; container: Container; group: string }

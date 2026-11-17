@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { SpecterError, describe } from "./errors.js";
+import { WispError, describe } from "./errors.js";
 import { workspacesDir } from "./paths.js";
 import { PROJECT_SCHEMA_URL, parseWait, readProjectFile } from "./project.js";
 import { pickColor } from "./colors.js";
@@ -61,7 +61,7 @@ export interface StepField {
 export const STEP_FIELDS: Record<StepKindName, StepField[]> = {
   run: [
     { key: "run", label: "Command", hint: "what you would type in a terminal", placeholder: "pnpm dev", required: true },
-    { key: "label", label: "Name", hint: "how it is shown in Specter — short is best", placeholder: "the command itself", required: false },
+    { key: "label", label: "Name", hint: "how it is shown in Wisp — short is best", placeholder: "the command itself", required: false },
     { key: "cwd", label: "In folder", hint: "relative to the project", placeholder: "the project's folder", required: false },
     {
       key: "restart",
@@ -82,19 +82,19 @@ export const STEP_FIELDS: Record<StepKindName, StepField[]> = {
   wait: [{ key: "wait", label: "Wait for", hint: "a website (http://…), a port (5432), or seconds (5s)", placeholder: "http://localhost:3000", required: true }],
   url: [
     { key: "url", label: "Address", hint: "a bare host works too", placeholder: "http://localhost:3000", required: true },
-    { key: "label", label: "Name", hint: "how it is shown in Specter", placeholder: "the address", required: false },
+    { key: "label", label: "Name", hint: "how it is shown in Wisp", placeholder: "the address", required: false },
   ],
   folder: [
     { key: "folder", label: "Folder", hint: "relative to the project", placeholder: "apps/api", required: true },
-    { key: "label", label: "Name", hint: "how it is shown in Specter", placeholder: "the path", required: false },
+    { key: "label", label: "Name", hint: "how it is shown in Wisp", placeholder: "the path", required: false },
   ],
   file: [
     { key: "file", label: "File", hint: "relative to the project", placeholder: "README.md", required: true },
-    { key: "label", label: "Name", hint: "how it is shown in Specter", placeholder: "the path", required: false },
+    { key: "label", label: "Name", hint: "how it is shown in Wisp", placeholder: "the path", required: false },
   ],
   app: [
     { key: "app", label: "App", hint: "its name — or a command on Linux, like code", placeholder: "Slack", required: true },
-    { key: "label", label: "Name", hint: "how it is shown in Specter", placeholder: "the app's name", required: false },
+    { key: "label", label: "Name", hint: "how it is shown in Wisp", placeholder: "the app's name", required: false },
   ],
   bolt: [
     { key: "bolt", label: "Bolt", hint: "the bolt to run before this one's next step", placeholder: "Database", required: true },
@@ -140,7 +140,7 @@ export function buildStep(kind: StepKindName, values: Record<string, string>): {
   if (kind === "wait") {
     const raw = value("wait");
     const wait = /^\d+(\.\d+)?$/.test(raw) && Number(raw) < 1000 ? Number(raw) : raw;
-    if (raw && !parseWait(wait)) errors["wait"] = "Not something Specter can wait for — try http://localhost:3000, 5432 or 5s";
+    if (raw && !parseWait(wait)) errors["wait"] = "Not something Wisp can wait for — try http://localhost:3000, 5432 or 5s";
     step["wait"] = wait;
   } else if (kind === "compose") {
     step["compose"] = value("compose");
@@ -209,7 +209,7 @@ async function locate(file: string, bolt?: string): Promise<{ path: string; raw:
   const localPath = localFileFor(file);
   const local = await readRaw(localPath).catch(() => undefined);
   if (local && findBolt(local, bolt) >= 0) return { path: localPath, raw: local };
-  throw new SpecterError(`No bolt called "${bolt}" in ${file}`, "NOT_FOUND");
+  throw new WispError(`No bolt called "${bolt}" in ${file}`, "NOT_FOUND");
 }
 
 async function readRaw(file: string): Promise<Record<string, unknown>> {
@@ -217,11 +217,11 @@ async function readRaw(file: string): Promise<Record<string, unknown>> {
   try {
     text = await readFile(file, "utf8");
   } catch (error) {
-    throw new SpecterError(`Could not read ${file}: ${describe(error)}`, "PROJECT_READ_FAILED");
+    throw new WispError(`Could not read ${file}: ${describe(error)}`, "PROJECT_READ_FAILED");
   }
   const parsed: unknown = JSON.parse(text);
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    throw new SpecterError(`${file} does not contain an object`, "PROJECT_INVALID");
+    throw new WispError(`${file} does not contain an object`, "PROJECT_INVALID");
   }
   return parsed as Record<string, unknown>;
 }
@@ -257,9 +257,9 @@ export async function changeBolt(file: string, bolt: string, change: (bolt: RawB
 
 export async function addBolt(file: string, label: string, options: { job?: boolean } = {}): Promise<void> {
   const name = label.trim();
-  if (!name) throw new SpecterError("A bolt needs a name", "INVALID_INPUT");
+  if (!name) throw new WispError("A bolt needs a name", "INVALID_INPUT");
   const raw = await readRaw(file);
-  if (findBolt(raw, name) >= 0) throw new SpecterError(`There is already a bolt called "${name}"`, "DUPLICATE_NAME");
+  if (findBolt(raw, name) >= 0) throw new WispError(`There is already a bolt called "${name}"`, "DUPLICATE_NAME");
   const existing = (raw["bolts"] as RawBolt[]) ?? [];
   // A colour of its own, so it is told apart from its neighbours at a glance.
   const color = pickColor(existing.map((bolt) => bolt.color));
@@ -269,9 +269,9 @@ export async function addBolt(file: string, label: string, options: { job?: bool
 
 export async function renameBolt(file: string, bolt: string, label: string): Promise<void> {
   const name = label.trim();
-  if (!name) throw new SpecterError("A bolt needs a name", "INVALID_INPUT");
+  if (!name) throw new WispError("A bolt needs a name", "INVALID_INPUT");
   if (name.toLowerCase() !== bolt.toLowerCase() && findBolt(await readRaw(file), name) >= 0) {
-    throw new SpecterError(`There is already a bolt called "${name}"`, "DUPLICATE_NAME");
+    throw new WispError(`There is already a bolt called "${name}"`, "DUPLICATE_NAME");
   }
   await changeBolt(file, bolt, (current) => ({ ...current, label: name }));
 }
@@ -336,16 +336,16 @@ export async function moveStep(file: string, bolt: string, index: number, by: -1
 }
 
 /**
- * A personal workspace: the same format, kept in Specter's own directory, for the things
+ * A personal workspace: the same format, kept in Wisp's own directory, for the things
  * that belong to no repository — "Morning", "On call".
  */
 export async function createPersonalWorkspace(name: string): Promise<string> {
   const title = name.trim();
-  if (!title) throw new SpecterError("A workspace needs a name", "INVALID_INPUT");
-  const fileName = `${title.replace(/[\\/:*?"<>|]+/g, "-")}.specter.json`;
+  if (!title) throw new WispError("A workspace needs a name", "INVALID_INPUT");
+  const fileName = `${title.replace(/[\\/:*?"<>|]+/g, "-")}.wisp.json`;
   const file = join(workspacesDir(), fileName);
   const exists = await readFile(file).then(() => true).catch(() => false);
-  if (exists) throw new SpecterError(`There is already a workspace called "${title}"`, "DUPLICATE_NAME");
+  if (exists) throw new WispError(`There is already a workspace called "${title}"`, "DUPLICATE_NAME");
   const { mkdir } = await import("node:fs/promises");
   await mkdir(workspacesDir(), { recursive: true });
   // Its own colour too, apart from the workspaces you already have.

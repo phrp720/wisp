@@ -15,7 +15,7 @@ import { TONE } from "./tones.js";
 
 /**
  * Every workspace, grouped by where it comes from — said in words rather than marks: the
- * project of the folder Specter was opened in, the other projects you have used, and the
+ * project of the folder Wisp was opened in, the other projects you have used, and the
  * workspaces of your own.
  */
 export function WorkspaceList(props: { reads: WorkspaceRead[]; index: number; here?: string | undefined; focused: boolean; glyphs: Glyphs; height: number; width: number }) {
@@ -202,9 +202,9 @@ export function Empty({ glyphs, height, unreadable }: { glyphs: Glyphs; height: 
     <Box flexDirection="column" height={height} borderStyle={glyphs.border} paddingX={1}>
       <Text bold>No workspaces yet</Text>
       <Text> </Text>
-      <Text>In a project, quit and run <Text color="cyan">specter init</Text> to give it a .specter.json.</Text>
-      <Text>Already have some? <Text color="cyan">specter scan ~/dev</Text> finds them.</Text>
-      {unreadable > 0 ? <Text color="red">{`${unreadable} workspace file(s) could not be read — specter list`}</Text> : null}
+      <Text>In a project, quit and run <Text color="cyan">wisp init</Text> to give it a .wisp.json.</Text>
+      <Text>Already have some? <Text color="cyan">wisp scan ~/dev</Text> finds them.</Text>
+      {unreadable > 0 ? <Text color="red">{`${unreadable} workspace file(s) could not be read — wisp list`}</Text> : null}
     </Box>
   );
 }

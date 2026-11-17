@@ -34,7 +34,7 @@ export function editorCommand(env: NodeJS.ProcessEnv = process.env): string[] {
   return ["vi"];
 }
 
-/** The real thing: what `specter` with no arguments runs against. */
+/** The real thing: what `wisp` with no arguments runs against. */
 export function realServices(hooks: { suspend: () => void; resume: () => void }): Services {
   return {
     environment: detectEnvironment(),
@@ -147,7 +147,7 @@ export function realServices(hooks: { suspend: () => void; resume: () => void })
           watchers.push(
             watchPath(dir, (_event, name) => {
               if (!name) return;
-              const file = files.find((entry) => dirname(entry) === dir && (basename(entry) === name || name === ".specter.local.json"));
+              const file = files.find((entry) => dirname(entry) === dir && (basename(entry) === name || name === ".wisp.local.json"));
               if (!file) return;
               clearTimeout(timers.get(file));
               timers.set(file, setTimeout(() => onChange(file), 250));

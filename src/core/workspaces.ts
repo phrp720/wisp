@@ -2,12 +2,12 @@ import { readdir, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 import { loadConfig } from "./config.js";
-import { SpecterError, describe } from "./errors.js";
+import { WispError, describe } from "./errors.js";
 import { workspacesDir } from "./paths.js";
 import { readProjectFile, type ReadOptions } from "./project.js";
 import type { Workspace, WorkspaceRead } from "./types.js";
 
-/** A workspace file Specter knows about but could not read. */
+/** A workspace file Wisp knows about but could not read. */
 export interface Unreadable {
   file: string;
   error: string;
@@ -30,7 +30,7 @@ export async function personalFiles(): Promise<string[]> {
 }
 
 /**
- * Every workspace file Specter knows: your own, then the projects you have used.
+ * Every workspace file Wisp knows: your own, then the projects you have used.
  *
  * A known project that has since been deleted is left out quietly — a clone you removed
  * is not an error — but one that exists and cannot be read is reported, since that is a
@@ -51,7 +51,7 @@ export async function workspaceFiles(): Promise<string[]> {
   return [...new Set(files.map((file) => resolve(file)))];
 }
 
-/** Read every workspace Specter knows, collecting what could not be read. */
+/** Read every workspace Wisp knows, collecting what could not be read. */
 export async function discoverWorkspaces(options: ReadOptions = {}): Promise<Discovered> {
   const files = await workspaceFiles();
   const settled = await Promise.all(
@@ -115,10 +115,10 @@ export function resolveWorkspace<T extends { workspace: Workspace } | Workspace>
   if (candidates.length > 1) {
     // Two projects can share a name — two clones, two `api` repos — so say where each is.
     const names = candidates.map((item) => `${of(item).name} (${of(item).file})`).join(", ");
-    throw new SpecterError(`"${query}" matches several workspaces: ${names}`, "AMBIGUOUS");
+    throw new WispError(`"${query}" matches several workspaces: ${names}`, "AMBIGUOUS");
   }
 
-  throw new SpecterError(`No workspace matching "${query}"`, "NOT_FOUND");
+  throw new WispError(`No workspace matching "${query}"`, "NOT_FOUND");
 }
 
 export function slugify(value: string): string {

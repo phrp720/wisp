@@ -43,7 +43,7 @@ export const linux: Platform = {
 
   async runInTerminal(invocation: Invocation, request: TerminalRequest) {
     const spec = LINUX_TERMINALS.find((terminal) => terminal.name === request.terminal);
-    if (!spec?.binary) throw new Error(`Specter cannot drive "${request.terminal}" on Linux`);
+    if (!spec?.binary) throw new Error(`Wisp cannot drive "${request.terminal}" on Linux`);
     await launch(spec.binary, spec.args(invocation, request.title));
   },
 

@@ -66,10 +66,10 @@ describe("Windows", () => {
 });
 
 describe("multiplexers", () => {
-  it("opens a tmux window beside you, or in a detached specter session", () => {
+  it("opens a tmux window beside you, or in a detached wisp session", () => {
     expect(tmuxPlan(invocation, "dev", true, true)).toEqual([["new-window", "-d", "-n", "dev", expect.stringContaining("pnpm dev")]]);
-    expect(tmuxPlan(invocation, "dev", false, false)[0]!.slice(0, 5)).toEqual(["new-session", "-d", "-s", "specter", "-n"]);
-    expect(tmuxPlan(invocation, "dev", false, true)[0]!.slice(0, 4)).toEqual(["new-window", "-d", "-t", "specter:"]);
+    expect(tmuxPlan(invocation, "dev", false, false)[0]!.slice(0, 5)).toEqual(["new-session", "-d", "-s", "wisp", "-n"]);
+    expect(tmuxPlan(invocation, "dev", false, true)[0]!.slice(0, 4)).toEqual(["new-window", "-d", "-t", "wisp:"]);
   });
 
   it("opens a zellij pane with the program as separate arguments", () => {

@@ -2,35 +2,35 @@ import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { SpecterError, describe, isNotFound } from "./errors.js";
+import { WispError, describe, isNotFound } from "./errors.js";
 import type { OS } from "./types.js";
 
-/** The OS Specter is running on, or the one a test says it is. */
+/** The OS Wisp is running on, or the one a test says it is. */
 export function currentOS(): OS {
-  const forced = process.env["SPECTER_OS"]?.trim();
+  const forced = process.env["WISP_OS"]?.trim();
   if (forced === "darwin" || forced === "linux" || forced === "win32") return forced;
   const platform = process.platform;
   return platform === "darwin" || platform === "win32" ? platform : "linux";
 }
 
 /**
- * Where Specter keeps its own files.
+ * Where Wisp keeps its own files.
  *
- * `~/.config/specter` on macOS as well as Linux, rather than Application Support: this is
+ * `~/.config/wisp` on macOS as well as Linux, rather than Application Support: this is
  * a command-line tool, and that is where a command-line user looks for — and keeps in
  * their dotfiles — a tool's configuration. Windows has its own convention, and gets it.
  */
 export function configDir(): string {
-  const override = process.env["SPECTER_HOME"]?.trim();
+  const override = process.env["WISP_HOME"]?.trim();
   if (override) return expandHome(override);
 
   if (currentOS() === "win32") {
     const appData = process.env["APPDATA"]?.trim() || join(homedir(), "AppData", "Roaming");
-    return join(appData, "specter");
+    return join(appData, "wisp");
   }
 
   const xdg = process.env["XDG_CONFIG_HOME"]?.trim();
-  return join(xdg || join(homedir(), ".config"), "specter");
+  return join(xdg || join(homedir(), ".config"), "wisp");
 }
 
 export function configPath(): string {
@@ -47,23 +47,23 @@ export function workspacesDir(): string {
 }
 
 /**
- * Where Specter keeps what it does, as opposed to what you configured: the runs it is
+ * Where Wisp keeps what it does, as opposed to what you configured: the runs it is
  * tracking and their logs. Separate from config so a dotfiles repo never picks up logs.
  */
 export function stateDir(): string {
-  const override = process.env["SPECTER_STATE"]?.trim();
+  const override = process.env["WISP_STATE"]?.trim();
   if (override) return expandHome(override);
 
-  const home = process.env["SPECTER_HOME"]?.trim();
+  const home = process.env["WISP_HOME"]?.trim();
   if (home) return join(expandHome(home), "state");
 
   if (currentOS() === "win32") {
     const local = process.env["LOCALAPPDATA"]?.trim() || join(homedir(), "AppData", "Local");
-    return join(local, "specter", "state");
+    return join(local, "wisp", "state");
   }
 
   const xdg = process.env["XDG_STATE_HOME"]?.trim();
-  return join(xdg || join(homedir(), ".local", "state"), "specter");
+  return join(xdg || join(homedir(), ".local", "state"), "wisp");
 }
 
 export function expandHome(input: string): string {
@@ -89,7 +89,7 @@ export async function readJson(file: string): Promise<unknown> {
     raw = await readFile(file, "utf8");
   } catch (error) {
     if (isNotFound(error)) return undefined;
-    throw new SpecterError(`Could not read ${file}: ${describe(error)}`, "READ_FAILED");
+    throw new WispError(`Could not read ${file}: ${describe(error)}`, "READ_FAILED");
   }
 
   if (raw.trim() === "") return undefined;
@@ -97,7 +97,7 @@ export async function readJson(file: string): Promise<unknown> {
   try {
     return JSON.parse(raw);
   } catch {
-    throw new SpecterError(`${file} is not valid JSON`, "INVALID_JSON");
+    throw new WispError(`${file} is not valid JSON`, "INVALID_JSON");
   }
 }
 
@@ -118,7 +118,7 @@ const STALE_LOCK_MS = 10_000;
 /**
  * Run `work` while holding a lock on `file`.
  *
- * Every `specter` run records the project it used, so two terminals running bolts at once
+ * Every `wisp` run records the project it used, so two terminals running bolts at once
  * would otherwise read the same config, each add their own entry, and the second write
  * would drop the first. A directory is the lock because creating one is atomic everywhere.
  */
@@ -139,7 +139,7 @@ export async function withLock<T>(file: string, work: () => Promise<T>): Promise
         continue;
       }
       if (attempt > 200) {
-        throw new SpecterError(`Timed out waiting for ${lock} — remove it if no specter is running`, "LOCKED");
+        throw new WispError(`Timed out waiting for ${lock} — remove it if no wisp is running`, "LOCKED");
       }
       await new Promise((resolve) => setTimeout(resolve, 25));
     }

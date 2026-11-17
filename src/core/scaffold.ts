@@ -4,14 +4,14 @@ import { basename, join, resolve } from "node:path";
 import { promisify } from "node:util";
 
 import { pickColors } from "./colors.js";
-import { SpecterError } from "./errors.js";
+import { WispError } from "./errors.js";
 import { expandHome } from "./paths.js";
 import { PROJECT_FILE, PROJECT_SCHEMA_URL } from "./project.js";
 
 const run = promisify(execFile);
 
 /**
- * A project file Specter guessed at, before anyone has edited it.
+ * A project file Wisp guessed at, before anyone has edited it.
  *
  * Held as a draft rather than written straight out, so the CLI can show what it is about
  * to commit to a repository and the caller can say no.
@@ -61,10 +61,10 @@ export interface Detected {
 }
 
 /**
- * Draft a `.specter.json` for a directory from what is already there.
+ * Draft a `.wisp.json` for a directory from what is already there.
  *
  * The point is the blank page: a project already says how to run it — in package.json,
- * a Makefile, docker-compose — and `init` reads that, so the first `specter` works
+ * a Makefile, docker-compose — and `init` reads that, so the first `wisp` works
  * without anyone writing a line. The guesses are the ones a person would make from the
  * same files.
  */
@@ -81,7 +81,7 @@ export async function draftProject(from: string = process.cwd()): Promise<Projec
 export async function writeProjectDraft(draft: ProjectDraft, overwrite = false): Promise<string> {
   if (!overwrite) {
     const exists = await stat(draft.file).catch(() => undefined);
-    if (exists) throw new SpecterError(`${draft.file} already exists — pass --force to replace it`, "PROJECT_EXISTS");
+    if (exists) throw new WispError(`${draft.file} already exists — pass --force to replace it`, "PROJECT_EXISTS");
   }
   await writeFile(draft.file, draft.contents, "utf8");
   return draft.file;
@@ -489,7 +489,7 @@ export function bolts(detected: Detected, random: () => number = Math.random): D
   const services = detected.compose?.services ?? [];
 
   if (services.length > 0) {
-    // A compose step rather than a `docker compose up` command: Specter then waits for the
+    // A compose step rather than a `docker compose up` command: Wisp then waits for the
     // services to be healthy, shows each container, and stops them again on `down`.
     out.push({ label: "Services", targets: [{ compose: detected.compose?.file ?? composeFileName(detected) }] });
   }

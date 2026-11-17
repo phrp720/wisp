@@ -20,7 +20,7 @@ export function Header({ services, glyphs, columns, here, running, failing, tab 
       <Box flexShrink={1} overflow="hidden">
         <Text wrap="truncate-end">
           <Text bold color={TONE.accent}>
-            {glyphs.border === "round" ? "🔮 " : ""}specter
+            {glyphs.border === "round" ? "🔮 " : ""}wisp
           </Text>
           {"   "}
           <TabLabel number="1" title="Bolts" on={tab === "bolts"} />

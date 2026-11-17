@@ -477,7 +477,7 @@ function graphWidth(nodes: GraphNode[]): number {
   return nodes.reduce((total, node) => total + node.label.length + (node.detail?.length ?? 0) + 10, 0);
 }
 
-/** A past step as the sentence the rest of Specter would use for it. */
+/** A past step as the sentence the rest of Wisp would use for it. */
 export function describeHistoryStep(step: HistoryStep, job: boolean): string {
   switch (step.kind) {
     case "command":

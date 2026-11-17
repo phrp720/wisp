@@ -1,4 +1,7 @@
-<h1 align="center">🔮 Specter</h1>
+<h1 align="center">
+  🔮 Wisp<br />
+  <sub><i>as in will-o'-the-wisp — the little light that leads the way</i></sub>
+</h1>
 
 <p align="center">
   <b>Start your working context with one word.</b><br />
@@ -12,7 +15,7 @@
 ---
 
 ```console
-$ specter api
+$ wisp api
 running 🏢 Acme · Work on api
   ✓ run    docker compose up db · in Ghostty
   ✓ wait   port 5432
@@ -22,29 +25,29 @@ running 🏢 Acme · Work on api
   ✓ link   http://localhost:3000 · focused its open tab
 ```
 
-You describe the job once, in a `.specter.json` next to your code. After that, `specter api`
+You describe the job once, in a `.wisp.json` next to your code. After that, `wisp api`
 gets you from *"I'm starting on the API"* to everything open and running — database up,
 server started, editor in the right folder, the page in your browser.
 
 ## Install
 
 ```bash
-npm install -g @squaredasher/specter
+npm install -g @squaredasher/wisp
 ```
 
 Or download a single binary — no Node needed — from
-[Releases](https://github.com/phrp720/specter/releases) for macOS, Linux or Windows.
+[Releases](https://github.com/phrp720/wisp/releases) for macOS, Linux or Windows.
 
 ## Quick start
 
 ```bash
 cd ~/dev/acme
-specter init        # reads the project and writes a .specter.json
-specter             # opens the TUI: every workspace and its bolts, ⏎ to run
-specter api         # or skip it: runs the "api" bolt — any distinctive word works
+wisp init        # reads the project and writes a .wisp.json
+wisp             # opens the TUI: every workspace and its bolts, ⏎ to run
+wisp api         # or skip it: runs the "api" bolt — any distinctive word works
 ```
 
-`specter init` doesn't make you start from a blank file. It reads what the project already
+`wisp init` doesn't make you start from a blank file. It reads what the project already
 says about running itself — `package.json` scripts (monorepos too), `docker compose`
 services and their ports, a `Makefile`, `justfile`, `mise` or `Taskfile`, a `Procfile` —
 and writes the bolts you'd have written: start the services, wait for the database, start
@@ -53,14 +56,14 @@ scripts.
 
 ## The TUI
 
-`specter` on its own opens a full-screen view of everything you have — like htop, but for
+`wisp` on its own opens a full-screen view of everything you have — like htop, but for
 your projects. It works the same at your desk, over SSH and inside tmux.
 
 ```
- 🔮 specter   1 Bolts   2 Running ● 2   3 History                     ~/dev/acme
+ 🔮 wisp   1 Bolts   2 Running ● 2   3 History                     ~/dev/acme
 ╭──────────────────────────╮╭─────────────────────────────────────────────────────╮
 │ Workspaces               ││ 🏢 Acme  3 bolts                                    │
-│ THIS FOLDER              ││ ~/dev/acme/.specter.json                            │
+│ THIS FOLDER              ││ ~/dev/acme/.wisp.json                            │
 │ ❯ 🏢 Acme                ││ ✓ Allowed to run its commands                       │
 │ PROJECTS                 ││                                                     │
 │   🧱 infra               ││ ⚡ Bolts                                            │
@@ -76,7 +79,7 @@ your projects. It works the same at your desk, over SSH and inside tmux.
  ⏎ run · v view · e edit · a add · x stop · / search · 1 2 3 tabs · ? keys
 ```
 
-**You never have to write JSON.** Open Specter in a project that has no file and it offers
+**You never have to write JSON.** Open Wisp in a project that has no file and it offers
 to set one up from what it finds. `e` edits a bolt through simple forms — pick what a step
 should do ("Run a command", "Start Docker services", "Wait until a website answers"…), fill
 in a field or two, done. `a` adds a bolt, `D` deletes one, `N` makes a workspace of your
@@ -103,7 +106,7 @@ own. (`E` still opens the file itself in your `$EDITOR`, for those who'd rather.
 on Running, past runs on History (`cymph failed` finds Cymph's failed runs). Questions —
 trust a file, delete a bolt — are two buttons: `←→` picks, `⏎` confirms, `esc` backs out,
 and anything that deletes or allows starts on "no". It's all live: when a server crashes or
-a database turns unhealthy, Specter says so at the bottom of the screen. `?` lists every key.
+a database turns unhealthy, Wisp says so at the bottom of the screen. `?` lists every key.
 
 ## The file
 
@@ -140,8 +143,8 @@ A **bolt** is a named list of things to start, in order. That is the whole idea:
 
 Paths are relative to the file, so it works on everyone's machine. Commit it.
 
-Your editor autocompletes and checks the file as you type — `specter init` adds the
-[`$schema`](schema/specter.schema.json) line for you. `specter check` catches the rest.
+Your editor autocompletes and checks the file as you type — `wisp init` adds the
+[`$schema`](schema/wisp.schema.json) line for you. `wisp check` catches the rest.
 
 <details>
 <summary><b>More: shared assets, dependencies, several operating systems, your own additions</b></summary>
@@ -165,7 +168,7 @@ Sections: `links`, `folders`, `files`, `apps`, `commands`.
 ### Dependencies
 
 `{ "bolt": "Database" }` runs another bolt first. It runs once per run however many bolts
-need it, a command Specter already has running is left alone rather than started twice,
+need it, a command Wisp already has running is left alone rather than started twice,
 and bolts that need each other are refused before anything starts. Point at another
 project's bolt with `"workspace": "infra"`.
 
@@ -182,14 +185,14 @@ Commands run in your own shell on macOS and Linux, and PowerShell on Windows; se
 
 ### Your own additions
 
-A `.specter.local.json` beside the project's file — add it to `.gitignore` — is merged in:
+A `.wisp.local.json` beside the project's file — add it to `.gitignore` — is merged in:
 its lists are added, and a bolt with the same name replaces the project's. Your own
 board, your own scripts, without touching the shared file.
 
 ### Personal workspaces
 
 Things that belong to no repository — *Morning*, *On call* — are the same format, kept in
-Specter's `workspaces` directory (`specter doctor` shows where).
+Wisp's `workspaces` directory (`wisp doctor` shows where).
 
 </details>
 
@@ -213,39 +216,39 @@ stop the moment something fails. Mark those as a **job**:
 - Every run is kept, with each step's time and output:
 
 ```console
-$ specter history
+$ wisp history
 ✗ 3f2a1b  Release job · 2m ago · 41.2s
 ✓ 9c01de  Check job · 1h ago · 12.8s
 
-$ specter history 3f2a1b
+$ wisp history 3f2a1b
 failed Release · Acme · 17/11/2026, 16:07:01 · 41.2s
    1 ✓ wait   port 5432
    2 ✓ run    lint — pnpm lint 3.1s  [--log 2]
    3 ✗ run    test — pnpm test 9.8s exited with code 1  [--log 3]
    4 – run    pnpm build not reached — "test" failed
 
-$ specter history 3f2a1b --log 3      # what the tests printed
+$ wisp history 3f2a1b --log 3      # what the tests printed
 ```
 
 Run a job before every push — the push is blocked if it fails:
 
 ```bash
-specter hook pre-push check
+wisp hook pre-push check
 ```
 
 Or on a schedule, with the cron you already have:
-`0 3 * * * specter use ~/dev/acme/.specter.json Release`.
+`0 3 * * * wisp use ~/dev/acme/.wisp.json Release`.
 
 ## Up and down
 
-Specter keeps track of every command it starts, wherever it runs. So it knows which bolts
+Wisp keeps track of every command it starts, wherever it runs. So it knows which bolts
 are **up** (● in the TUI), never starts a second copy of a server that's already running,
 and can take a bolt down again:
 
 ```bash
-specter down api          # stop what "api" started
-specter down api --deps   # …and the database it needed
-specter restart api
+wisp down api          # stop what "api" started
+wisp down api --deps   # …and the database it needed
+wisp restart api
 ```
 
 A bolt's `down` steps run afterwards, for teardown that isn't a process:
@@ -253,7 +256,7 @@ A bolt's `down` steps run afterwards, for teardown that isn't a process:
 
 ## Where commands run
 
-Specter keeps them. A dev server, a database, a worker — each runs in the background, on
+Wisp keeps them. A dev server, a database, a worker — each runs in the background, on
 your machine as if you'd typed it, and shows up in the TUI in a **pane of its own** with
 its live, coloured output. No extra windows. They keep running when you close everything,
 and they're there again when you reopen it.
@@ -268,22 +271,22 @@ and they're there again when you reopen it.
  ↑↓ choose · r restart · x stop · s start · f full screen · pgup/pgdn scroll · h history
 ```
 
-From the command line it's the same: `specter logs web -f` follows one, `specter ps`
-lists them, `specter down api` stops a bolt's.
+From the command line it's the same: `wisp logs web -f` follows one, `wisp ps`
+lists them, `wisp down api` stops a bolt's.
 
 Prefer a window per command? Ask for one with `--window`, or make it the default:
-`specter open-with terminal ghostty` — or `tmux`, which on a server you SSH into keeps
-everything in a `specter` session you can attach to.
+`wisp open-with terminal ghostty` — or `tmux`, which on a server you SSH into keeps
+everything in a `wisp` session you can attach to.
 
 ## Trust
 
-A cloned repository could put anything in its `.specter.json`. So its commands — and any
+A cloned repository could put anything in its `.wisp.json`. So its commands — and any
 file or app that would execute when opened — **do not run until you've read them and said
 yes**:
 
 ```bash
-specter check    # see exactly what would run
-specter trust    # allow this exact file
+wisp check    # see exactly what would run
+wisp trust    # allow this exact file
 ```
 
 Approval is tied to the file's contents. Any change — a `git pull` included — asks again.
@@ -292,28 +295,28 @@ Approval is tied to the file's contents. Any change — a `git pull` included �
 
 | | |
 |---|---|
-| `specter` | the TUI (`specter status` for plain text) |
-| `specter <bolt>` | run a bolt — `--dry-run` to see what would happen first |
-| `specter init` | write a `.specter.json` for this project |
-| `specter trust` | allow this project's commands |
-| `specter list` | every workspace you have, from anywhere |
-| `specter show` · `check` | what a workspace holds · what's wrong with it |
-| `specter down` · `restart` | take a bolt down · and up again |
-| `specter history` | past runs, and what each step printed |
-| `specter hook pre-push check` | run a job from a git hook |
-| `specter ps` · `logs` · `stop` | what's running |
-| `specter scan ~/dev` | find the projects you already have |
-| `specter open-with` | pick your editor and terminal |
-| `specter doctor` | what works here, and where files live |
+| `wisp` | the TUI (`wisp status` for plain text) |
+| `wisp <bolt>` | run a bolt — `--dry-run` to see what would happen first |
+| `wisp init` | write a `.wisp.json` for this project |
+| `wisp trust` | allow this project's commands |
+| `wisp list` | every workspace you have, from anywhere |
+| `wisp show` · `check` | what a workspace holds · what's wrong with it |
+| `wisp down` · `restart` | take a bolt down · and up again |
+| `wisp history` | past runs, and what each step printed |
+| `wisp hook pre-push check` | run a job from a git hook |
+| `wisp ps` · `logs` · `stop` | what's running |
+| `wisp scan ~/dev` | find the projects you already have |
+| `wisp open-with` | pick your editor and terminal |
+| `wisp doctor` | what works here, and where files live |
 
 Every command takes `--help`; most take `--json`.
 
 ## For AI agents
 
-Specter is built to be driven by coding agents. Point yours at it:
+Wisp is built to be driven by coding agents. Point yours at it:
 
 ```bash
-specter spec
+wisp spec
 ```
 
 prints the complete reference — the file format, every command, JSON output and exit
@@ -322,7 +325,7 @@ codes, and a check → dry-run → run → read-logs loop — written for an age
 `--json` makes every result machine-readable, and `--inline` puts command output where the
 agent can read it.
 
-An agent can write and run bolts, but **it cannot approve its own commands** — `specter
+An agent can write and run bolts, but **it cannot approve its own commands** — `wisp
 trust` stays yours.
 
 ## Development
@@ -333,13 +336,13 @@ pnpm dev -- --help     # run from source
 pnpm test              # tests
 pnpm typecheck
 pnpm build             # dist/, for npm
-pnpm compile           # bin/specter, a standalone binary
+pnpm compile           # bin/wisp, a standalone binary
 ```
 
 - `src/core` — the format, trust, discovery, running bolts. No CLI code, so other front
   ends can use it.
 - `src/platform` — everything specific to macOS, Linux and Windows.
-- `src/cli` — the `specter` command.
+- `src/cli` — the `wisp` command.
 
 ## License
 
