@@ -356,7 +356,10 @@ export function Choice(props: { yes: string; no: string; danger?: boolean; onAns
   const { yes, no, danger = false, onAnswer, onCancel } = props;
   const [onYes, setOnYes] = useState(!danger);
   const picked = useRef(onYes);
-  picked.current = onYes;
+  const pick = (yes: boolean) => {
+    picked.current = yes;
+    setOnYes(yes);
+  };
   const answered = useRef(false);
   // The key that answers is the dialog's alone. Every screen hears each key; answering at
   // once would close the dialog before the screen behind it hears the same ⏎, and it would
@@ -368,7 +371,11 @@ export function Choice(props: { yes: string; no: string; danger?: boolean; onAns
   };
   useInput((input, key) => {
     if (answered.current) return;
-    if (key.leftArrow || key.rightArrow || key.tab || input === "h" || input === "l") return setOnYes((now) => !now);
+    // Arrows go where they point: ← to the left button (yes), → to the right one (no). Only
+    // tab flips, so → on "No" stays on "No" instead of jumping to "Yes, delete it".
+    if (key.leftArrow || input === "h") return pick(true);
+    if (key.rightArrow || input === "l") return pick(false);
+    if (key.tab) return pick(!picked.current);
     if (key.return || input === " ") return answer(picked.current);
     if (input === "y" || input === "Y") return answer(true);
     // Where both buttons do something, esc is neither: it backs out.

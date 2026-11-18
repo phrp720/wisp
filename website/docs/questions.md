@@ -18,6 +18,11 @@ own folder, and its commands run without asking: they're yours.
 → [Personal workspaces](./file#personal-workspaces)
 :::
 
+::: details How do I delete a workspace?
+Select it on the left in the dashboard and press `D`. One of your own is deleted. A
+project is only removed from your list: its `.wisp.json` stays in the repository.
+:::
+
 ::: details Is there tab completion?
 Yes, for zsh, bash and fish. Run this once, then open a new terminal:
 
@@ -68,6 +73,14 @@ The Running tab (`2`) shows each one live. From the command line: `wisp ps` list
 too. `wisp stop --all` stops every command Wisp started.
 
 → [Up and down](./running#up-and-down)
+:::
+
+::: details What's the difference between a job and a normal bolt?
+A normal bolt starts things and leaves them running: servers, databases. A job runs each
+command to the end, in front of you, stops at the first failure, and ends with ✓ or ✗:
+tests, builds, cleanups. If it finishes, make it a job.
+
+→ [A job, or a normal bolt?](./jobs#a-job-or-a-normal-bolt)
 :::
 
 ::: details A check failed. Do I have to run it all again?

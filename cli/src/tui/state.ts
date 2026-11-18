@@ -47,6 +47,7 @@ export type View =
   | { kind: "new-bolt"; file: string; workspace: string }
   | { kind: "new-workspace" }
   | { kind: "delete-bolt"; file: string; bolt: string }
+  | { kind: "delete-workspace"; file: string; name: string; personal: boolean }
   | { kind: "view"; file: string; bolt: string }
   /** Your own settings: the app for folders and files, where commands run. */
   | { kind: "settings" }
@@ -55,7 +56,32 @@ export type View =
   | { kind: "setup"; suggestion: SetupSuggestion };
 
 /** Views that read the keyboard themselves: forms, the editor, confirmations. */
-export const SELF_DRIVEN = new Set(["editor", "new-bolt", "new-workspace", "delete-bolt", "setup", "history", "view", "stop-bolt", "settings"]);
+/**
+ * Whether each screen takes its own keys. While one does, the dashboard behind it hears
+ * nothing: otherwise a dialog's ⏎ or ← would also run or move things underneath it. Every
+ * kind of view must be listed, so a new screen can't forget to say.
+ */
+const TAKES_ITS_OWN_KEYS: Record<View["kind"], boolean> = {
+  browse: false,
+  search: false,
+  run: false,
+  check: false,
+  trust: false, // the dashboard hands its keys to the trust dialog itself
+  processes: false,
+  help: false,
+  editor: true,
+  "new-bolt": true,
+  "new-workspace": true,
+  "delete-bolt": true,
+  "delete-workspace": true,
+  view: true,
+  "stop-bolt": true,
+  settings: true,
+  setup: true,
+  history: true,
+};
+
+export const SELF_DRIVEN = new Set(Object.entries(TAKES_ITS_OWN_KEYS).filter(([, own]) => own).map(([kind]) => kind));
 
 /**
  * The run in progress, or the last one. Kept apart from the screen showing it, so that
@@ -95,15 +121,16 @@ export interface Notice {
 
 /** One row of the panes: a command Wisp runs, or a container Docker runs for it. */
 export type PaneItem =
-  | { type: "run"; run: RunStatus; group: string }
-  | { type: "container"; container: Container; group: string }
+  /** `depth` 2: inside a bolt another bolt needed, shown under that bolt's line. */
+  | { type: "run"; run: RunStatus; group: string; depth?: number }
+  | { type: "container"; container: Container; group: string; depth?: number }
   | { type: "current" }
   | { type: "group"; group: PaneGroup }
   /**
    * A step of the bolt's last run that is not something running — a wait, a link, a build,
    * a bolt it needed — so the list reads as the pipeline it is, in order.
    */
-  | { type: "step"; step: HistoryStep; entry: HistoryEntry; index: number; group: string };
+  | { type: "step"; step: HistoryStep; entry: HistoryEntry; index: number; group: string; depth?: number };
 
 /**
  * A bolt in the Running list, with what it started under it — the way Dockge shows a stack

@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { createWriteStream } from "node:fs";
 import { stat } from "node:fs/promises";
-import { basename, dirname, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 
 import { getPlatform, type Platform } from "../platform/index.js";
 import { runInTmux, runInZellij } from "../platform/multiplexer.js";
@@ -11,7 +12,7 @@ import { composeStopArgs, composeUpArgs, type Container } from "./docker.js";
 import { detectEnvironment, type Environment } from "./environment.js";
 import { WispError, describe } from "./errors.js";
 import { gitState, newHistoryId, recordHistory, stepLogPath, type HistoryEntry, type HistoryStep } from "./history.js";
-import { currentOS, expandHome } from "./paths.js";
+import { currentOS, expandHome, stateDir, withLock } from "./paths.js";
 import { listRuns, newRunId, pidFileFor, recordWindowRun, runningFor, startRun, stopRun, type RunStatus } from "./processes.js";
 import { restartLoop, shellInvocation, windowInvocation } from "./shell.js";
 import { normalizeUrl, sameUrl } from "./url.js";
@@ -219,6 +220,8 @@ function toHistoryStep(result: TargetResult): HistoryStep {
 }
 
 interface Context {
+  /** Set while this run holds the lock on starting one command; see runCommand. */
+  starting?: boolean;
   environment: Environment;
   defaults: OpenWithDefaults;
   options: SwitchOptions;
@@ -527,6 +530,14 @@ function describeRoute(target: SwitchTarget, step: PlannedStep, context: Context
 async function runCommand(step: PlannedStep, index: number, context: Context): Promise<TargetResult> {
   const { target, workspace } = step;
   const route = routeFor(target, context, step.job);
+
+  // Check, then start, as one step: two runs of the same bolt at once (two terminals, a
+  // double ⏎) would otherwise both see nothing running and both start the server. The
+  // second waits for the first, then finds it up. Other commands never wait on this one.
+  if (route.kind !== "inline" && !context.starting) {
+    const key = createHash("sha1").update(`${workspace.file}\0${target.id}`).digest("hex").slice(0, 16);
+    return withLock(join(stateDir(), "starting", key), () => runCommand(step, index, { ...context, starting: true }));
+  }
 
   // A service that is already up stays up: starting "Database" again while Wisp's own
   // run of it is going would start a second one fighting the first for its port. A job's

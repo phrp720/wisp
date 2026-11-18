@@ -42,7 +42,7 @@ export function TrustPanel({ read, then, glyphs, height, onAnswer }: { read: Wor
  * Every suggested bolt is a box to tick, all ticked to start: keep what you want, untick the
  * rest. A kept bolt that needed an unticked one simply stops asking for it.
  */
-export function SetupPanel({ suggestion, glyphs, height, onAnswer }: { suggestion: SetupSuggestion; glyphs: Glyphs; height: number; onAnswer: (chosen: string[] | undefined) => void }) {
+export function SetupPanel({ suggestion, glyphs, height, onAnswer }: { suggestion: SetupSuggestion; glyphs: Glyphs; height: number; onAnswer: (chosen: string[] | undefined | "never") => void }) {
   const [index, setIndexState] = useState(0);
   const indexRef = useRef(0);
   const [ticked, setTickedState] = useState<Set<string>>(() => new Set(suggestion.bolts.map((bolt) => bolt.label)));
@@ -60,7 +60,7 @@ export function SetupPanel({ suggestion, glyphs, height, onAnswer }: { suggestio
     setTickedState(next);
   };
   // The answer lands after the key is done, so the screen behind never hears the same ⏎.
-  const answer = (chosen: string[] | undefined) => {
+  const answer = (chosen: string[] | undefined | "never") => {
     if (answered.current) return;
     answered.current = true;
     setTimeout(() => onAnswer(chosen), 0);
@@ -69,6 +69,7 @@ export function SetupPanel({ suggestion, glyphs, height, onAnswer }: { suggestio
   useInput((input, key) => {
     if (answered.current) return;
     if (key.escape || input === "q" || input === "n") return answer(undefined);
+    if (input === "d") return answer("never");
     if (key.upArrow || input === "k") return setIndex(Math.max(0, indexRef.current - 1));
     if (key.downArrow || input === "j") return setIndex(Math.min(suggestion.bolts.length - 1, indexRef.current + 1));
     if (input === " ") {
@@ -118,8 +119,8 @@ export function SetupPanel({ suggestion, glyphs, height, onAnswer }: { suggestio
       <Box flexGrow={1} />
       <Text dimColor>It's saved as .wisp.json in this folder, and you can change all of it afterwards with e.</Text>
       <Text>
-        <Text color={count > 0 ? "black" : undefined} backgroundColor={count > 0 ? TONE.accent : undefined} bold dimColor={count === 0}>{count > 0 ? ` ▸ Set up ${count === suggestion.bolts.length ? "all" : count} ${count === 1 ? "bolt" : "bolts"} ` : " Tick at least one "}</Text>
-        <Text dimColor>{"   space tick or untick · a all or none · ⏎ set up · esc not now"}</Text>
+        <Text color={count > 0 ? "black" : undefined} backgroundColor={count > 0 ? TONE.accent : undefined} bold dimColor={count === 0}>{count > 0 ? ` ▸ ${count === 1 ? (suggestion.bolts.length === 1 ? "Set up this bolt" : "Set up 1 bolt") : count === suggestion.bolts.length ? `Set up all ${count} bolts` : `Set up ${count} bolts`} ` : " Tick at least one "}</Text>
+        <Text dimColor>{"   space tick · a all/none · ⏎ set up · esc not now · d don't ask again"}</Text>
       </Text>
     </Box>
   );

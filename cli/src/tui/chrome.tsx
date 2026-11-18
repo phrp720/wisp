@@ -63,6 +63,7 @@ export function Footer({ view, message, notice }: { view: View; message?: string
     "new-bolt": "",
     "new-workspace": "",
     "delete-bolt": "",
+    "delete-workspace": "",
     view: "",
     "stop-bolt": "",
     settings: "",

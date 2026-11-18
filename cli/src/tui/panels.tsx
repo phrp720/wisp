@@ -161,7 +161,7 @@ export function HelpPanel({ glyphs, height }: { glyphs: Glyphs; height: number }
       "Edit",
       [
         ["e", "edit the selected bolt — its steps, name, kind"],
-        ["a  D", "add a bolt · delete the selected one"],
+        ["a  D", "add a bolt · delete the selected bolt, or workspace on the left"],
         ["K  J", "move the selected bolt up · down"],
         ["N", "a new workspace of your own"],
         ["E", "open the file itself in your text editor"],

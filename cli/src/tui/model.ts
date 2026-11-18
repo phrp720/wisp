@@ -57,6 +57,8 @@ export interface Services {
 
   /** What Wisp would set up in the folder it was opened in, if that folder has none. */
   suggestSetup(): Promise<SetupSuggestion | undefined>;
+  /** Never offer to set this folder up again. */
+  declineSetup(dir: string): Promise<void>;
   /** Write the suggested file. Returns its path. */
   setUp(suggestion: SetupSuggestion, chosen?: string[]): Promise<string>;
 
@@ -97,6 +99,10 @@ export interface Editing {
   removeStep(file: string, bolt: string, index: number): Promise<void>;
   moveStep(file: string, bolt: string, index: number, by: -1 | 1): Promise<void>;
   createPersonalWorkspace(name: string): Promise<string>;
+  /** Delete one of your own workspaces' files. */
+  removePersonalWorkspace(file: string): Promise<void>;
+  /** Stop listing a project; its .wisp.json is left as it is. */
+  forgetProject(file: string): Promise<void>;
 }
 
 /** A `.wisp.json` Wisp could write for the folder it was opened in. */

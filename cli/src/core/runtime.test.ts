@@ -116,6 +116,23 @@ describe("background runs", () => {
     expect((await listRuns())[0]!.alive).toBe(false);
   });
 
+  it("remember how they ended: finished, failed with a code, or stopped", async () => {
+    const start = (label: string, script: string) =>
+      startRun({ label, command: script, workspace: "/w/.wisp.json", workspaceName: "w", asset: `command:${label}`, invocation: { file: "/bin/sh", args: ["-c", script] }, graceMs: 200 });
+    const done = await start("done", "sleep 0.5; exit 0");
+    const broke = await start("broke", "sleep 0.5; exit 3");
+    const server = await start("server", "sleep 30");
+    stopRun((await listRuns()).find((run) => run.id === server.run.id)!);
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+
+    const runs = await listRuns();
+    const of = (id: string) => runs.find((run) => run.id === id)!;
+    expect(of(done.run.id)).toMatchObject({ alive: false, exitCode: 0 });
+    expect(of(broke.run.id)).toMatchObject({ alive: false, exitCode: 3 });
+    expect(of(server.run.id).alive).toBe(false);
+    expect(of(server.run.id).exitCode).toBeUndefined();
+  });
+
   it("report a command that fails straight away, with what it said", async () => {
     const started = await startRun({
       label: "broken",

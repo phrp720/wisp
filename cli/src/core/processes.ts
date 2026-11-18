@@ -6,7 +6,7 @@ import { join } from "node:path";
 
 import { currentOS, readJson, stateDir, withLock, writeJson } from "./paths.js";
 import { cleanOutput, stripAnsi } from "./ansi.js";
-import { underTerminal } from "./shell.js";
+import { exitFileFor, recordExit, underTerminal } from "./shell.js";
 import type { Invocation } from "./types.js";
 
 /**
@@ -48,6 +48,8 @@ export interface Run {
 
 export interface RunStatus extends Run {
   alive: boolean;
+  /** How it ended, once it has: 0 finished, anything else failed. Unset: stopped, or unknown. */
+  exitCode?: number;
 }
 
 /** How many finished runs to keep, logs included. Running ones are always kept. */
@@ -151,8 +153,10 @@ export async function startRun(request: StartRequest): Promise<StartResult> {
   const log = join(logsDir(), `${id}.log`);
   const handle = await open(log, "a");
 
-  // Under a terminal, so it writes what you would see in one: colours and all.
-  const shimmed = underTerminal(request.invocation);
+  // Under a terminal, so it writes what you would see in one: colours and all. And with
+  // its exit code kept, so "it finished" and "it crashed" can be told apart afterwards.
+  const recorded = currentOS() === "win32" ? request.invocation : recordExit(request.invocation, exitFileFor(log));
+  const shimmed = underTerminal(recorded);
   const child = spawn(shimmed.file, shimmed.args, {
     detached: true,
     stdio: ["ignore", handle.fd, handle.fd],
@@ -434,21 +438,37 @@ function pidOf(run: Run): number {
   }
 }
 
+/** The exit code a finished background run left beside its log, if it left one. */
+function exitCodeOf(run: Run): number | undefined {
+  if (run.kind !== "background" || !run.log) return undefined;
+  try {
+    const code = Number.parseInt(readFileSync(exitFileFor(run.log), "utf8").trim(), 10);
+    return Number.isInteger(code) ? code : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function withStatus(run: Run, dead?: Set<number>): RunStatus {
   const pid = pidOf(run);
-  if (pid) return { ...run, pid, alive: dead ? signalable(pid) && !dead.has(pid) : isAlive(pid) };
+  if (pid) {
+    const alive = dead ? signalable(pid) && !dead.has(pid) : isAlive(pid);
+    const exitCode = alive ? undefined : exitCodeOf(run);
+    return { ...run, pid, alive, ...(exitCode === undefined ? {} : { exitCode }) };
+  }
   // A window that has not reported in yet is starting, for a while; then it never will.
   const starting = Date.now() - Date.parse(run.startedAt) < STARTING_MS;
   return { ...run, alive: run.kind === "window" && starting };
 }
 
 function strip(run: RunStatus): Run {
-  const { alive: _alive, ...rest } = run;
+  const { alive: _alive, exitCode: _exitCode, ...rest } = run;
   return rest;
 }
 
 async function removeFiles(run: Run): Promise<void> {
-  await Promise.all([run.log, run.pidFile].filter((file): file is string => Boolean(file)).map((file) => rm(file, { force: true })));
+  const files = [run.log, run.log ? exitFileFor(run.log) : undefined, run.pidFile];
+  await Promise.all(files.filter((file): file is string => Boolean(file)).map((file) => rm(file, { force: true })));
 }
 
 async function saveRun(run: Run): Promise<void> {

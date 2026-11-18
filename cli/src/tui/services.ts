@@ -1,9 +1,10 @@
 import { spawnSync } from "node:child_process";
 import { watch as watchPath, type FSWatcher } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { basename, dirname } from "node:path";
+import { homedir } from "node:os";
+import { basename, dirname, resolve } from "node:path";
 
-import { getOpenWithDefaults, recordProject, setOpenWithDefaults } from "../core/config.js";
+import { declineSetup, forgetProject, getOpenWithDefaults, recordProject, setOpenWithDefaults, setupDeclined } from "../core/config.js";
 import { installedEditors } from "../core/editors.js";
 import { detectEnvironment } from "../core/environment.js";
 import { listRuns, restartRun, stopRun, tail } from "../core/processes.js";
@@ -110,8 +111,14 @@ export function realServices(hooks: { suspend: () => void; resume: () => void })
     containerLogs: (name) => containerLogs(name).catch((error: unknown) => describeError(error)),
     containerAction,
 
+    declineSetup: (dir) => declineSetup(dir),
+
     async suggestSetup() {
       if (await findProjectFile()) return undefined;
+      // Never your home folder or the root: they hold projects, they aren't one.
+      const here = resolve(process.cwd());
+      if (here === resolve(homedir()) || here === resolve("/")) return undefined;
+      if (await setupDeclined(here)) return undefined;
       const draft = await draftProject(process.cwd());
       const detected = draft.detected;
       // Only where there is something real to set up: a folder with nothing to run gets no
@@ -188,6 +195,10 @@ export function realServices(hooks: { suspend: () => void; resume: () => void })
       removeStep: edit.removeStep,
       moveStep: edit.moveStep,
       createPersonalWorkspace: edit.createPersonalWorkspace,
+      removePersonalWorkspace: edit.removePersonalWorkspace,
+      forgetProject: async (file) => {
+        await forgetProject(file);
+      },
     },
 
     runs: listRuns,

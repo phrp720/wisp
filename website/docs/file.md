@@ -82,8 +82,9 @@ bolt with `"workspace": "infra"`.
 
 ## Jobs
 
-`"job": true` makes a bolt run to completion and stop at the first failure, like a CI job.
-See [Jobs and history](./jobs).
+`"job": true` makes a bolt run each command to the end, in order, and stop at the first
+failure, like a CI job. Use it for what finishes (tests, builds, cleanups); leave it off for
+what keeps running (servers). See [a job, or a normal bolt?](./jobs#a-job-or-a-normal-bolt)
 
 ## Taking a bolt down
 

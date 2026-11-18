@@ -153,6 +153,20 @@ const QUIET_INPUT = 'if f=$(mktemp -u "${TMPDIR:-/tmp}/wisp-in.XXXXXX") && mkfif
 /** How many times in a row a command is brought back before Wisp gives up on it. */
 export const MAX_RESTARTS = 10;
 
+/**
+ * Write the command's exit code to a file when it ends by itself, so Wisp can tell later
+ * whether it finished (0), failed (anything else), or was stopped (no file: whatever stops
+ * it stops this little shell too).
+ */
+export function recordExit(inner: Invocation, file: string): Invocation {
+  return { file: "/bin/sh", args: ["-c", `"$@"; code=$?; printf '%s' "$code" > ${posixQuote(file)}; exit "$code"`, "sh", inner.file, ...inner.args] };
+}
+
+/** The file a background run's exit code lands in, beside its log. */
+export function exitFileFor(log: string): string {
+  return log.replace(/\.log$/, "") + ".exit";
+}
+
 /** The line a restart leaves in the log — read back by the panes to count restarts. */
 export const RESTART_MARK = "[wisp] restarting";
 

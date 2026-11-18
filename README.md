@@ -7,124 +7,80 @@
 </h1>
 
 <p align="center">
+  <a href="https://www.npmjs.com/package/@squaredasher/wisp"><img src="https://img.shields.io/npm/v/@squaredasher/wisp?color=6d4aff&label=npm" alt="npm version" /></a>
+  <a href="https://www.npmjs.com/package/@squaredasher/wisp"><img src="https://img.shields.io/npm/dm/@squaredasher/wisp?color=6d4aff" alt="npm downloads" /></a>
+  <a href="https://github.com/phrp720/wisp/actions/workflows/ci.yml"><img src="https://github.com/phrp720/wisp/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-6d4aff" alt="MIT license" /></a>
+</p>
+
+<p align="center">
   <b>Start your working context with one word.</b><br />
-  The folders, links, apps and commands a task needs, opened and running in order.
+  The database, the server, your editor in the right folder, the page in your browser:<br />
+  described once in a <code>.wisp.json</code>, brought up with <code>wisp api</code>.
 </p>
 
 <p align="center">
-  macOS · Linux · Windows · over SSH · inside tmux
+  <img src="website/public/demo/cli.gif" alt="wisp api: the database, the API server and the page, started in order, each step ticking off" width="800" />
 </p>
-
----
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/phrp720/wisp/main/website/public/demo/cli.gif" alt="wisp api: the database, the API server and the page, started in order, each step ticking off" width="800" />
+  <a href="https://willowisp.dev/docs/getting-started">Docs</a> ·
+  <a href="https://willowisp.dev/docs/commands">Commands</a> ·
+  <a href="https://willowisp.dev/docs/reference">File reference</a> ·
+  <a href="https://willowisp.dev/docs/questions">Questions</a> ·
+  <a href="https://willowisp.dev/docs/agents">For AI agents</a>
 </p>
-
-You describe the job once, in a `.wisp.json` next to your code. After that, `wisp api`
-gets you from *"I'm starting on the API"* to everything open and running: database up,
-server started, editor in the right folder, the page in your browser.
 
 ## Install
 
-On macOS and Linux, one line, no Node needed:
-
 ```bash
-curl -fsSL https://willowisp.dev/install.sh | sh
+curl -fsSL https://willowisp.dev/install.sh | sh     # macOS and Linux, no Node needed
+npm install -g @squaredasher/wisp                     # anywhere, with Node 22.12+
+wisp completion --install                             # optional: tab completion
 ```
 
-It downloads the build for your machine, checks it against the release's checksums, and
-puts `wisp` in `~/.local/bin`. [Read it first](https://willowisp.dev/install.sh) if you like.
-
-With Node, on any system:
-
-```bash
-npm install -g @squaredasher/wisp
-```
-
-Or download it from [Releases](https://github.com/phrp720/wisp/releases): macOS, Linux and
-Windows.
-
-Tab completion for your workspaces and bolts (zsh, bash, fish): `wisp completion --install`.
+Windows without Node: [Releases](https://github.com/phrp720/wisp/releases) has a zip.
 
 ## Quick start
 
 ```bash
 cd ~/dev/acme
-wisp init        # reads the project and writes a .wisp.json
-wisp             # opens the dashboard: every workspace and its bolts, ⏎ to run
-wisp api         # or skip it: runs the "api" bolt; any distinctive word works
+wisp init     # suggests bolts from what the project has; keep the ones you want
+wisp trust    # allow its commands, after reading them
+wisp api      # run the "api" bolt: any distinctive word of its name
+wisp          # the dashboard
 ```
 
-`wisp init` doesn't make you start from a blank file. It reads what the project already
-says about running itself, at its root and one folder down (a `backend/`, a `frontend/`):
-
-- **JavaScript:** `package.json` scripts (monorepos too), Deno tasks
-- **Python:** Django, FastAPI and Flask servers; pytest, ruff, mypy, tox, nox; poe and pdm
-  tasks, run through `uv`, `poetry` or `pipenv` when the project uses one
-- **Java and Kotlin:** Gradle and Maven, Spring Boot, through `./gradlew` or `./mvnw`
-- **Go, Rust, Ruby on Rails, PHP and Laravel, .NET, Elixir and Phoenix**
-- **Anything:** `docker compose` services and their ports, a `Makefile`, `justfile`,
-  `mise` or `Taskfile`, a `Procfile`
-
-Then it suggests the bolts you'd have written: start the services, wait for the database,
-start each app, wait for it to answer, open it, plus a **Check** job from your lint and test
-commands. You keep the ones you want: it asks, or pass `--only "Check,Work on api"`.
+`wisp init` reads package.json scripts, compose files, Django, FastAPI, Gradle, Maven, Go,
+Rust, Rails, Laravel, .NET, Makefiles and [more](https://willowisp.dev/docs/file#wisp-init).
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/phrp720/wisp/main/website/public/demo/init.gif" alt="wisp init: it suggests three bolts, keeps two, writes the file, then wisp trust allows it and wisp blog runs it" width="800" />
+  <img src="website/public/demo/init.gif" alt="wisp init: it suggests three bolts, keeps two, writes the file, then wisp trust allows it and wisp blog runs it" width="800" />
 </p>
 
 ## The dashboard
 
-`wisp` on its own opens a dashboard of everything you have, right in your terminal, like
-htop but for your projects. It works the same at your desk, over SSH and inside tmux.
+`wisp` opens a dashboard of all your projects, right in your terminal: run a bolt with `⏎`,
+watch what it started on **Running**, look back on **History**. Add and edit bolts through
+forms; no JSON to touch. It works the same over SSH and in tmux.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/phrp720/wisp/main/website/public/demo/dashboard.gif" alt="Wisp's dashboard: running a bolt, its server's live output on the Running tab, then the History tab" width="900" />
+  <img src="website/public/demo/dashboard.gif" alt="Wisp's dashboard: running a bolt, its server's live output on the Running tab, then the History tab" width="900" />
 </p>
 
-**You never have to write JSON.** Open Wisp in a project that has no file and it offers
-to set one up from what it finds. `e` edits a bolt through simple forms: pick what a step
-should do ("Run a command", "Start Docker services", "Wait until a website answers"…), fill
-in a field or two, done. `a` adds a bolt, `D` deletes one, `N` makes a workspace of your
-own. (`E` still opens the file itself in your `$EDITOR`, for those who'd rather.)
+## A bolt
 
-**Three tabs along the top, one key each**: `1` Bolts (workspaces and their bolts), `2`
-(or `p`) Running, `3` (or `h`) History:
-
-- **Bolts.** `⏎` runs the selected one and shows each step as it happens; a job's output
-  streams in live. `v` shows it whole and read-only: every step in order, the bolts it needs
-  opened up beneath their own number, what each one runs and where, and what is up right
-  now. `x` takes it down, and when it needed other bolts (a database, say), asks whether
-  to stop those too, warning you if something else still uses them. `R` restarts it.
-- **Running.** What your bolts started, grouped under the bolt that started them, each
-  with the run that started it (`#4`): commands and Docker containers side by side, with
-  state, health, ports, CPU, memory and live logs. `x` stops, `r` restarts, one task or
-  a whole bolt. `o` shows the ones that stopped too. An activity log underneath keeps what happened:
-  what you ran and stopped, what crashed, what came back.
-- **History.** Every run, like a CI: numbered per bolt, with the branch and commit it ran
-  on. Open one for its summary, a graph of the bolts it went through, and each step's time
-  and output; a failed step opens on its log. `r` retries only what failed.
-
-`/` searches wherever you are: every workspace and bolt from the main screen, what's running
-on Running, past runs on History (`acme failed` finds Acme's failed runs). Questions
-(trust a file, delete a bolt) are two buttons: `←→` picks, `⏎` confirms, `esc` backs out,
-and anything that deletes or allows starts on "no". It's all live: when a server crashes or
-a database turns unhealthy, Wisp says so at the bottom of the screen. `?` lists every key.
-
-## The file
-
-A **bolt** is a named list of things to start, in order. That is the whole idea:
+A named list of things to start, in order. It lives in a `.wisp.json` next to your code, so
+the whole team has it:
 
 ```json
 {
+  "name": "Acme",
   "bolts": [
     {
       "label": "Work on api",
       "targets": [
-        { "run": "docker compose up db" },
-        { "wait": "localhost:5432" },
+        { "compose": "compose.yaml", "services": ["postgres"] },
         { "folder": "apps/api" },
         { "run": "pnpm dev", "cwd": "apps/api" },
         { "wait": "http://localhost:3000" },
@@ -135,213 +91,50 @@ A **bolt** is a named list of things to start, in order. That is the whole idea:
 }
 ```
 
-| Step | Example |
-|---|---|
-| Folder | `{ "folder": "apps/api" }` · opens in your file manager, or your editor |
-| File | `{ "file": "docs/runbook.md" }` |
-| Link | `{ "url": "https://staging.acme.com" }` · on macOS, focuses the tab if it's already open |
-| App | `{ "app": "Slack" }` |
-| Command | `{ "run": "pnpm dev", "cwd": "apps/api", "env": { "PORT": 3000 } }` · add `"restart": "on-failure"` to bring it back if it crashes |
-| Wait | `{ "wait": 3 }` · `{ "wait": "localhost:5432" }` · `{ "wait": "http://localhost:3000" }` |
-| Another bolt | `{ "bolt": "Database" }` · `{ "bolt": "Database", "workspace": "infra" }` |
-| Docker services | `{ "compose": "compose.yaml", "services": ["postgres"] }` · waits until they're healthy |
+Steps can run commands, start Docker services, wait for a port or a website, run another
+bolt first, and open links, folders, files and apps. Every field is in the
+[File reference](https://willowisp.dev/docs/reference).
 
-Paths are relative to the file, so it works on everyone's machine. Commit it.
+## Jobs and history
 
-Your editor autocompletes and checks the file as you type: `wisp init` adds the
-[`$schema`](schema/wisp.schema.json) line for you. `wisp check` catches the rest.
-
-<details>
-<summary><b>More: shared assets, dependencies, several operating systems, your own additions</b></summary>
-
-### Shared assets
-
-When several bolts need the same thing, declare it once and name it by label:
-
-```json
-{
-  "links": [{ "label": "Repository", "url": "https://github.com/acme/acme" }],
-  "bolts": [
-    { "label": "Work on api", "targets": [{ "folder": "apps/api" }, "Repository"] },
-    { "label": "Work on web", "targets": [{ "folder": "apps/web" }, "Repository"] }
-  ]
-}
-```
-
-Sections: `links`, `folders`, `files`, `apps`, `commands`.
-
-### Dependencies
-
-`{ "bolt": "Database" }` runs another bolt first. It runs once per run however many bolts
-need it, a command Wisp already has running is left alone rather than started twice,
-and bolts that need each other are refused before anything starts. Point at another
-project's bolt with `"workspace": "infra"`.
-
-### Several operating systems
-
-```json
-{ "app": { "macos": "Visual Studio Code", "linux": "code", "windows": "code" } }
-{ "run": { "macos": "open -a Docker", "linux": "systemctl --user start docker" } }
-{ "folder": "build/win", "os": "windows" }
-```
-
-Commands run in your own shell on macOS and Linux, and PowerShell on Windows; set
-`"shell": "sh" | "pwsh" | "cmd"` to say otherwise.
-
-### Your own additions
-
-A `.wisp.local.json` beside the project's file (add it to `.gitignore`) is merged in:
-its lists are added, and a bolt with the same name replaces the project's. Your own
-board, your own scripts, without touching the shared file.
-
-### Personal workspaces
-
-Things that belong to no repository, like *Morning* or *On call*, are the same format, kept in
-Wisp's `workspaces` directory (`wisp doctor` shows where).
-
-</details>
-
-## Jobs: checks, builds, releases
-
-Some bolts start things and leave them running. Others should *run to completion* and
-stop the moment something fails. Mark those as a **job**:
-
-```json
-{
-  "label": "Release",
-  "job": true,
-  "targets": [{ "bolt": "Database" }, { "bolt": "Check" }, { "run": "pnpm build" }, { "run": "./deploy.sh" }]
-}
-```
-
-- Commands run here, one after another, with their output on screen.
-- **The first failure stops it.** Tests fail, nothing deploys. A failed job it depends on
-  stops it too.
-- Dependencies that aren't jobs, like the database, start as usual and stay up.
-- Every run is kept, with each step's time and output:
+Mark a bolt `"job": true` (Check, Build, Release) and it stops at the first failure. Every
+run is kept like a CI run, with its commit and each step's output; `--retry` runs only what
+failed. `wisp hook pre-push check` runs one before every push.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/phrp720/wisp/main/website/public/demo/jobs.gif" alt="A Check job fails at its test; History shows the run like CI, with the test's output; after the fix, --retry runs only the test, and it passes" width="900" />
+  <img src="website/public/demo/jobs.gif" alt="A Check job fails at its test; History shows the run like CI, with the test's output; after the fix, --retry runs only the test, and it passes" width="900" />
 </p>
 
-Run a job before every push. The push is blocked if it fails:
+## What's running
 
-```bash
-wisp hook pre-push check
-```
+Servers run in the background, each with its live output in the Running tab, and keep
+running when you close Wisp. `wisp ps` lists them, `wisp logs api -f` follows one, and
+`wisp down api` stops everything a bolt started, child processes included.
 
-Or on a schedule, with the cron you already have:
-`0 3 * * * wisp use ~/dev/acme/.wisp.json Release`.
+<p align="center">
+  <img src="website/public/demo/running.png" alt="The Running tab: the Database and Work on api bolts, each with what it started, and the api server's live log on the right" width="900" />
+</p>
 
-## Up and down
-
-Wisp keeps track of every command it starts, wherever it runs. So it knows which bolts
-are **up** (● in the dashboard), never starts a second copy of a server that's already running,
-and can take a bolt down again:
-
-```bash
-wisp down api          # stop what "api" started
-wisp down api --deps   # …and the database it needed
-wisp restart api
-```
-
-A bolt's `down` steps run afterwards, for teardown that isn't a process:
-`"down": [{ "run": "docker compose stop" }]`.
-
-## Where commands run
-
-Wisp keeps them. A dev server, a database, a worker: each runs in the background, on
-your machine as if you'd typed it, and shows up in the dashboard in a **pane of its own** with
-its live, coloured output. No extra windows. They keep running when you close everything,
-and they're there again when you reopen it.
-
-```
-╭ Running ───────────────╮╭ web dev  pnpm dev  ● running ──────────────────────────╮
-│ ● web dev  Shop        ││ ▲ Next.js 16.1.7 (Turbopack)                          │
-│   ✓ Ready in 1.2s      ││ - Local:   http://localhost:3000                      │
-│ ● postgres  infra      ││ ✓ Ready in 1.2s                                       │
-│   ready to accept …    ││ GET / 200 in 84ms                                     │
-╰────────────────────────╯╰───────────────────────────────────────────────────────╯
- ↑↓ choose · r restart · x stop · s start · f full screen · pgup/pgdn scroll · h history
-```
-
-From the command line it's the same: `wisp logs web -f` follows one, `wisp ps`
-lists them, `wisp down api` stops a bolt's.
-
-Prefer a window per command? Ask for one with `--window`, or make it the default:
-`wisp open-with terminal ghostty`, or `tmux`, which on a server you SSH into keeps
-everything in a `wisp` session you can attach to.
+Rather have a terminal window per command, or a tmux session? Choose it in Settings (`s`).
 
 ## Trust
 
-A cloned repository could put anything in its `.wisp.json`. So its commands, and any
-file or app that would execute when opened, **do not run until you've read them and said
-yes**:
-
-```bash
-wisp check    # see exactly what would run
-wisp trust    # allow this exact file
-```
-
-Approval is tied to the file's contents. Any change, a `git pull` included, asks again.
-
-## Commands
-
-| | |
-|---|---|
-| `wisp` | the dashboard (`wisp status` for plain text) |
-| `wisp <bolt>` | run a bolt; `--dry-run` shows what would happen first |
-| `wisp init` | write a `.wisp.json` for this project |
-| `wisp trust` | allow this project's commands |
-| `wisp list` | every workspace you have, from anywhere |
-| `wisp show` · `check` | what a workspace holds · what's wrong with it |
-| `wisp down` · `restart` | take a bolt down · and up again |
-| `wisp history` | past runs, and what each step printed |
-| `wisp hook pre-push check` | run a job from a git hook |
-| `wisp ps` · `logs` · `stop` | what's running |
-| `wisp scan ~/dev` | find the projects you already have |
-| `wisp open-with` | pick your editor and terminal |
-| `wisp doctor` | what works here, and where files live |
-
-Every command takes `--help`; most take `--json`.
-
-## For AI agents
-
-Wisp is built to be driven by coding agents. Point yours at it:
-
-```bash
-wisp spec
-```
-
-prints the complete reference: the file format, every command, JSON output and exit
-codes, and a check → dry-run → run → read-logs loop, written for an agent reading it cold
-([docs/SPEC.md](docs/SPEC.md) is the same text). Commands never prompt without a terminal,
-`--json` makes every result machine-readable, and `--inline` puts command output where the
-agent can read it.
-
-An agent can write and run bolts, but **it cannot approve its own commands**: `wisp
-trust` stays yours.
+A cloned repository could put anything in its `.wisp.json`, so **nothing in it that runs code
+starts until you've read it and allowed it** with `wisp trust`. Any change, a `git pull`
+included, asks again. AI agents can write and run bolts, but can't approve their own.
 
 ## Development
 
 ```bash
 pnpm install
-pnpm test              # the CLI's tests
-pnpm typecheck
-pnpm build             # cli/dist, for npm
-pnpm compile           # cli/bin/wisp, a standalone binary
+pnpm test && pnpm typecheck
+pnpm build             # cli/dist
 pnpm website:dev       # the website, at http://localhost:5173
 ```
 
-The repository holds two things:
-
-- `cli/`: Wisp itself, published as `@squaredasher/wisp`.
-  - `src/core`: the format, trust, discovery, running bolts. No CLI code, so other front
-    ends can use it.
-  - `src/platform`: everything specific to macOS, Linux and Windows.
-  - `src/cli` and `src/tui`: the `wisp` command and its dashboard.
-- `website/`: the landing page and docs, built with VitePress and served by a Cloudflare
-  Worker. `pnpm website:deploy` builds and deploys it.
+`cli/` is Wisp (`src/core`: the format, trust and running; `src/cli` and `src/tui`: the
+command and its dashboard). `website/` is the site and docs (VitePress, on Cloudflare).
+See [AGENTS.md](AGENTS.md) for conventions and [RELEASING.md](RELEASING.md) to cut a release.
 
 ## License
 
