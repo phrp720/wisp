@@ -6,7 +6,7 @@ titleTemplate: Start your working context with one word
 hero:
   name: Wisp
   text: Start your working context with one word.
-  tagline: The folders, links, apps and commands a task needs, opened and running in order. Free and open source, for macOS, Linux and Windows.
+  tagline: Describe how your project starts, once. From then on, one word brings it all up, and Wisp keeps watch while you work.
   actions:
     - theme: brand
       text: Get started

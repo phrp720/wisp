@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ComputerTerminal01Icon, ContainerIcon, FlashIcon, GitBranchIcon, LaptopIcon, ReloadIcon } from "@hugeicons/core-free-icons";
 import { onMounted, onBeforeUnmount, ref } from "vue";
 
 /** The demo at the top: `wisp api` typed, then each step of the bolt coming up in turn. */
@@ -38,21 +39,22 @@ async function copy() {
   }
 }
 
-/** One line-icon set for the features, drawn on a 24px grid: paths only, stroked in the brand colour. */
-const icons: Record<string, string[]> = {
-  // A bolt, and the smaller bolt it needs beside it
-  needs: ["M6.5 7L3 13h2.8L4.8 18l4.4-6.5H6.5L8 7z", "M16 2.5L10 12.5h4.5L13 21.5l7.5-11.5H16l2-7.5z"],
-  // Shipping containers, stacked
-  docker: ["M3 13h8v7H3z", "M13 13h8v7h-8z", "M8 5h8v7H8z", "M5.5 15.5v2", "M8.5 15.5v2", "M15.5 15.5v2", "M18.5 15.5v2", "M10.5 7.5v2", "M13.5 7.5v2"],
-  // Around again, and running
-  restart: ["M20 12a8 8 0 1 1 -2.3 -5.7", "M20 4v4h-4", "M10.5 9l4.5 3l-4.5 3z"],
-  // A git branch
-  git: ["M4 5a2 2 0 1 0 4 0a2 2 0 1 0 -4 0", "M4 19a2 2 0 1 0 4 0a2 2 0 1 0 -4 0", "M16 7a2 2 0 1 0 4 0a2 2 0 1 0 -4 0", "M6 7v10", "M18 9v1a5 5 0 0 1 -5 5h-4.5a2.5 2.5 0 0 0 -2.5 2.5"],
-  // A laptop
-  laptop: ["M5 5h14a1 1 0 0 1 1 1v9H4V6a1 1 0 0 1 1 -1z", "M2.5 18h19", "M4 15l-1.5 3", "M20 15l1.5 3"],
-  // A terminal split into panes, as tmux does
-  tmux: ["M4 4h16a1 1 0 0 1 1 1v14a1 1 0 0 1 -1 1H4a1 1 0 0 1 -1 -1V5a1 1 0 0 1 1 -1z", "M13 4v16", "M13 12h8", "M6 9.5l2.5 2l-2.5 2", "M9.5 15h1.5"],
+/**
+ * The features' icons, from Hugeicons (MIT): each one a list of SVG elements, drawn here
+ * with their attributes turned from camelCase to the names SVG uses.
+ */
+type IconData = readonly (readonly [string, Record<string, unknown>])[];
+const icons: Record<string, IconData> = {
+  needs: FlashIcon as IconData,
+  docker: ContainerIcon as IconData,
+  restart: ReloadIcon as IconData,
+  git: GitBranchIcon as IconData,
+  laptop: LaptopIcon as IconData,
+  tmux: ComputerTerminal01Icon as IconData,
 };
+function svgAttrs(attrs: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(attrs).filter(([name]) => name !== "key").map(([name, value]) => [name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`), value]));
+}
 
 const more = [
   { icon: "needs", title: "Bolts that need bolts", text: "Start the database before the API, even from another project. Each runs once per run." },
@@ -188,8 +190,8 @@ const more = [
       <ul class="grid">
         <li v-for="item in more" :key="item.title">
           <span class="icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-              <path v-for="d in icons[item.icon]" :key="d" :d="d" />
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none">
+              <component :is="tag" v-for="([tag, attrs], at) in icons[item.icon]" :key="at" v-bind="svgAttrs(attrs)" />
             </svg>
           </span>
           <div>

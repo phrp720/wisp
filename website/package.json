@@ -10,6 +10,7 @@
     "deploy": "vitepress build && wrangler deploy"
   },
   "devDependencies": {
+    "@hugeicons/core-free-icons": "4.3.5",
     "vitepress": "1.6.4",
     "wrangler": "4.164.0"
   }
