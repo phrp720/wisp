@@ -5,8 +5,7 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitepress";
 
 const here = dirname(fileURLToPath(import.meta.url));
-// Links are relative, so they work on whatever address the site is served from.
-const site = "";
+const site = "https://willowisp.dev";
 
 /**
  * /llms.txt, in the shape llmstxt.org sets out: what Wisp is, then links to the docs as
@@ -46,12 +45,14 @@ export default defineConfig({
   lang: "en",
   // /docs/trust rather than /docs/trust.html; the Worker serves both.
   cleanUrls: true,
+  sitemap: { hostname: site },
   appearance: "dark",
   lastUpdated: false,
   head: [
     ["link", { rel: "icon", type: "image/svg+xml", href: "/logo.svg" }],
     ["meta", { name: "theme-color", content: "#8b5cf6" }],
     ["meta", { property: "og:title", content: "Wisp" }],
+    ["meta", { property: "og:url", content: site }],
     ["meta", { property: "og:description", content: description }],
   ],
   themeConfig: {

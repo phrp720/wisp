@@ -507,7 +507,7 @@ function clip(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, Math.max(1, max - 1))}…` : text;
 }
 
-/** A finished step in a few words, to fit the list: "wait for port 5050", "open Cymph". */
+/** A finished step in a few words, to fit the list: "wait for port 5050", "open Acme". */
 function shortStep(step: HistoryStep, job: boolean): string {
   if (step.kind === "wait") {
     if (/^\d+(\.\d+)?s$/.test(step.label)) return `wait ${step.label}`;

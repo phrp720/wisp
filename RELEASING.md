@@ -1,0 +1,43 @@
+# Releasing Wisp
+
+A release is a tag. Push `v0.1.0` and `.github/workflows/release.yml` does the rest:
+
+1. **Check:** the tag must match `cli/package.json`'s version; typecheck and tests must pass.
+2. **Build:** the five binaries (macOS and Linux on arm64 and x64, Windows on x64), each
+   packed with the README and licence, plus `SHA256SUMS`.
+3. **GitHub Release:** the archives, with notes generated from the merged pull requests.
+4. **npm**, when switched on (below).
+
+The archives have no version in their names, so
+`https://github.com/phrp720/wisp/releases/latest/download/wisp-darwin-arm64.tar.gz`
+always points at the newest. The install script (`website/public/install.sh`) relies on that.
+
+## Cutting a release
+
+```bash
+# 1. Bump the version in both places (a test keeps them equal)
+#    cli/package.json        "version": "0.2.0"
+#    cli/src/cli/version.ts  export const VERSION = "0.2.0";
+# 2. Commit, merge to main, then tag it:
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+## Switching channels on
+
+Everything below lives in the repository's **Settings → Secrets and variables → Actions**.
+Secrets are encrypted and never appear in logs or in this repository.
+
+| Channel | Variable | Secret |
+|---|---|---|
+| npm (`@squaredasher/wisp`) | `PUBLISH_NPM` = `true` | `NPM_TOKEN`: an npm *granular* token that can publish only this package |
+| Website (Cloudflare Worker, on every push to main) | `DEPLOY_WEBSITE` = `true` | `CLOUDFLARE_API_TOKEN` (the *Edit Cloudflare Workers* template) and `CLOUDFLARE_ACCOUNT_ID` |
+
+npm packages are published with provenance, so npm shows they were built by this workflow
+from this repository.
+
+## Before the repository is public
+
+- Never commit a token, a `.env` or a machine's own paths; `.gitignore` covers the usual ones.
+- Commits show their author's email. To keep yours private, use GitHub's noreply address:
+  `git config user.email <id>+<user>@users.noreply.github.com`.

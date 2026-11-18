@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ComputerTerminal01Icon, ContainerIcon, FlashIcon, GitBranchIcon, LaptopIcon, ReloadIcon } from "@hugeicons/core-free-icons";
+import { ComputerTerminal01Icon, ContainerIcon, Copy01Icon, FlashIcon, GitBranchIcon, LaptopIcon, ReloadIcon, Tick02Icon } from "@hugeicons/core-free-icons";
 import { onMounted, onBeforeUnmount, ref } from "vue";
 
 /** The demo at the top: `wisp api` typed, then each step of the bolt coming up in turn. */
@@ -28,12 +28,20 @@ function play() {
 onMounted(play);
 onBeforeUnmount(() => timers.forEach(clearTimeout));
 
-const copied = ref(false);
-async function copy() {
+/** The ways to install, as tabs: the one that needs nothing first. */
+const installs = [
+  { tab: "macOS & Linux", command: "curl -fsSL https://willowisp.dev/install.sh | sh" },
+  // Windows has no one-line installer: it says, in words, the two ways there are.
+  { tab: "Windows", command: "" },
+  { tab: "npm", command: "npm install -g @squaredasher/wisp" },
+];
+const tab = ref(0);
+const copied = ref("");
+async function copy(command: string) {
   try {
-    await navigator.clipboard.writeText("npm install -g @squaredasher/wisp");
-    copied.value = true;
-    setTimeout(() => (copied.value = false), 1600);
+    await navigator.clipboard.writeText(command);
+    copied.value = command;
+    setTimeout(() => (copied.value = ""), 1600);
   } catch {
     // No clipboard here: the command is on screen to select by hand.
   }
@@ -206,11 +214,33 @@ const more = [
     <section class="wrap narrow cta">
       <h2>Free, open source, yours.</h2>
       <p class="lead">No account, no telemetry. One command to install, one word to start.</p>
-      <button class="install" type="button" @click="copy">
-        <span class="dim">$</span> npm install -g @squaredasher/wisp
-        <span class="copy">{{ copied ? "copied" : "copy" }}</span>
-      </button>
-      <p class="small">Or a single binary for macOS, Linux and Windows from <a href="https://github.com/phrp720/wisp/releases">Releases</a>. Then <a href="/docs/getting-started">get started</a>.</p>
+      <div class="installer">
+        <div class="tabs" role="tablist" aria-label="Install Wisp">
+          <button
+            v-for="(install, at) in installs"
+            :key="install.tab"
+            type="button"
+            role="tab"
+            :aria-selected="tab === at"
+            :class="{ on: tab === at }"
+            @click="tab = at"
+          >
+            {{ install.tab }}
+          </button>
+        </div>
+        <p v-if="!installs[tab].command" class="windows">
+          Install with <button type="button" class="inline" @click="tab = installs.findIndex((install) => install.tab === 'npm')">npm</button>, or download from the <a href="https://github.com/phrp720/wisp/releases">Releases page</a>.
+        </p>
+        <div v-else class="command">
+          <code><span class="dim">$ </span>{{ installs[tab].command }}</code>
+          <button type="button" class="copy" :aria-label="copied === installs[tab].command ? 'Copied' : 'Copy the command'" @click="copy(installs[tab].command)">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true">
+              <component :is="t" v-for="([t, a], at) in (copied === installs[tab].command ? Tick02Icon : Copy01Icon) as IconData" :key="at" v-bind="svgAttrs(a)" />
+            </svg>
+          </button>
+        </div>
+      </div>
+      <p class="small">Then <a href="/docs/getting-started">get started</a>: one file, one word.</p>
     </section>
   </div>
 </template>
@@ -264,9 +294,19 @@ pre { margin: 0; font-family: var(--vp-font-family-mono); font-size: 13px; line-
 
 .center-text { text-align: center; }
 .cta { text-align: center; }
-.install { margin: 18px auto 12px; display: inline-flex; gap: 12px; align-items: center; font-family: var(--vp-font-family-mono); font-size: 15px; background: var(--wisp-terminal-bg); color: var(--wisp-terminal-fg); border: 1px solid rgba(167, 139, 250, 0.3); border-radius: 12px; padding: 14px 18px; cursor: pointer; }
-.install:hover { border-color: var(--vp-c-brand-1); }
-.copy { font-family: var(--vp-font-family-base); font-size: 12px; color: var(--wisp-accent); border-left: 1px solid var(--wisp-line); padding-left: 12px; }
+.installer { max-width: 560px; margin: 28px auto 18px; text-align: left; border: 1px solid var(--wisp-line); border-radius: 14px; background: var(--wisp-terminal-bg); box-shadow: var(--wisp-shadow); overflow: hidden; }
+.tabs { display: flex; gap: 4px; padding: 6px 6px 0; border-bottom: 1px solid var(--wisp-divider); }
+.tabs button { font: inherit; font-size: 13px; font-weight: 500; color: var(--wisp-dim); background: none; border: 0; border-bottom: 2px solid transparent; padding: 8px 12px 9px; cursor: pointer; }
+.tabs button:hover { color: var(--wisp-terminal-fg); }
+.tabs button.on { color: var(--wisp-terminal-fg); border-bottom-color: var(--wisp-accent); }
+.windows { margin: 0; padding: 18px; font-size: 14px; line-height: 1.6; color: var(--wisp-terminal-fg); }
+.windows a, .windows .inline { color: var(--wisp-accent); text-decoration: underline; text-underline-offset: 2px; }
+.windows .inline { font: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+.windows code { font-family: var(--vp-font-family-mono); font-size: 13px; background: var(--wisp-band-code-bg); color: var(--wisp-band-code); padding: 2px 6px; border-radius: 4px; }
+.command { display: flex; align-items: center; gap: 12px; padding: 16px 12px 16px 18px; }
+.command code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font-family: var(--vp-font-family-mono); font-size: 14px; color: var(--wisp-terminal-fg); background: none; padding: 0; }
+.copy { flex-shrink: 0; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 8px; border: 1px solid var(--wisp-line); background: none; color: var(--wisp-dim); cursor: pointer; }
+.copy:hover { color: var(--wisp-accent); border-color: var(--wisp-accent); }
 .small { font-size: 14px; color: var(--vp-c-text-2); }
 .small a { color: var(--vp-c-brand-1); }
 

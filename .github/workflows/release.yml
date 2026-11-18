@@ -1,14 +1,46 @@
 name: Release
 
+# Push a tag like v0.1.0 to release. The tag must match cli/package.json's version.
+#
+# GitHub Releases always happens. npm is off until switched on, so the first release needs
+# no tokens at all (see RELEASING.md): variable PUBLISH_NPM = true, secret NPM_TOKEN.
+
 on:
   push:
     tags: ["v*"]
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      WISP_HEADLESS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: The tag matches the package's version
+        run: |
+          version="$(node -p 'require("./cli/package.json").version')"
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match cli/package.json ($version)"
+            exit 1
+          fi
+      - run: pnpm typecheck
+      - run: pnpm test
+
   binaries:
+    needs: check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,11 +48,66 @@ jobs:
       - run: bun install
         working-directory: cli
       - name: Compile for every platform
+        working-directory: cli
+        run: bun scripts/compile.ts darwin-arm64 darwin-x64 linux-x64 linux-arm64 windows-x64
+      - name: Package, with the README and licence, and checksums
         run: |
-          cd cli && bun scripts/compile.ts darwin-arm64 darwin-x64 linux-x64 linux-arm64 windows-x64
-          cd .. && mkdir -p release && mv cli/bin/wisp-* release/
-          cd release && sha256sum * > SHA256SUMS
+          mkdir -p release
+          for target in darwin-arm64 darwin-x64 linux-x64 linux-arm64; do
+            dir="$(mktemp -d)"
+            cp "cli/bin/wisp-$target" "$dir/wisp"
+            chmod +x "$dir/wisp"
+            cp LICENSE README.md "$dir/"
+            tar -czf "release/wisp-$target.tar.gz" -C "$dir" wisp LICENSE README.md
+          done
+          dir="$(mktemp -d)"
+          cp cli/bin/wisp-windows-x64.exe "$dir/wisp.exe"
+          cp LICENSE README.md "$dir/"
+          (cd "$dir" && zip -q "$GITHUB_WORKSPACE/release/wisp-windows-x64.zip" wisp.exe LICENSE README.md)
+          (cd release && sha256sum -- * > SHA256SUMS)
+          cat release/SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release
+          path: release/
+          if-no-files-found: error
+
+  github:
+    needs: binaries
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release
+          path: release
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" release/* --title "$GITHUB_REF_NAME" --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" release/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes --verify-tag
+
+  npm:
+    needs: github
+    if: vars.PUBLISH_NPM == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Lets npm record that this workflow, from this repository, built the package.
+      id-token: write
+    env:
+      WISP_HEADLESS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+      - name: Publish @squaredasher/wisp
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: "true"
+        run: pnpm --filter @squaredasher/wisp publish --access public --no-git-checks

@@ -248,7 +248,7 @@ function hostOf(value: string): string {
 
 /**
  * A filter as you type: every word must appear somewhere in what the row says about itself,
- * in any order and any case — "cymph fail" finds Cymph's failed runs.
+ * in any order and any case — "acme fail" finds Acme's failed runs.
  */
 export function matchesAll(query: string, ...texts: (string | undefined)[]): boolean {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);

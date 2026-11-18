@@ -7,12 +7,23 @@ folder, the page in your browser.
 
 ## Install
 
+On macOS and Linux, one line, no Node needed:
+
+```bash
+curl -fsSL https://willowisp.dev/install.sh | sh
+```
+
+It downloads the build for your machine, checks it against the release's checksums, and
+puts `wisp` in `~/.local/bin`. [Read it first](https://willowisp.dev/install.sh) if you like.
+
+With Node, on any system:
+
 ```bash
 npm install -g @squaredasher/wisp
 ```
 
-Or download a single binary for macOS, Linux or Windows from
-[Releases](https://github.com/phrp720/wisp/releases). It needs no Node.
+Or download it from [Releases](https://github.com/phrp720/wisp/releases): macOS, Linux and
+Windows.
 
 Check it works:
 

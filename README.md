@@ -34,12 +34,23 @@ server started, editor in the right folder, the page in your browser.
 
 ## Install
 
+On macOS and Linux, one line, no Node needed:
+
+```bash
+curl -fsSL https://willowisp.dev/install.sh | sh
+```
+
+It downloads the build for your machine, checks it against the release's checksums, and
+puts `wisp` in `~/.local/bin`. [Read it first](https://willowisp.dev/install.sh) if you like.
+
+With Node, on any system:
+
 ```bash
 npm install -g @squaredasher/wisp
 ```
 
-Or download a single binary (no Node needed) from
-[Releases](https://github.com/phrp720/wisp/releases) for macOS, Linux or Windows.
+Or download it from [Releases](https://github.com/phrp720/wisp/releases): macOS, Linux and
+Windows.
 
 ## Quick start
 
@@ -114,7 +125,7 @@ own. (`E` still opens the file itself in your `$EDITOR`, for those who'd rather.
   and output; a failed step opens on its log. `r` retries only what failed.
 
 `/` searches wherever you are: every workspace and bolt from the main screen, what's running
-on Running, past runs on History (`cymph failed` finds Cymph's failed runs). Questions
+on Running, past runs on History (`acme failed` finds Acme's failed runs). Questions
 (trust a file, delete a bolt) are two buttons: `←→` picks, `⏎` confirms, `esc` backs out,
 and anything that deletes or allows starts on "no". It's all live: when a server crashes or
 a database turns unhealthy, Wisp says so at the bottom of the screen. `?` lists every key.
