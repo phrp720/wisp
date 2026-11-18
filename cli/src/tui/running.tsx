@@ -146,13 +146,15 @@ export function PanesPanel(props: {
     if (entry.type === "run") {
       const run = entry.run;
       const restarts = selected ? restartsOf(lines) : { count: 0, gaveUp: false };
-      const right = run.alive
+      const right = run.alive && run.waiting
+        ? "waiting for an answer"
+        : run.alive
         ? [`up ${since(run.startedAt).replace(" ago", "").replace("just now", "<1m")}`, restarts.count > 0 ? `${restarts.count}× restarted` : ""].filter(Boolean).join(" · ")
         : restarts.gaveUp
           ? "gave up"
           : endedAs(run);
       const failedRun = restarts.gaveUp || (!run.alive && run.exitCode !== undefined && run.exitCode !== 0);
-      line(run.id, selected, entry.depth ?? 1, <Text color={run.alive ? TONE.up : failedRun ? TONE.failed : TONE.stopped}>{glyphs.dot}</Text>, run.label, right, failedRun ? TONE.failed : undefined);
+      line(run.id, selected, entry.depth ?? 1, <Text color={run.waiting ? TONE.busy : run.alive ? TONE.up : failedRun ? TONE.failed : TONE.stopped}>{glyphs.dot}</Text>, run.label, right, run.waiting ? TONE.busy : failedRun ? TONE.failed : undefined);
       return;
     }
     const container = entry.container;
@@ -184,7 +186,7 @@ export function PanesPanel(props: {
       <Text wrap="truncate-end">
         <Text bold>{item.run.label}</Text>
         {item.run.command !== item.run.label ? <Text dimColor>{`  ${item.run.command}`}</Text> : null}
-        {item.run.alive ? <Text color={TONE.up}>{`  ${glyphs.dot} running`}</Text> : <Text color={item.run.exitCode ? TONE.failed : TONE.stopped}>{`  ${glyphs.dot} ${endedAs(item.run)}`}</Text>}
+        {item.run.alive && item.run.waiting ? <Text color={TONE.busy}>{`  ${glyphs.dot} waiting for an answer: "${item.run.waiting}"`}</Text> : item.run.alive ? <Text color={TONE.up}>{`  ${glyphs.dot} running`}</Text> : <Text color={item.run.exitCode ? TONE.failed : TONE.stopped}>{`  ${glyphs.dot} ${endedAs(item.run)}`}</Text>}
         <Text dimColor>{startedBy(item.run, history, undefined, true).replace(" from ", "  started by ")}</Text>
         {restartsOf(lines).count > 0 ? <Text color={TONE.busy}>{`  restarted ${restartsOf(lines).count}×`}</Text> : null}
       </Text>

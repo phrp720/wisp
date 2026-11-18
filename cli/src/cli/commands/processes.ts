@@ -11,7 +11,7 @@ import {
   tail,
   type RunStatus,
 } from "../../core/processes.js";
-import { ago, bold, dim, green, plural, yellow } from "../format.js";
+import { ago, bold, dim, green, plural, red, yellow } from "../format.js";
 import { emitJson } from "../lib/context.js";
 import type { CommandDef } from "../lib/define.js";
 
@@ -48,7 +48,15 @@ export const ps: CommandDef<{ all?: boolean; clear?: boolean; json?: boolean }> 
       shown.map(async (run) => {
         const restarts = run.log ? ((await readTail(run.log, 2000)).match(/\[wisp\] restarting/g)?.length ?? 0) : 0;
         return [
-          run.alive ? green("● running") : dim("○ stopped"),
+          run.alive && run.waiting
+            ? yellow("● waiting")
+            : run.alive
+              ? green("● running")
+              : run.exitCode === 0
+                ? dim("○ finished")
+                : run.exitCode !== undefined
+                  ? red(`○ failed (${run.exitCode})`)
+                  : dim("○ stopped"),
           bold(run.id),
           run.label,
           run.workspaceName,
@@ -59,6 +67,10 @@ export const ps: CommandDef<{ all?: boolean; clear?: boolean; json?: boolean }> 
       }),
     );
     printTable(["STATUS", "ID", "NAME", "WORKSPACE", "UP", "RESTARTS", "WHERE"], rows);
+    for (const run of shown.filter((candidate) => candidate.alive && candidate.waiting)) {
+      console.log(yellow(`\n! ${run.label} is waiting for an answer: "${run.waiting}"`));
+      console.log(dim("  It can't get one in the background: give it a flag like --yes, or run it in a window: --window"));
+    }
     console.log(dim(`\n\`wisp logs <name> -f\` follows one · \`wisp stop <name>\` stops it`));
   },
 };

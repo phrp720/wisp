@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { forgetProject, knownProjects, recordProject, setOpenWithDefaults, getOpenWithDefaults } from "./config.js";
 import { detectEnvironment } from "./environment.js";
-import { listRuns, matchRun, startRun, stopRun, type RunStatus } from "./processes.js";
+import { listRuns, matchRun, questionIn, startRun, stopRun, type RunStatus } from "./processes.js";
 import { loginShell, posixQuote, shellInvocation, windowsQuote } from "./shell.js";
 import { sameUrl } from "./url.js";
 import { matchWorkspace } from "./workspaces.js";
@@ -115,6 +115,23 @@ describe("background runs", () => {
     await new Promise((resolve) => setTimeout(resolve, 200));
     expect((await listRuns())[0]!.alive).toBe(false);
   });
+
+  it("know a question when their output ends on one, and not otherwise", () => {
+    const asks = ["Ok to proceed? (y) ", "? Port 3000 is in use. Use 3001 instead? › (Y/n)", "Apply 3 migrations? [y/N]: ", "Password:", "Enter your GitHub token:", "Continue? (yes/no)", "\u001b[1mDelete all?\u001b[0m ", "line one\nWhat is your name? "];
+    const says = ["Server ready on http://localhost:3000", "GET /api?x=1 200", "  ➜  Local:   http://localhost:5173/", "compiled successfully", "Tests 21 passed", "token refreshed", ""];
+    for (const line of asks) expect(questionIn(line), line).toBeDefined();
+    for (const line of says) expect(questionIn(line), line).toBeUndefined();
+  });
+
+  it("are seen waiting when they go quiet on a question", async () => {
+    const started = await startRun({ label: "asks", command: "ask", workspace: "/w/.wisp.json", workspaceName: "w", asset: "command:asks", invocation: { file: "/bin/sh", args: ["-c", "printf 'Use port 3001 instead? (Y/n) '; read answer; sleep 30"] }, graceMs: 300 });
+    expect((await listRuns()).find((run) => run.id === started.run.id)?.waiting).toBeUndefined();
+    await new Promise((resolve) => setTimeout(resolve, 3500));
+    const run = (await listRuns()).find((candidate) => candidate.id === started.run.id)!;
+    expect(run.alive).toBe(true);
+    expect(run.waiting).toBe("Use port 3001 instead? (Y/n)");
+    stopRun(run);
+  }, 10_000);
 
   it("remember how they ended: finished, failed with a code, or stopped", async () => {
     const start = (label: string, script: string) =>

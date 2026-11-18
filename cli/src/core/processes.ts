@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { closeSync, openSync, readFileSync, readSync, statSync } from "node:fs";
 import { mkdir, open, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -50,6 +50,47 @@ export interface RunStatus extends Run {
   alive: boolean;
   /** How it ended, once it has: 0 finished, anything else failed. Unset: stopped, or unknown. */
   exitCode?: number;
+  /** The question it seems to be waiting on: gone quiet, its last line asking something. */
+  waiting?: string;
+}
+
+/** How long a command must have been quiet before a question-like last line counts. */
+const QUIET_MS = 3000;
+
+/**
+ * Whether output ends on a question: "? ", "(y/n)", "[Y/n]", or a prompt for a password,
+ * token or code. Returns that last line, or nothing.
+ */
+export function questionIn(output: string): string | undefined {
+  // Played out as a terminal would show it (progress bars, backspaces), then as plain text.
+  const lines = stripAnsi(cleanOutput(output)).split("\n").map((line) => line.trim());
+  const last = [...lines].reverse().find((line) => line.length > 0);
+  if (!last || last.length > 200) return undefined;
+  const asks =
+    /\?\s*(\[[^\]]{1,12}\]|\([^)]{1,12}\))?\s*:?$/.test(last) ||
+    /[[(]\s*(y\/n|yes\/no)\s*[\])]/i.test(last) ||
+    /\b(password|passphrase|token|code|otp|pin)\b[^:]{0,40}:$/i.test(last);
+  return asks ? last : undefined;
+}
+
+/** The question a running background command is waiting on, judged from the end of its log. */
+function waitingOn(run: Run): string | undefined {
+  if (run.kind !== "background" || !run.log) return undefined;
+  try {
+    const { mtimeMs, size } = statSync(run.log);
+    if (Date.now() - mtimeMs < QUIET_MS || size === 0) return undefined;
+    const length = Math.min(size, 2048);
+    const buffer = Buffer.alloc(length);
+    const fd = openSync(run.log, "r");
+    try {
+      readSync(fd, buffer, 0, length, size - length);
+    } finally {
+      closeSync(fd);
+    }
+    return questionIn(buffer.toString("utf8"));
+  } catch {
+    return undefined;
+  }
 }
 
 /** How many finished runs to keep, logs included. Running ones are always kept. */
@@ -454,7 +495,8 @@ function withStatus(run: Run, dead?: Set<number>): RunStatus {
   if (pid) {
     const alive = dead ? signalable(pid) && !dead.has(pid) : isAlive(pid);
     const exitCode = alive ? undefined : exitCodeOf(run);
-    return { ...run, pid, alive, ...(exitCode === undefined ? {} : { exitCode }) };
+    const waiting = alive ? waitingOn(run) : undefined;
+    return { ...run, pid, alive, ...(exitCode === undefined ? {} : { exitCode }), ...(waiting ? { waiting } : {}) };
   }
   // A window that has not reported in yet is starting, for a while; then it never will.
   const starting = Date.now() - Date.parse(run.startedAt) < STARTING_MS;
@@ -462,7 +504,7 @@ function withStatus(run: Run, dead?: Set<number>): RunStatus {
 }
 
 function strip(run: RunStatus): Run {
-  const { alive: _alive, exitCode: _exitCode, ...rest } = run;
+  const { alive: _alive, exitCode: _exitCode, waiting: _waiting, ...rest } = run;
   return rest;
 }
 

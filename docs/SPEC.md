@@ -99,6 +99,10 @@ names the folder.
 - `restart` brings a command back when it stops: `"on-failure"` after a crash, `"always"`
   whenever it exits. It waits 1s, 2s, 4s… up to 30s, and gives up after 10 in a row. It
   keeps working after Wisp is closed.
+- A command that asks something can't be answered in the background. **Agents: give it a
+  non-interactive flag (`--yes`, `CI=1`) in `run`.**
+- A background command whose output goes quiet on a question is shown as **waiting**
+  (`wisp ps`, `"waiting"` in `wisp ps --json`). It can't be answered there: fix the step.
 
 ## Per-OS values
 
