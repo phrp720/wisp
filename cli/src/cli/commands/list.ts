@@ -43,7 +43,7 @@ export const list: CommandDef<{ json?: boolean }> = {
             ? green(" ✓")
             : yellow(read.trust === "stale" ? " ! changed" : " ! untrusted")
           : "";
-      // What to type for it from any folder: `wisp flower-testbed`, or `wisp flower-testbed <bolt>`.
+      // What to type for it from any folder: `wisp payments-service`, or `wisp payments-service <bolt>`.
       console.log(`${current} ${title(workspace)} ${cyan(slugify(workspace.name))}  ${counts(workspace)}  ${where}${trust}`);
     }
 

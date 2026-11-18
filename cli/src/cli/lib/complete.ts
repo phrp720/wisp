@@ -37,7 +37,7 @@ export const SHELLS = ["zsh", "bash", "fish"];
 
 /**
  * The suggestions for the last of `words`, the one being typed. `words` are what follows
- * `wisp` on the line, so `["flower-testbed", "se"]` asks for that workspace's bolts.
+ * `wisp` on the line, so `["payments-service", "se"]` asks for that workspace's bolts.
  *
  * Bolts and workspaces are offered as slugs ("work-on-api"), which need no quoting and
  * which Wisp matches like their names.

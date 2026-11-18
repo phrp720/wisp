@@ -253,6 +253,19 @@ describe("the TUI", () => {
     expect(trust).toHaveBeenCalledWith(infra.workspace.file, infra.hash);
   });
 
+  it("offers + add a bolt in an empty workspace, and ⏎ opens the form instead of running", async () => {
+    const empty = read("/home/.config/wisp/workspaces/Notes.json", { name: "Notes", bolts: [] }, "trusted", true);
+    const run = vi.fn(services().run);
+    const app = await open(services({ run }, { reads: [empty], here: empty.workspace.file, unreadable: [] }));
+    app.stdin.write(ARROW_RIGHT);
+    await tick();
+    expect(app.lastFrame()).toContain("+ add a bolt");
+    app.stdin.write("\r");
+    await tick();
+    expect(app.lastFrame()).toContain("A new bolt in Notes");
+    expect(run).not.toHaveBeenCalled();
+  });
+
   it("asks before running a bolt that would start only half, and runs it once trusted", async () => {
     const shop = (trust: TrustState) =>
       read("/dev/shop/.wisp.json", {
@@ -943,7 +956,7 @@ describe("history steps", () => {
     expect(describeHistoryStep(step("wait", "port 5432"), false)).toBe("wait until port 5432 is open");
     expect(describeHistoryStep(step("wait", "http://localhost:3000"), false)).toBe("wait until http://localhost:3000 answers");
     expect(describeHistoryStep(step("link", "http://localhost:3000"), false)).toBe("open http://localhost:3000");
-    expect(describeHistoryStep(step("command", "Flower Testbed dev", "pnpm dev"), false)).toBe("start Flower Testbed dev");
+    expect(describeHistoryStep(step("command", "Payments Service dev", "pnpm dev"), false)).toBe("start Payments Service dev");
     expect(describeHistoryStep(step("command", "test", "pnpm test"), true)).toBe("run test");
   });
 });

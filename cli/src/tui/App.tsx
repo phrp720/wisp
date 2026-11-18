@@ -759,7 +759,10 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
       return setMessage(current.workspace.trusted ? "already trusted" : "nothing here needs trust");
     }
     if ((key.return && focus === "bolts") || input === "n") {
-      if (!bolt) return setMessage("no bolts yet — e to edit the file");
+      if (!bolt) {
+        if (input === "n") return setMessage("no bolts yet: a adds one");
+        return setView({ kind: "new-bolt", file: current.workspace.file, workspace: current.workspace.name });
+      }
       void runBolt(current, bolt.label, input === "n");
     }
   }, { isActive: !SELF_DRIVEN.has(view.kind) });
@@ -896,7 +899,8 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
             await reload(file);
             setBoltIndex(0);
             setFocus("bolts");
-            setView({ kind: "editor", file, bolt: "Start" });
+            // Straight to its first bolt: a workspace is only as useful as what it runs.
+            setView({ kind: "new-bolt", file, workspace: values["name"]?.trim() ?? "" });
             return undefined;
           }}
         />

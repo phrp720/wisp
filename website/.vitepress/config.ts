@@ -72,15 +72,21 @@ export default defineConfig({
           text: "Start here",
           items: [
             { text: "Getting started", link: "/docs/getting-started" },
+            { text: "Questions", link: "/docs/questions" },
           ],
         },
         {
-          text: "Using it",
+          text: "Use it",
           items: [
             { text: "The dashboard", link: "/docs/dashboard" },
-            { text: "The .wisp.json file", link: "/docs/file" },
-            { text: "Jobs and history", link: "/docs/jobs" },
             { text: "What's running", link: "/docs/running" },
+            { text: "Jobs and history", link: "/docs/jobs" },
+          ],
+        },
+        {
+          text: "Set it up",
+          items: [
+            { text: "The .wisp.json file", link: "/docs/file" },
             { text: "Settings", link: "/docs/settings" },
             { text: "Trust", link: "/docs/trust" },
           ],
@@ -90,7 +96,6 @@ export default defineConfig({
           items: [
             { text: "Commands", link: "/docs/commands" },
             { text: "File reference", link: "/docs/reference" },
-            { text: "Questions", link: "/docs/questions" },
             { text: "For AI agents", link: "/docs/agents" },
           ],
         },

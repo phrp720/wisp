@@ -117,7 +117,13 @@ export function WorkspacePanel(props: { read: WorkspaceRead; boltIndex: number; 
         {`${glyphs.bolt}Bolts`}
       </Text>
       {bolts.length === 0 ? (
-        <Text dimColor>No bolts yet — press a to add the first one.</Text>
+        <>
+          <Text bold={focused}>
+            {focused ? glyphs.pointer : " "} <Text color={focused ? undefined : "magenta"} inverse={focused}>+ add a bolt</Text>
+          </Text>
+          <Text> </Text>
+          <Text dimColor>{"  A bolt is one thing you do, like \"Work on the API\": what to start, in order."}</Text>
+        </>
       ) : (
         shownBolts.map((entry, position) => {
           const at = offset + position;

@@ -28,10 +28,10 @@ Every command takes `--help`; most take `--json`, for scripts and agents.
 ### How Wisp reads `wisp <name>`
 
 - **Inside a project,** a name is one of its bolts first: `wisp api` runs "Work on api".
-- **Otherwise it's a workspace:** `wisp flower-testbed` lists that workspace's bolts, and
-  `wisp flower-testbed services` runs one.
-- **A name can be** the full name in quotes (`"Flower Testbed"`), its slug (`flower-testbed`,
-  shown by `wisp list`), or any part of it that only one matches (`flower`). When several
+- **Otherwise it's a workspace:** `wisp payments-service` lists that workspace's bolts, and
+  `wisp payments-service services` runs one.
+- **A name can be** the full name in quotes (`"Payments Service"`), its slug (`payments-service`,
+  shown by `wisp list`), or any part of it that only one matches (`pay`). When several
   match, Wisp lists them and runs nothing.
 
 `down` and `restart` take `--deps`, for the bolts it needed too; `down --dry-run` shows what
