@@ -221,7 +221,10 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
           const was = before.get(run.id);
           if (was === true && !run.alive) {
             if (expected.current.delete(run.id)) continue;
-            notify(`${run.label} stopped (${run.workspaceName}) — press p to see its last output`, "bad");
+            // Finished by itself is news, not trouble; only a failure or a crash is red.
+            if (run.exitCode === 0) notify(`${run.label} finished (${run.workspaceName})`, "info");
+            else if (run.exitCode !== undefined) notify(`${run.label} failed, exit code ${run.exitCode} (${run.workspaceName}) — press p to see why`, "bad");
+            else notify(`${run.label} stopped (${run.workspaceName}) — press p to see its last output`, "bad");
           } else if (was === undefined && run.alive && !expected.current.has(run.id)) {
             notify(`${run.label} started (${run.workspaceName})`, "good");
           }
@@ -348,7 +351,12 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
       start: (callbacks: Parameters<Services["run"]>[2]) => Promise<SwitchResult>,
       title: string,
     ) => {
-      if (busy.current) return;
+      // One run at a time on this screen. Say so, rather than let ⏎ do nothing.
+      if (busy.current) {
+        const going = activeRef.current;
+        setMessage(`${going ? `"${going.bolt}"` : "A run"} is still starting. Run another once it's done`);
+        return;
+      }
       busy.current = true;
       const controller = new AbortController();
       abort.current = controller;
@@ -722,6 +730,10 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
       return setView({ kind: "editor", file: current.workspace.file, bolt: bolt.label });
     }
     if (input === "a") return setView({ kind: "new-bolt", file: current.workspace.file, workspace: current.workspace.name });
+    // D deletes what is selected: a workspace on the left, a bolt on the right.
+    if (input === "D" && focus === "workspaces") {
+      return setView({ kind: "delete-workspace", file: current.workspace.file, name: current.workspace.name, personal: current.workspace.personal });
+    }
     if (input === "D" && bolt) return setView({ kind: "delete-bolt", file: current.workspace.file, bolt: bolt.label });
     if (input === "v" && bolt) return setView({ kind: "view", file: current.workspace.file, bolt: bolt.label });
     if (input === "s") return setView({ kind: "settings" });
@@ -799,6 +811,12 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
           glyphs={glyphs}
           height={bodyHeight}
           onAnswer={async (chosen) => {
+            if (chosen === "never") {
+              setView({ kind: "browse" });
+              await services.declineSetup(view.suggestion.dir).catch(() => undefined);
+              setMessage("Won't ask here again. `wisp init` still sets it up whenever you like");
+              return;
+            }
             if (!chosen) {
               setView({ kind: "browse" });
               setMessage("Not now — press a in a workspace to add bolts by hand, or run `wisp init` later");
@@ -950,6 +968,27 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
             onCancel={() => setView({ kind: "browse" })}
           />
         </Box>
+      ) : view.kind === "delete-workspace" ? (
+        <Confirm
+          title={view.personal ? `Delete the workspace "${view.name}"?` : `Remove "${view.name}" from your list?`}
+          detail={
+            view.personal
+              ? "Its file and its bolts go. Anything it started keeps running: x takes a bolt down first."
+              : "Its .wisp.json stays in the repository, untouched. Running one of its bolts lists it again."
+          }
+          yes={view.personal ? "delete it" : "remove it"}
+          glyphs={glyphs}
+          height={bodyHeight}
+          onAnswer={(yes) => {
+            setView({ kind: "browse" });
+            if (!yes) return;
+            const { file, name, personal } = view;
+            void (personal ? services.editing.removePersonalWorkspace(file) : services.editing.forgetProject(file))
+              .then(() => reload())
+              .then(() => say(personal ? `Deleted "${name}"` : `Removed "${name}" from your list`))
+              .catch((error: unknown) => setMessage(describe(error)));
+          }}
+        />
       ) : view.kind === "delete-bolt" ? (
         <Confirm
           title={`Delete the bolt "${view.bolt}"?`}

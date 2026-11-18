@@ -14,6 +14,7 @@ import {
   moveBolt,
   moveStep,
   removeBolt,
+  removePersonalWorkspace,
   removeStep,
   renameBolt,
   replaceStep,
@@ -129,5 +130,13 @@ describe("editing a workspace without writing JSON", () => {
     expect(read.workspace.bolts).toEqual([]);
     expect(read.diagnostics.filter((diagnostic) => diagnostic.level === "error")).toEqual([]);
     await expect(createPersonalWorkspace("Morning")).rejects.toThrow(/already/);
+  });
+
+  it("deletes your own workspaces, and never a project's file", async () => {
+    const created = await createPersonalWorkspace("Notes");
+    await removePersonalWorkspace(created);
+    await expect(readFile(created, "utf8")).rejects.toThrow();
+    await expect(removePersonalWorkspace(file)).rejects.toThrow(/Only your own workspaces/);
+    expect(await readFile(file, "utf8")).toContain("bolts");
   });
 });

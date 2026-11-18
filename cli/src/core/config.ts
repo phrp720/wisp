@@ -26,6 +26,18 @@ export async function updateConfig(change: (config: Config) => Config): Promise<
   });
 }
 
+/** Whether you asked never to be offered a .wisp.json for this folder. */
+export async function setupDeclined(dir: string): Promise<boolean> {
+  const config = await loadConfig().catch(() => undefined);
+  return (config?.noSetup ?? []).includes(resolve(expandHome(dir)));
+}
+
+/** "Don't ask again here": the dashboard stops offering to set this folder up. */
+export async function declineSetup(dir: string): Promise<void> {
+  const path = resolve(expandHome(dir));
+  await updateConfig((config) => ({ ...config, noSetup: [...(config.noSetup ?? []).filter((entry) => entry !== path), path] }));
+}
+
 export async function getOpenWithDefaults(): Promise<OpenWithDefaults> {
   const config = await loadConfig().catch(() => undefined);
   return config?.openWith ?? {};
@@ -118,6 +130,11 @@ function normalizeConfig(value: unknown): Config {
   const roots = value["roots"];
   if (Array.isArray(roots)) {
     config.roots = roots.filter((root): root is string => typeof root === "string" && !!root.trim());
+  }
+
+  const noSetup = value["noSetup"];
+  if (Array.isArray(noSetup)) {
+    config.noSetup = noSetup.filter((dir): dir is string => typeof dir === "string" && !!dir.trim());
   }
 
   const projects = value["projects"];

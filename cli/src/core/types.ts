@@ -192,6 +192,8 @@ export interface Config {
   /** Directories to look in for project files, beyond the ones you have used. */
   roots?: string[];
   projects?: KnownProject[];
+  /** Folders where you said "don't ask again" to setting up a .wisp.json. */
+  noSetup?: string[];
 }
 
 /**

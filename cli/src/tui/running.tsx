@@ -140,7 +140,7 @@ export function PanesPanel(props: {
       const step = entry.step;
       const mark = step.skipped ? <Text dimColor>{glyphs.skip}</Text> : step.ok ? <Text color={TONE.up}>{glyphs.ok}</Text> : <Text color={TONE.failed}>{glyphs.fail}</Text>;
       const label = step.kind === "bolt" ? `${glyphs.bolt}${step.label}` : shortStep(step, entry.entry.job ?? false);
-      line(`${paneKey(entry)}`, selected, 1, mark, label, step.skipped ? "" : !step.ok ? "failed" : step.durationMs >= 1000 ? `${(step.durationMs / 1000).toFixed(1)}s` : "", !step.ok && !step.skipped ? TONE.failed : undefined);
+      line(`${paneKey(entry)}`, selected, entry.depth ?? 1, mark, label, step.skipped ? "" : !step.ok ? "failed" : step.durationMs >= 1000 ? `${(step.durationMs / 1000).toFixed(1)}s` : "", !step.ok && !step.skipped ? TONE.failed : undefined);
       return;
     }
     if (entry.type === "run") {
@@ -150,14 +150,15 @@ export function PanesPanel(props: {
         ? [`up ${since(run.startedAt).replace(" ago", "").replace("just now", "<1m")}`, restarts.count > 0 ? `${restarts.count}× restarted` : ""].filter(Boolean).join(" · ")
         : restarts.gaveUp
           ? "gave up"
-          : "stopped";
-      line(run.id, selected, 1, <Text color={run.alive ? TONE.up : restarts.gaveUp ? TONE.failed : TONE.stopped}>{glyphs.dot}</Text>, run.label, right, restarts.gaveUp ? TONE.failed : undefined);
+          : endedAs(run);
+      const failedRun = restarts.gaveUp || (!run.alive && run.exitCode !== undefined && run.exitCode !== 0);
+      line(run.id, selected, entry.depth ?? 1, <Text color={run.alive ? TONE.up : failedRun ? TONE.failed : TONE.stopped}>{glyphs.dot}</Text>, run.label, right, failedRun ? TONE.failed : undefined);
       return;
     }
     const container = entry.container;
     const mood = containerMood(container);
     const color = mood.tone === "good" ? TONE.up : mood.tone === "busy" ? TONE.busy : mood.tone === "bad" ? TONE.failed : TONE.stopped;
-    line(`container:${container.name}`, selected, 1, <Text color={color}>{glyphs.dot}</Text>, container.service, mood.word, mood.tone === "bad" ? TONE.failed : undefined);
+    line(`container:${container.name}`, selected, entry.depth ?? 1, <Text color={color}>{glyphs.dot}</Text>, container.service, mood.word, mood.tone === "bad" ? TONE.failed : undefined);
   });
 
   const header =
@@ -183,7 +184,7 @@ export function PanesPanel(props: {
       <Text wrap="truncate-end">
         <Text bold>{item.run.label}</Text>
         {item.run.command !== item.run.label ? <Text dimColor>{`  ${item.run.command}`}</Text> : null}
-        {item.run.alive ? <Text color={TONE.up}>{`  ${glyphs.dot} running`}</Text> : <Text color={TONE.stopped}>{`  ${glyphs.dot} stopped`}</Text>}
+        {item.run.alive ? <Text color={TONE.up}>{`  ${glyphs.dot} running`}</Text> : <Text color={item.run.exitCode ? TONE.failed : TONE.stopped}>{`  ${glyphs.dot} ${endedAs(item.run)}`}</Text>}
         <Text dimColor>{startedBy(item.run, history, undefined, true).replace(" from ", "  started by ")}</Text>
         {restartsOf(lines).count > 0 ? <Text color={TONE.busy}>{`  restarted ${restartsOf(lines).count}×`}</Text> : null}
       </Text>
@@ -304,6 +305,7 @@ export function groupPanes(head: PaneItem[], runs: RunStatus[], containers: Cont
   }
 
   for (const found of groups.values()) found.members = pipeline(found.group, found.members, history);
+  nestNeededBolts(groups, history);
 
   // Within a workspace, its bolts by name, and what no bolt started last.
   const ordered = [...groups.values()].sort(
@@ -313,6 +315,37 @@ export function groupPanes(head: PaneItem[], runs: RunStatus[], containers: Cont
       left.group.title.localeCompare(right.group.title),
   );
   return [...head, ...ordered.flatMap(({ group, members }) => [{ type: "group" as const, group }, ...members])];
+}
+
+/**
+ * A bolt that came up only because another bolt needed it is part of that run, the way
+ * GitHub shows a called workflow inside the run that called it: its containers and commands
+ * move under the "⚡ Services" line of the bolt that needed it, and its own group goes.
+ * Run on its own since, it keeps its own place.
+ */
+function nestNeededBolts(groups: Map<string, { group: PaneGroup; members: PaneItem[] }>, history: HistoryEntry[]): void {
+  for (const [key, found] of groups) {
+    const { bolt, workspace } = found.group;
+    if (!bolt || !workspace || !groups.has(key)) continue;
+    const entry = history.find((candidate) => candidate.workspace === workspace && baseLabel(candidate.bolt) === bolt);
+    if (!entry) continue;
+    for (const member of [...found.members]) {
+      if (member.type !== "step" || member.step.kind !== "bolt" || member.entry !== entry) continue;
+      const neededKey = `${workspace}#${member.step.label}`;
+      const needed = groups.get(neededKey);
+      if (!needed || neededKey === key) continue;
+      // Only when this run is the newest that touched it: run on its own later, it's its own.
+      const latest = history.find(
+        (candidate) => candidate.workspace === workspace && (baseLabel(candidate.bolt) === member.step.label || candidate.steps.some((step) => step.bolt === member.step.label)),
+      );
+      if (latest !== entry) continue;
+      const inside = needed.members.filter((item) => item.type === "run" || item.type === "container").map((item) => ({ ...item, group: key, depth: 2 }));
+      if (inside.length === 0) continue;
+      const position = found.members.indexOf(member);
+      found.members.splice(position + 1, 0, ...inside);
+      groups.delete(neededKey);
+    }
+  }
 }
 
 /**
@@ -380,7 +413,7 @@ export function filterPanes(items: PaneItem[], query: string): PaneItem[] {
     item.type === "group"
       ? [item.group.title, item.group.workspaceName]
       : item.type === "run"
-        ? [item.run.label, item.run.command, item.run.workspaceName, item.run.alive ? "running" : "stopped"]
+        ? [item.run.label, item.run.command, item.run.workspaceName, item.run.alive ? "running" : endedAs(item.run)]
         : item.type === "container"
           ? [item.container.service, item.container.name, item.container.image, item.container.project, containerMood(item.container).word, "container"]
           : item.type === "step"
@@ -514,4 +547,11 @@ function shortStep(step: HistoryStep, job: boolean): string {
     return `wait for ${step.label.replace(/^https?:\/\//, "").replace(/\/$/, "")}`;
   }
   return describeHistoryStep(step, job);
+}
+
+/** How a command that is no longer running ended: by itself, with a failure, or stopped. */
+function endedAs(run: { exitCode?: number }): string {
+  if (run.exitCode === 0) return "finished";
+  if (run.exitCode !== undefined) return `failed (exit ${run.exitCode})`;
+  return "stopped";
 }

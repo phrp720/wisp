@@ -43,6 +43,7 @@ function services(overrides: Partial<Services> = {}, library: Library = { reads:
     containerAction: async () => undefined,
     planRetry: async () => [],
     suggestSetup: async () => undefined,
+    declineSetup: async () => undefined,
     setUp: async () => "",
     watch: () => () => undefined,
     settings: {
@@ -62,6 +63,8 @@ function services(overrides: Partial<Services> = {}, library: Library = { reads:
       removeStep: async () => undefined,
       moveStep: async () => undefined,
       createPersonalWorkspace: async () => "",
+      removePersonalWorkspace: async () => undefined,
+      forgetProject: async () => undefined,
     },
     down: async () => ({ stopped: [] }),
     restart: async (run) => ({ ok: true, run }),
@@ -253,6 +256,46 @@ describe("the TUI", () => {
     expect(trust).toHaveBeenCalledWith(infra.workspace.file, infra.hash);
   });
 
+  it("cancelling the delete-workspace dialog leaves the dashboard as it was: no run, focus unmoved", async () => {
+    const run = vi.fn(services().run);
+    const forgetProject = vi.fn(async () => undefined);
+    const base = services({ run });
+    const app = await open(services({ run, editing: { ...base.editing, forgetProject } }));
+    app.stdin.write(ARROW_LEFT);
+    await tick();
+    for (const key of ["D", ARROW_RIGHT, "\r", "D", ARROW_RIGHT, ARROW_LEFT, ARROW_RIGHT, "\r"]) {
+      app.stdin.write(key);
+      await tick();
+    }
+    await tick();
+    expect(run).not.toHaveBeenCalled();
+    expect(forgetProject).not.toHaveBeenCalled();
+    // Still on the workspaces: D asks about the workspace again, not about a bolt.
+    app.stdin.write("D");
+    await tick();
+    expect(app.lastFrame()).toContain('Remove "Acme" from your list?');
+  });
+
+  it("D on a project in the list removes it from the list, and never deletes its file", async () => {
+    const forgetProject = vi.fn(async () => undefined);
+    const removePersonalWorkspace = vi.fn(async () => undefined);
+    const base = services();
+    const app = await open(services({ editing: { ...base.editing, forgetProject, removePersonalWorkspace } }));
+    app.stdin.write(ARROW_LEFT);
+    await tick();
+    app.stdin.write("D");
+    await tick();
+    expect(app.lastFrame()).toContain('Remove "Acme" from your list?');
+    expect(app.lastFrame()).toContain("stays in the repository");
+    app.stdin.write(ARROW_LEFT);
+    await tick();
+    app.stdin.write("\r");
+    await tick();
+    await tick();
+    expect(forgetProject).toHaveBeenCalledWith(acme.workspace.file);
+    expect(removePersonalWorkspace).not.toHaveBeenCalled();
+  });
+
   it("offers + add a bolt in an empty workspace, and ⏎ opens the form instead of running", async () => {
     const empty = read("/home/.config/wisp/workspaces/Notes.json", { name: "Notes", bolts: [] }, "trusted", true);
     const run = vi.fn(services().run);
@@ -417,6 +460,22 @@ describe("the TUI", () => {
     await tick();
     await tick();
     expect(setUp).toHaveBeenCalledWith(suggestion, ["Work on Shop", "Check"]);
+  });
+
+  it("stops offering setup in a folder after d, don't ask again", async () => {
+    const suggestion = { dir: "/dev/shop", name: "Shop", found: [], bolts: [{ label: "Services", job: false, steps: ["start Docker services: postgres"] }], contents: "{}" };
+    const setUp = vi.fn(async () => infra.workspace.file);
+    const declineSetup = vi.fn(async () => undefined);
+    const app = await open(services({ suggestSetup: async () => suggestion, setUp, declineSetup }, { reads: [infra], unreadable: [] }));
+    await tick();
+    expect(app.lastFrame()).toContain("Set up this bolt");
+    expect(app.lastFrame()).toContain("d don't ask again");
+    app.stdin.write("d");
+    await tick();
+    await tick();
+    expect(declineSetup).toHaveBeenCalledWith("/dev/shop");
+    expect(setUp).not.toHaveBeenCalled();
+    expect(app.lastFrame()).toContain("Won't ask here again");
   });
 
   it("says so when there are no workspaces at all", async () => {

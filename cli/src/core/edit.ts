@@ -1,5 +1,5 @@
-import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { readFile, rm, writeFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 
 import { WispError, describe } from "./errors.js";
 import { workspacesDir } from "./paths.js";
@@ -339,6 +339,18 @@ export async function moveStep(file: string, bolt: string, index: number, by: -1
  * A personal workspace: the same format, kept in Wisp's own directory, for the things
  * that belong to no repository — "Morning", "On call".
  */
+/**
+ * Delete one of your own workspaces. Only those: a project's .wisp.json belongs to its
+ * repository, and is never Wisp's to delete (it can only stop listing it).
+ */
+export async function removePersonalWorkspace(file: string): Promise<void> {
+  const path = resolve(file);
+  if (dirname(path) !== resolve(workspacesDir())) {
+    throw new WispError("Only your own workspaces can be deleted. A project's file stays in its repository", "INVALID_INPUT");
+  }
+  await rm(path);
+}
+
 export async function createPersonalWorkspace(name: string): Promise<string> {
   const title = name.trim();
   if (!title) throw new WispError("A workspace needs a name", "INVALID_INPUT");
