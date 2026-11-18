@@ -221,7 +221,7 @@ const more = [
           </button>
         </div>
       </div>
-      <p class="small">Then <a href="/docs/getting-started">get started</a>: one file, one word.</p>
+      <p class="small">Next: <a href="/docs/getting-started">Getting started</a></p>
     </section>
   </div>
 </template>
