@@ -54,6 +54,14 @@ in; `wisp scan ~/dev` finds the rest.
 Press `⏎` on its own, type `q`, or press Ctrl+C. Nothing runs.
 :::
 
+::: details A command asks something (y/n, a password). What do I do?
+In the background nothing can answer it, so Wisp shows it as **waiting for an answer**. Give
+the command a flag that skips the question (`--yes`, `CI=1`), or, when it really needs you,
+run commands in a terminal window (`s`, Settings), where you can answer.
+
+→ [Commands that ask something](./running#commands-that-ask-something)
+:::
+
 ::: details Why didn't my command run?
 Most likely trust: a project's commands wait until you've allowed that exact file, and any
 change, a `git pull` included, asks again. `wisp check` shows what is waiting.

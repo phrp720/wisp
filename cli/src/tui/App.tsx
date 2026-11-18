@@ -207,6 +207,7 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
       clearInterval(timer);
     };
   }, [selectedContainer?.name, services]);
+  const askedAbout = useRef(new Set<string>());
   useEffect(() => {
     if (!watching) return;
     let alive = true;
@@ -227,6 +228,12 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
             else notify(`${run.label} stopped (${run.workspaceName}) — press p to see its last output`, "bad");
           } else if (was === undefined && run.alive && !expected.current.has(run.id)) {
             notify(`${run.label} started (${run.workspaceName})`, "good");
+          }
+          // Once per question: a command that went quiet asking something can't be answered
+          // in the background, so say so, and how to fix the bolt.
+          if (run.alive && run.waiting && !askedAbout.current.has(run.id)) {
+            askedAbout.current.add(run.id);
+            notify(`${run.label} is waiting for an answer: "${run.waiting}". Give it a flag like --yes, or run commands in a terminal window (s)`, "bad");
           }
         }
       }
