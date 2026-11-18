@@ -53,8 +53,9 @@ wisp          # the dashboard: every bolt, what's running, history
 
 Servers keep running in the background: `wisp ps` lists them, `wisp down api` stops them.
 
-**From any other folder,** name the project too: `wisp acme api`. Wisp knows every project
-you've run a bolt in (`wisp list`); `wisp scan ~/dev` finds the rest.
+**From any folder,** the same word works: `wisp api` finds the bolt in any project you've
+used. If two projects have one, name the project: `wisp acme api`. `wisp scan ~/dev` finds
+projects you haven't used yet.
 
 ## Update or remove
 

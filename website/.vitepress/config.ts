@@ -14,7 +14,7 @@ const site = "https://willowisp.dev";
  */
 const LLMS = `# Wisp
 
-> Wisp starts a project's working context with one word: the folders, links, apps and commands a task needs, opened and running in order. A \`.wisp.json\` next to the code describes it; \`wisp <bolt>\` runs it. Free and open source, for macOS, Linux and Windows.
+> Wisp starts any project from anywhere with one word: the database, the server, the editor and the page a task needs, opened and running in order. A \`.wisp.json\` next to the code describes it; \`wisp <bolt>\` runs it. Free and open source, for macOS, Linux and Windows.
 
 The complete reference for agents, the file format, every command, JSON output and exit codes, is [llms-full.txt](${site}/llms-full.txt). The installed CLI prints the same text with \`wisp help agents\`.
 
@@ -35,7 +35,7 @@ The complete reference for agents, the file format, every command, JSON output a
 - [The dashboard](${site}/docs/dashboard): the screen \`wisp\` opens in your terminal
 `;
 
-const description = "Start your working context with one word: the folders, links, apps and commands a task needs, opened and running in order. Free and open source.";
+const description = "Start any project from anywhere, with one word: the database, the server and the page, without hunting for the folder or remembering the commands. Free and open source.";
 
 export default defineConfig({
   async buildEnd(config) {

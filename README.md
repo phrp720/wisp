@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <b>Start your working context with one word.</b><br />
+  <b>Start any project from anywhere, with one word.</b><br />
   The database, the server, your editor in the right folder, the page in your browser:<br />
   described once in a <code>.wisp.json</code>, brought up with <code>wisp api</code>.
 </p>

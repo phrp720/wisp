@@ -6,7 +6,7 @@ import { expandHome } from "../../core/paths.js";
 import { PROJECT_FILE, findProjectFile, readProjectFile } from "../../core/project.js";
 import { matchBolt } from "../../core/switch.js";
 import type { TargetKind, Workspace, WorkspaceRead } from "../../core/types.js";
-import { discoverWorkspaces, matchWorkspace, resolveWorkspace } from "../../core/workspaces.js";
+import { discoverWorkspaces, matchWorkspace, resolveWorkspace, slugify } from "../../core/workspaces.js";
 
 /**
  * Every workspace Wisp knows, plus the project you are standing in if it is not known
@@ -100,6 +100,17 @@ export async function resolveRun(
     const { match } = matchWorkspace(first, all);
     if (match) return { read: match, workspaceRef: first };
 
+    // One word from anywhere: a bolt of any project you've used. One match runs; several
+    // are listed, with what to type for each, and nothing runs.
+    const found = boltsEverywhere(first, all);
+    if (found.length === 1) return { read: found[0]!.read, bolt: found[0]!.label };
+    if (found.length > 1) {
+      throw new WispError(
+        `"${first}" is a bolt in several projects. Name the project: ${found.map((hit) => `wisp ${slugify(hit.read.workspace.name)} ${slugify(hit.label)}`).join(" · ")}`,
+        "AMBIGUOUS",
+      );
+    }
+
     if (here) {
       const bolts = here.workspace.bolts;
       throw new WispError(
@@ -159,4 +170,20 @@ export function parseKinds(value?: string): TargetKind[] | undefined {
 
 export function emitJson(value: unknown): void {
   console.log(JSON.stringify(value, null, 2));
+}
+
+/**
+ * The bolts named `word` in every workspace: by name or slug when any is, else by the one
+ * bolt in a workspace that the word is part of.
+ */
+function boltsEverywhere(word: string, reads: WorkspaceRead[]): { read: WorkspaceRead; label: string }[] {
+  const needle = word.trim().toLowerCase();
+  const hits = reads.flatMap((read) => {
+    const { bolt } = matchBolt(read.workspace, word);
+    if (!bolt) return [];
+    const exact = bolt.label.toLowerCase() === needle || slugify(bolt.label) === slugify(word);
+    return [{ read, label: bolt.label, exact }];
+  });
+  const exact = hits.filter((hit) => hit.exact);
+  return (exact.length > 0 ? exact : hits).map(({ read, label }) => ({ read, label }));
 }
