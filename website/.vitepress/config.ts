@@ -24,12 +24,15 @@ The complete reference for agents, the file format, every command, JSON output a
 - [The .wisp.json file](${site}/docs/file): every kind of step, dependencies, several operating systems
 - [Jobs and history](${site}/docs/jobs): runs that stop at the first failure, kept like CI runs
 - [What's running](${site}/docs/running): background commands, logs, stopping, restart on crash
+- [Settings](${site}/docs/settings): which editor opens folders and files, where commands run
 - [Trust](${site}/docs/trust): why a cloned repository's commands wait for approval
-- [Commands](${site}/docs/commands): every command and its options
+- [Commands](${site}/docs/commands): every command, option and environment variable
+- [File reference](${site}/docs/reference): every field of a .wisp.json
+- [Questions](${site}/docs/questions): short answers to common questions
 
 ## Optional
 
-- [The TUI](${site}/docs/tui): the full-screen view, for people at a terminal
+- [The dashboard](${site}/docs/dashboard): the screen \`wisp\` opens in your terminal
 `;
 
 const description = "Start your working context with one word: the folders, links, apps and commands a task needs, opened and running in order. Free and open source.";
@@ -69,15 +72,22 @@ export default defineConfig({
           text: "Start here",
           items: [
             { text: "Getting started", link: "/docs/getting-started" },
+            { text: "Questions", link: "/docs/questions" },
           ],
         },
         {
-          text: "Using it",
+          text: "Use it",
           items: [
-            { text: "The TUI", link: "/docs/tui" },
-            { text: "The .wisp.json file", link: "/docs/file" },
-            { text: "Jobs and history", link: "/docs/jobs" },
+            { text: "The dashboard", link: "/docs/dashboard" },
             { text: "What's running", link: "/docs/running" },
+            { text: "Jobs and history", link: "/docs/jobs" },
+          ],
+        },
+        {
+          text: "Set it up",
+          items: [
+            { text: "The .wisp.json file", link: "/docs/file" },
+            { text: "Settings", link: "/docs/settings" },
             { text: "Trust", link: "/docs/trust" },
           ],
         },
@@ -85,6 +95,7 @@ export default defineConfig({
           text: "Reference",
           items: [
             { text: "Commands", link: "/docs/commands" },
+            { text: "File reference", link: "/docs/reference" },
             { text: "For AI agents", link: "/docs/agents" },
           ],
         },
@@ -94,8 +105,5 @@ export default defineConfig({
     search: { provider: "local" },
     outline: { level: [2, 3], label: "On this page" },
     editLink: { pattern: "https://github.com/phrp720/wisp/edit/main/website/:path", text: "Edit this page on GitHub" },
-    footer: {
-      message: 'Released under the <a href="https://github.com/phrp720/wisp/blob/main/LICENSE">MIT License</a>.',
-    },
   },
 });

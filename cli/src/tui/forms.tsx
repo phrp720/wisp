@@ -272,8 +272,15 @@ export function Picker(props: {
     setQueryState(next);
     setIndex(0);
   };
-  const matching = (text: string) =>
-    options.filter((option) => text.split(/\s+/).every((word) => `${option.title} ${option.detail ?? ""} ${option.group ?? ""}`.toLowerCase().includes(word.toLowerCase())));
+  // A step whose name matches beats one whose description does: "open a web" means "Open a
+  // website", not "Wait until something is ready", whose example says "a website answers".
+  const matching = (text: string) => {
+    const words = text.toLowerCase().split(/\s+/).filter(Boolean);
+    const all = (haystack: string) => words.every((word) => haystack.toLowerCase().includes(word));
+    const byName = options.filter((option) => all(option.title));
+    if (byName.length > 0) return byName;
+    return options.filter((option) => all(`${option.title} ${option.detail ?? ""} ${option.group ?? ""}`));
+  };
   const shown = matching(query);
 
   useInput((input, key) => {

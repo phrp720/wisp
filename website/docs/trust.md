@@ -8,15 +8,19 @@ wisp check    # see exactly what would run
 wisp trust    # allow this exact file
 ```
 
-In the TUI, press `t` on a workspace. It lists every command the file would run, and the
+In the dashboard, press `t` on a workspace. It lists every command the file would run, and the
 **Trust this file** button starts unselected, so a stray `⏎` allows nothing.
+
+A bolt never starts only half of what it lists. Press `⏎` on one that needs trust and the
+same list opens first, with **Trust and run**. `wisp api` asks the same at a terminal; in a
+script or a git hook it stops with `NOT_TRUSTED` and runs nothing.
 
 ## How it works
 
 - Approval is tied to the file's exact contents. Any change, a `git pull` included, asks
   again. `wisp check` shows what changed.
 - Until then, links, folders and plain files still open; only what could run code waits.
-- Changes you make yourself, through the TUI's editor, keep the file trusted.
+- Changes you make yourself, through the dashboard's editor, keep the file trusted.
 - Your personal workspaces are yours, so their commands run without asking.
 
 ## Agents

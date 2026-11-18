@@ -1,6 +1,7 @@
 # The .wisp.json file
 
-A **bolt** is a named list of things to start, in order. That is the whole idea:
+A **bolt** is a named list of things to start, in order. That is the whole idea (every field
+is in the [File reference](./reference)):
 
 ```json
 {
@@ -128,5 +129,5 @@ scripts, without touching the shared file.
 ## Personal workspaces
 
 Things that belong to no repository, like *Morning* or *On call*, are the same format, kept
-in Wisp's own `workspaces` folder (`wisp doctor` shows where). Make one with `N` in the TUI.
+in Wisp's own `workspaces` folder (`wisp doctor` shows where). Make one with `N` in the dashboard.
 Their commands run without asking: they're yours.

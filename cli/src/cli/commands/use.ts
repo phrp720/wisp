@@ -1,12 +1,15 @@
 import { recordProject } from "../../core/config.js";
 import { listHistory } from "../../core/history.js";
 import { WispError } from "../../core/errors.js";
-import { planRetry, runPlan, switchToWorkspace, type RunDeps } from "../../core/switch.js";
+import { matchBolt, planRetry, runPlan, switchToWorkspace, type RunDeps } from "../../core/switch.js";
 import type { Bolt, RunMode, SwitchOptions, SwitchResult, SwitchTarget, TargetResult, Workspace } from "../../core/types.js";
 import { bold, cyan, dim, green, kindLabel, plural, red, title, yellow } from "../format.js";
 import { emitJson, findWorkspaceForDependency, resolveRun } from "../lib/context.js";
 import type { CommandDef } from "../lib/define.js";
-import { diagnosticSummary, resultLine, suggestBolts, trustLine } from "../lib/render.js";
+import { diagnosticSummary, printWithheld, resultLine, suggestBolts, trustLine } from "../lib/render.js";
+import { tildify } from "../../core/paths.js";
+import { trustProject } from "../../core/trust.js";
+import { waitingForTrust } from "../../core/waiting.js";
 import { Prompter } from "../prompt.js";
 
 interface Options {
@@ -16,6 +19,7 @@ interface Options {
   detach?: boolean;
   window?: boolean;
   retry?: boolean;
+  skipUntrusted?: boolean;
   json?: boolean;
 }
 
@@ -34,6 +38,7 @@ export const use: CommandDef<Options> = {
     ["-w, --window", "run commands in terminal windows (or tmux windows, inside tmux)"],
     ["-d, --detach", "run commands in the background, even if you chose a terminal"],
     ["-r, --retry", "run again only what failed last time — and what that kept from running"],
+    ["--skip-untrusted", "run only what the file is allowed to, skipping what waits for `wisp trust`"],
     ["--json", "print the result as JSON"],
   ],
   examples: [
@@ -44,16 +49,56 @@ export const use: CommandDef<Options> = {
   ],
 
   async run([first, second], options) {
-    const { read, bolt: named, workspaceRef } = await resolveRun(first, second, undefined);
-    const { workspace } = read;
+    const resolved = await resolveRun(first, second, undefined);
+    const { bolt: named, workspaceRef } = resolved;
+    let { read } = resolved;
+    let { workspace } = read;
     const mode: RunMode = options.inline ? "inline" : options.detach ? "background" : options.window ? "terminal" : "auto";
 
-    const bolt = named ?? (options.all ? undefined : await chooseBolt(workspace, options));
+    const chosen = named ?? (options.all ? undefined : await chooseBolt(workspace, options));
+    if (chosen === null) {
+      console.log(dim("Nothing ran."));
+      return;
+    }
+    const bolt = chosen;
     if (!options.all && !bolt) {
       if (options.json) return emitJson({ workspace: workspace.name, bolts: workspace.bolts });
       console.log(`${dim("in")} ${title(workspace)}`);
       suggestBolts(workspace, workspaceRef);
       return;
+    }
+
+    // Not half a run: when steps it needs wait for trust, ask (at a terminal) or stop, and
+    // start nothing. A dry run goes ahead, since showing what would be skipped is its point.
+    if (!options.dryRun && !options.skipUntrusted) {
+      const waitLabel = bolt ? boltLabel(workspace, bolt) : undefined;
+      const waiting = waitingForTrust(read, waitLabel);
+      if (waiting.length > 0) {
+        const what = waitLabel ? `"${waitLabel}"` : "Everything";
+        const needs = `${what} needs ${plural(waiting.length, "thing")} this file isn't allowed to run yet`;
+        if (options.json || !process.stdin.isTTY || !process.stdout.isTTY) throw new WispError(needs, "NOT_TRUSTED");
+        console.log(yellow(`! ${needs}. Run without them, it would start only part of it.`));
+        console.log();
+        printWithheld(read);
+        const prompt = new Prompter();
+        let yes = false;
+        try {
+          yes = await prompt.confirm(waitLabel ? `Trust it and run "${waitLabel}"?` : "Trust it and run everything?");
+        } finally {
+          prompt.close();
+        }
+        if (!yes) {
+          console.log(dim("Nothing ran. `wisp check` shows the file, `wisp trust` allows it."));
+          process.exitCode = 1;
+          return;
+        }
+        // The hash of what was shown: if the file changed while you read, this refuses.
+        await trustProject(workspace.file, read.hash);
+        console.log(`${green("✓")} trusted ${dim(tildify(workspace.file))}`);
+        console.log();
+        read = (await resolveRun(first, second, undefined)).read;
+        workspace = read.workspace;
+      }
     }
 
     // Remembered when you run it, so it can be listed and run from anywhere after.
@@ -168,14 +213,18 @@ export const use: CommandDef<Options> = {
 };
 
 function boltLabel(workspace: Workspace, ref: string): string {
-  return workspace.bolts.find((bolt) => bolt.id === ref || bolt.label === ref)?.label ?? ref;
+  // The bolt's own name, not the word typed for it: `wisp api` runs "Work on api".
+  const exact = workspace.bolts.find((bolt) => bolt.id === ref || bolt.label === ref);
+  if (exact) return exact.label;
+  return matchBolt(workspace, ref).bolt?.label ?? ref;
 }
 
 /**
  * Which bolt, when nothing said. Only on a terminal: a script that pipes `wisp use`
  * somewhere must not stop on a question nobody is there to answer.
  */
-async function chooseBolt(workspace: Workspace, options: Options): Promise<string | undefined> {
+/** The bolt picked, undefined when there was nothing to ask, null when you cancelled. */
+async function chooseBolt(workspace: Workspace, options: Options): Promise<string | undefined | null> {
   const bolts = workspace.bolts;
   if (bolts.length === 0 || options.json) return undefined;
   if (!process.stdin.isTTY || !process.stdout.isTTY) return undefined;
@@ -186,12 +235,17 @@ async function chooseBolt(workspace: Workspace, options: Options): Promise<strin
     console.log(`  ${dim(`${index + 1}.`)} ${bold(bolt.label)} ${dim(plural(bolt.steps.length, "step"))}`);
   });
 
+  // No default: ⏎ on its own, q or Ctrl+C means you changed your mind, and nothing runs.
   const prompt = new Prompter();
   try {
-    const answer = await prompt.ask(dim("  which"), "1");
+    const answer = (await prompt.ask(dim("  which? a number or name · ⏎ cancels"))).trim();
+    if (!answer || answer.toLowerCase() === "q") return null;
     const index = Number.parseInt(answer, 10) - 1;
     if (Number.isInteger(index) && index >= 0 && index < bolts.length) return (bolts[index] as Bolt).id;
-    return answer.trim() || undefined;
+    return answer;
+  } catch (error) {
+    if (error instanceof WispError && error.code === "CANCELLED") return null;
+    throw error;
   } finally {
     prompt.close();
   }

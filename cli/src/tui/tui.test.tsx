@@ -179,7 +179,23 @@ describe("the TUI", () => {
     expect(app.lastFrame()).toContain("❯ infra › Database");
     app.stdin.write("\r");
     await tick();
-    expect(run).toHaveBeenCalledWith(infra, "Database", expect.anything());
+    // infra isn't trusted and Database runs a command: it asks rather than run half of it.
+    expect(app.lastFrame()).toContain("Trust infra?");
+    expect(run).not.toHaveBeenCalled();
+    app.stdin.write("\r");
+    await tick();
+    await tick();
+
+    app.stdin.write("/");
+    await tick();
+    for (const char of "web") {
+      app.stdin.write(char);
+      await tick();
+    }
+    expect(app.lastFrame()).toContain("❯ Acme › Work on web");
+    app.stdin.write("\r");
+    await tick();
+    expect(run).toHaveBeenCalledWith(acme, "Work on web", expect.anything());
   });
 
   it("does nothing else with the ⏎ that cancels a trust dialog — it does not run the bolt behind it", async () => {
@@ -235,6 +251,85 @@ describe("the TUI", () => {
     app.stdin.write("\r");
     await tick();
     expect(trust).toHaveBeenCalledWith(infra.workspace.file, infra.hash);
+  });
+
+  it("offers + add a bolt in an empty workspace, and ⏎ opens the form instead of running", async () => {
+    const empty = read("/home/.config/wisp/workspaces/Notes.json", { name: "Notes", bolts: [] }, "trusted", true);
+    const run = vi.fn(services().run);
+    const app = await open(services({ run }, { reads: [empty], here: empty.workspace.file, unreadable: [] }));
+    app.stdin.write(ARROW_RIGHT);
+    await tick();
+    expect(app.lastFrame()).toContain("+ add a bolt");
+    app.stdin.write("\r");
+    await tick();
+    expect(app.lastFrame()).toContain("A new bolt in Notes");
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("asks before running a bolt that would start only half, and runs it once trusted", async () => {
+    const shop = (trust: TrustState) =>
+      read("/dev/shop/.wisp.json", {
+        name: "Shop",
+        bolts: [
+          { label: "Work on web", targets: [{ bolt: "Database" }, { url: "http://localhost:3000" }] },
+          { label: "Database", targets: [{ run: "postgres" }] },
+          { label: "Docs", targets: [{ url: "https://docs.shop.test" }] },
+        ],
+      }, trust);
+    let current = shop("untrusted");
+    const ran: string[] = [];
+    const base = services();
+    const api = services({
+      load: async () => ({ reads: [current], here: current.workspace.file, unreadable: [] }),
+      trust: vi.fn(async () => {
+        current = shop("trusted");
+      }),
+      run: async (target, bolt, callbacks) => {
+        ran.push(`${bolt}:${target.workspace.trusted ? "trusted" : "untrusted"}`);
+        return base.run(target, bolt, callbacks);
+      },
+    });
+    const app = await open(api);
+
+    // Its own step is a link, but the bolt it needs runs a command: ⏎ asks, nothing starts.
+    app.stdin.write("\r");
+    await tick();
+    expect(app.lastFrame()).toContain("Trust Shop?");
+    expect(app.lastFrame()).toContain('"Work on web" needs some of these');
+    expect(app.lastFrame()).toMatch(/Trust and run[\s\S]*Cancel/);
+    expect(ran).toEqual([]);
+
+    // Cancel runs nothing at all, rather than the half that was allowed.
+    app.stdin.write("\r");
+    await tick();
+    await tick();
+    expect(ran).toEqual([]);
+    expect(app.lastFrame()).toContain("didn't run");
+
+    // A bolt with nothing waiting for trust runs straight away.
+    app.stdin.write(ARROW_DOWN);
+    await tick();
+    app.stdin.write(ARROW_DOWN);
+    await tick();
+    app.stdin.write("\r");
+    await tick();
+    expect(ran).toEqual(["Docs:untrusted"]);
+    app.stdin.write("\u001B");
+    await tick();
+
+    // Trust and run: trusts the file, then runs the bolt, whole.
+    app.stdin.write("\u001B[A");
+    await tick();
+    app.stdin.write("\u001B[A");
+    await tick();
+    app.stdin.write("\r");
+    await tick();
+    app.stdin.write(ARROW_LEFT);
+    await tick();
+    app.stdin.write("\r");
+    for (let i = 0; i < 5; i++) await tick();
+    expect(api.trust).toHaveBeenCalled();
+    expect(ran).toEqual(["Docs:untrusted", "Work on web:trusted"]);
   });
 
   it("shows a bolt whole with v: its order, the bolts it needs opened up, what each runs", async () => {
@@ -861,7 +956,7 @@ describe("history steps", () => {
     expect(describeHistoryStep(step("wait", "port 5432"), false)).toBe("wait until port 5432 is open");
     expect(describeHistoryStep(step("wait", "http://localhost:3000"), false)).toBe("wait until http://localhost:3000 answers");
     expect(describeHistoryStep(step("link", "http://localhost:3000"), false)).toBe("open http://localhost:3000");
-    expect(describeHistoryStep(step("command", "Flower Testbed dev", "pnpm dev"), false)).toBe("start Flower Testbed dev");
+    expect(describeHistoryStep(step("command", "Payments Service dev", "pnpm dev"), false)).toBe("start Payments Service dev");
     expect(describeHistoryStep(step("command", "test", "pnpm test"), true)).toBe("run test");
   });
 });

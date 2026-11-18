@@ -354,7 +354,7 @@ export async function createPersonalWorkspace(name: string): Promise<string> {
   const color = pickColor(others.map((workspace) => workspace.color));
   await writeFile(
     file,
-    formatProjectFile([["$schema", PROJECT_SCHEMA_URL], ["name", title], ["color", color], ["bolts", [{ label: "Start", color: pickColor([color]), targets: [] }]]]),
+    formatProjectFile([["$schema", PROJECT_SCHEMA_URL], ["name", title], ["color", color], ["bolts", []]]),
     "utf8",
   );
   return file;

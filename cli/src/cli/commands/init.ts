@@ -1,5 +1,6 @@
 import { relative } from "node:path";
 
+import { tildify } from "../../core/paths.js";
 import { PROJECT_FILE, findProjectFile } from "../../core/project.js";
 import { bolts as draftBolts, draftProject, writeProjectDraft } from "../../core/scaffold.js";
 
@@ -54,7 +55,7 @@ export const init: CommandDef<{ force?: boolean; yes?: boolean; print?: boolean;
     // A project file is committed and read in review, so the one thing `init` must not do
     // is put a file in someone's repository before they have seen what it says.
     if (!options.yes) {
-      console.log(dim(`${draft.file}`));
+      console.log(dim(tildify(draft.file)));
       console.log();
       console.log(draft.contents.trimEnd());
       console.log();

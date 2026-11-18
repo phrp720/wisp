@@ -17,16 +17,9 @@
 
 ---
 
-```console
-$ wisp api
-running 🏢 Acme · Work on api
-  ✓ run    docker compose up db · in Ghostty
-  ✓ wait   port 5432
-  ✓ folder apps/api — ~/dev/acme/apps/api
-  ✓ run    pnpm dev · in Ghostty
-  ✓ wait   http://localhost:3000
-  ✓ link   http://localhost:3000 · focused its open tab
-```
+<p align="center">
+  <img src="https://raw.githubusercontent.com/phrp720/wisp/main/website/public/demo/cli.gif" alt="wisp api: the database, the API server and the page, started in order, each step ticking off" width="800" />
+</p>
 
 You describe the job once, in a `.wisp.json` next to your code. After that, `wisp api`
 gets you from *"I'm starting on the API"* to everything open and running: database up,
@@ -52,12 +45,14 @@ npm install -g @squaredasher/wisp
 Or download it from [Releases](https://github.com/phrp720/wisp/releases): macOS, Linux and
 Windows.
 
+Tab completion for your workspaces and bolts (zsh, bash, fish): `wisp completion --install`.
+
 ## Quick start
 
 ```bash
 cd ~/dev/acme
 wisp init        # reads the project and writes a .wisp.json
-wisp             # opens the TUI: every workspace and its bolts, ⏎ to run
+wisp             # opens the dashboard: every workspace and its bolts, ⏎ to run
 wisp api         # or skip it: runs the "api" bolt; any distinctive word works
 ```
 
@@ -76,30 +71,18 @@ Then it suggests the bolts you'd have written: start the services, wait for the 
 start each app, wait for it to answer, open it, plus a **Check** job from your lint and test
 commands. You keep the ones you want: it asks, or pass `--only "Check,Work on api"`.
 
-## The TUI
+<p align="center">
+  <img src="https://raw.githubusercontent.com/phrp720/wisp/main/website/public/demo/init.gif" alt="wisp init: it suggests three bolts, keeps two, writes the file, then wisp trust allows it and wisp blog runs it" width="800" />
+</p>
 
-`wisp` on its own opens a full-screen view of everything you have, like htop but for
-your projects. It works the same at your desk, over SSH and inside tmux.
+## The dashboard
 
-```
- 🔮 wisp   1 Bolts   2 Running ● 2   3 History                     ~/dev/acme
-╭──────────────────────────╮╭─────────────────────────────────────────────────────╮
-│ Workspaces               ││ 🏢 Acme  3 bolts                                    │
-│ THIS FOLDER              ││ ~/dev/acme/.wisp.json                            │
-│ ❯ 🏢 Acme                ││ ✓ Allowed to run its commands                       │
-│ PROJECTS                 ││                                                     │
-│   🧱 infra               ││ ⚡ Bolts                                            │
-│ YOURS                    ││ ❯ Work on api ● running  5 steps                    │
-│   ☀️ Morning             ││   Work on web  ✓ 3m ago  2 steps                    │
-│                          ││   Check job  ✗ failed 1h ago  3 steps               │
-│                          ││                                                     │
-│                          ││   When you run it, it will:                         │
-│                          ││    1. ⚡ infra › Database first                     │
-│                          ││    2. start api server                              │
-│                          ││    3. wait until http://localhost:3000 answers      │
-╰──────────────────────────╯╰─────────────────────────────────────────────────────╯
- ⏎ run · v view · e edit · a add · x stop · / search · 1 2 3 tabs · ? keys
-```
+`wisp` on its own opens a dashboard of everything you have, right in your terminal, like
+htop but for your projects. It works the same at your desk, over SSH and inside tmux.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/phrp720/wisp/main/website/public/demo/dashboard.gif" alt="Wisp's dashboard: running a bolt, its server's live output on the Running tab, then the History tab" width="900" />
+</p>
 
 **You never have to write JSON.** Open Wisp in a project that has no file and it offers
 to set one up from what it finds. `e` edits a bolt through simple forms: pick what a step
@@ -237,20 +220,9 @@ stop the moment something fails. Mark those as a **job**:
 - Dependencies that aren't jobs, like the database, start as usual and stay up.
 - Every run is kept, with each step's time and output:
 
-```console
-$ wisp history
-✗ 3f2a1b  Release job · 2m ago · 41.2s
-✓ 9c01de  Check job · 1h ago · 12.8s
-
-$ wisp history 3f2a1b
-failed Release · Acme · 17/11/2026, 16:07:01 · 41.2s
-   1 ✓ wait   port 5432
-   2 ✓ run    lint — pnpm lint 3.1s  [--log 2]
-   3 ✗ run    test — pnpm test 9.8s exited with code 1  [--log 3]
-   4 – run    pnpm build not reached — "test" failed
-
-$ wisp history 3f2a1b --log 3      # what the tests printed
-```
+<p align="center">
+  <img src="https://raw.githubusercontent.com/phrp720/wisp/main/website/public/demo/jobs.gif" alt="A Check job fails at its test; History shows the run like CI, with the test's output; after the fix, --retry runs only the test, and it passes" width="900" />
+</p>
 
 Run a job before every push. The push is blocked if it fails:
 
@@ -264,7 +236,7 @@ Or on a schedule, with the cron you already have:
 ## Up and down
 
 Wisp keeps track of every command it starts, wherever it runs. So it knows which bolts
-are **up** (● in the TUI), never starts a second copy of a server that's already running,
+are **up** (● in the dashboard), never starts a second copy of a server that's already running,
 and can take a bolt down again:
 
 ```bash
@@ -279,7 +251,7 @@ A bolt's `down` steps run afterwards, for teardown that isn't a process:
 ## Where commands run
 
 Wisp keeps them. A dev server, a database, a worker: each runs in the background, on
-your machine as if you'd typed it, and shows up in the TUI in a **pane of its own** with
+your machine as if you'd typed it, and shows up in the dashboard in a **pane of its own** with
 its live, coloured output. No extra windows. They keep running when you close everything,
 and they're there again when you reopen it.
 
@@ -317,7 +289,7 @@ Approval is tied to the file's contents. Any change, a `git pull` included, asks
 
 | | |
 |---|---|
-| `wisp` | the TUI (`wisp status` for plain text) |
+| `wisp` | the dashboard (`wisp status` for plain text) |
 | `wisp <bolt>` | run a bolt; `--dry-run` shows what would happen first |
 | `wisp init` | write a `.wisp.json` for this project |
 | `wisp trust` | allow this project's commands |
@@ -367,7 +339,7 @@ The repository holds two things:
   - `src/core`: the format, trust, discovery, running bolts. No CLI code, so other front
     ends can use it.
   - `src/platform`: everything specific to macOS, Linux and Windows.
-  - `src/cli` and `src/tui`: the `wisp` command and its TUI.
+  - `src/cli` and `src/tui`: the `wisp` command and its dashboard.
 - `website/`: the landing page and docs, built with VitePress and served by a Cloudflare
   Worker. `pnpm website:deploy` builds and deploys it.
 

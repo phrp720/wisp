@@ -122,11 +122,12 @@ describe("editing a workspace without writing JSON", () => {
     expect(JSON.parse(await readFile(file, "utf8")).bolts).toHaveLength(1);
   });
 
-  it("makes a personal workspace with a first bolt to fill in", async () => {
+  it("makes an empty personal workspace, with no placeholder bolt", async () => {
     const created = await createPersonalWorkspace("Morning");
     const read = await readProjectFile(created);
     expect(read.workspace).toMatchObject({ name: "Morning", personal: true, trusted: true });
-    expect(read.workspace.bolts.map((bolt) => bolt.label)).toEqual(["Start"]);
+    expect(read.workspace.bolts).toEqual([]);
+    expect(read.diagnostics.filter((diagnostic) => diagnostic.level === "error")).toEqual([]);
     await expect(createPersonalWorkspace("Morning")).rejects.toThrow(/already/);
   });
 });

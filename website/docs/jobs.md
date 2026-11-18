@@ -21,28 +21,18 @@ the moment something fails: tests, builds, releases. Mark those as a **job**:
 Every run is kept, the way a CI keeps them: numbered per bolt, with the branch and commit
 it ran on, what started it, and each step's time and output.
 
-```console
-$ wisp history
-✗ 3f2a1b  Release #4 job · 2m ago · 41.2s · main @ a1b2c3d
-✓ 9c01de  Check #12 job · 1h ago · 12.8s · main @ a1b2c3d
+![A Check job fails at its test; History shows the run like CI, with the test's output; after the fix, --retry runs only the test, and it passes](/demo/jobs.gif)
 
-$ wisp history 3f2a1b
-failed Release · Acme · 41.2s
-   1 ✓ wait   port 5432
-   2 ✓ run    lint · pnpm lint 3.1s  [--log 2]
-   3 ✗ run    test · pnpm test 9.8s exited with code 1  [--log 3]
-   4 – run    pnpm build not reached
+From the command line: `wisp history` lists the runs, `wisp history <id>` shows one, and
+`wisp history <id> --log 3` prints what step 3 printed.
 
-$ wisp history 3f2a1b --log 3      # what the tests printed
-```
-
-In the TUI, the History tab (`3`) shows the same: bolts on the left to filter by, the runs on
+In the dashboard, the History tab (`3`) shows the same: bolts on the left to filter by, the runs on
 the right, and each run's page with a summary, the bolts it went through, and every step's
 output.
 
 ## Retry only what failed
 
-`wisp Check --retry` (or `r` in the TUI) runs the failed step and everything after it, not
+`wisp Check --retry` (or `r` in the dashboard) runs the failed step and everything after it, not
 the steps that already passed.
 
 ## From git hooks and cron

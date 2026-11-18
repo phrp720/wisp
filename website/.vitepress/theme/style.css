@@ -1,4 +1,4 @@
-/* Wisp's purple, the colour of its TUI's accent, in both themes. Light first, then dark. */
+/* Wisp's purple, the colour of its dashboard's accent, in both themes. Light first, then dark. */
 :root {
   --vp-c-brand-1: #6d28d9;
   --vp-c-brand-2: #7c3aed;
@@ -79,3 +79,6 @@
   font-style: italic;
   color: var(--vp-c-text-2);
 }
+
+/* The recordings in the docs: rounded like the terminal they show. */
+.vp-doc img[src*="/demo/"] { border-radius: 10px; border: 1px solid var(--vp-c-divider); }

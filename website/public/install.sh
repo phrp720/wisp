@@ -66,3 +66,4 @@ case ":$PATH:" in
   *":$INSTALL_DIR:"*) say "Run \`wisp\` in a project to start." ;;
   *) say "Add $INSTALL_DIR to your PATH, then run \`wisp\` in a project to start." ;;
 esac
+say "Tab completion for your shell: \`wisp completion --install\`"

@@ -1,13 +1,12 @@
-import { dirname } from "node:path";
 
 import { WispError } from "../../core/errors.js";
 import { tildify } from "../../core/paths.js";
 import { PROJECT_FILE, findProjectFile, readProjectFile } from "../../core/project.js";
 import { listTrustedProjects, revokeProject, trustProject } from "../../core/trust.js";
-import { bold, cyan, dim, green, kindLabel, plural, red, yellow } from "../format.js";
+import { bold, cyan, dim, green, plural, red, yellow } from "../format.js";
 import { emitJson } from "../lib/context.js";
 import type { CommandDef } from "../lib/define.js";
-import { named, whereLine } from "../lib/render.js";
+import { printWithheld } from "../lib/render.js";
 import { Prompter } from "../prompt.js";
 
 export const trust: CommandDef<{ revoke?: boolean; list?: boolean; yes?: boolean; json?: boolean }> = {
@@ -55,18 +54,7 @@ export const trust: CommandDef<{ revoke?: boolean; list?: boolean; yes?: boolean
     // Trust is granted to what you have read, so what you are granting it to is printed
     // first — every time, including the re-grant after a change. A prompt that asks
     // "trust this file?" without saying what is in it is a rubber stamp, not a decision.
-    console.log(dim(tildify(path)));
-    if (read.workspace.local) console.log(dim(`+ ${tildify(read.workspace.local)}`));
-    if (read.trust === "stale") console.log(yellow("! this file has changed since you last trusted it"));
-    console.log();
-    console.log(bold(`Would allow ${plural(read.withheld.length, "item")} to run:`));
-    for (const item of read.withheld) {
-      const where = whereLine(item.cwd, dirname(path));
-      const why = item.reason ? dim(` (${item.reason})`) : "";
-      console.log(`  ${dim(kindLabel(item.kind))} ${named(item.label, tildify(item.value))}${where}${why}`);
-    }
-    console.log();
-    console.log(dim("These run on your machine, with your shell, as you."));
+    printWithheld(read);
 
     if (!options.yes) {
       if (!process.stdin.isTTY) {

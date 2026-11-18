@@ -1,5 +1,6 @@
 import { createInterface, type Interface } from "node:readline";
 
+import { WispError } from "../core/errors.js";
 import { dim } from "./format.js";
 
 /**
@@ -23,6 +24,12 @@ export class Prompter {
     });
 
     this.rl.on("line", (line) => this.deliver(line));
+    // Ctrl+C at a question means "never mind": without this, readline swallows it and the
+    // question just sits there.
+    this.rl.on("SIGINT", () => {
+      process.stdout.write("\n");
+      this.rl.close();
+    });
     this.rl.on("close", () => {
       this.ended = true;
       this.deliver(undefined);
@@ -35,7 +42,7 @@ export class Prompter {
     this.rl.prompt();
 
     const line = await this.nextLine();
-    if (line === undefined) throw new Error("Input ended before the answer was given");
+    if (line === undefined) throw new WispError("Cancelled. Nothing changed", "CANCELLED");
 
     return line.trim() || defaultValue;
   }
