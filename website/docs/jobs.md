@@ -47,7 +47,9 @@ From the command line: `wisp history` lists the runs, `wisp history <id>` shows 
 
 In the dashboard, the History tab (`3`) shows the same: bolts on the left to filter by, the runs on
 the right, and each run's page with a summary, the bolts it went through, and every step's
-output.
+output. On a run's page, `/` filters every step's output at once: each step says how many
+lines matched, and the matching lines show under it with their numbers. Type `FAIL` or
+`error` to go straight to what broke.
 
 ## Retry only what failed
 

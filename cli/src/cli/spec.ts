@@ -177,7 +177,8 @@ a folder with no file is offered a setup; \`e\` edits the selected bolt through 
 personal workspace; \`v\` shows a bolt whole and read-only, its dependencies opened up;
 \`p\` (or \`2\`) shows what is running, grouped by the bolt that started it, with live
 output (\`[\` and \`]\` switch to a command's details and past runs); \`h\` (or \`3\`) the
-history of every run; \`/\` searches. It takes the mouse too (clicks select, the wheel
+history of every run; \`/\` filters, and in a log full screen (\`f\`) or an open run of
+History, it filters the log's lines. It takes the mouse too (clicks select, the wheel
 scrolls), unless turned off in Settings. \`x\` on a bolt that needed others asks whether
 to stop those too (\`wisp down <bolt> --deps\` on the command line). Agents should use the
 CLI instead.

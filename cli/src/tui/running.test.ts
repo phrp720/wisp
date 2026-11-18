@@ -5,7 +5,7 @@ import type { HistoryEntry } from "../core/history.js";
 import type { RunStatus } from "../core/processes.js";
 import { interpret } from "../core/project.js";
 import { RESTART_MARK } from "../core/shell.js";
-import { containerDetails, groupPanes, maskEnv, nextTab, pastRuns, runDetails, shownTab, tabsOf, when } from "./running.js";
+import { containerDetails, filterPanes, groupPanes, maskEnv, nextTab, pastRuns, runDetails, shownTab, tabsOf, when } from "./running.js";
 import type { PaneItem } from "./state.js";
 
 const file = "/dev/shop/.wisp.json";
@@ -149,5 +149,24 @@ describe("the panel's tabs", () => {
     const now = new Date(2026, 10, 18, 15, 0);
     expect(when(new Date(2026, 10, 18, 9, 5).toISOString(), now)).toBe("09:05");
     expect(when(new Date(2026, 10, 17, 23, 30).toISOString(), now)).toBe("Nov 17 23:30");
+  });
+});
+
+describe("filtering the Running list", () => {
+  const items = groupPanes([], [web], [postgres], [shop], [{ ...workRun, number: 4 }]);
+
+  it("keeps the line a nested match sits under, so it is not left hanging", () => {
+    expect(titles(filterPanes(items, "postgres"))).toEqual(["group Work on shop", " step Services", "  container postgres"]);
+  });
+
+  it("keeps the bolt's run number when its steps are filtered out", () => {
+    const group = filterPanes(items, "web").find((item) => item.type === "group");
+    expect(group?.type === "group" && group.group.number).toBe(4);
+  });
+
+  it("keeps the run in progress when its bolt matches, and only then", () => {
+    const withCurrent: PaneItem[] = [{ type: "current" }, ...items];
+    expect(filterPanes(withCurrent, "deploy", "Deploy").some((item) => item.type === "current")).toBe(true);
+    expect(filterPanes(withCurrent, "postgres", "Deploy").some((item) => item.type === "current")).toBe(false);
   });
 });

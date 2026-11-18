@@ -761,6 +761,43 @@ describe("panes", () => {
     expect(app.lastFrame()).not.toContain("Running  History");
   });
 
+  it("read the log with ↑↓ once full screen, stopping at its first line, and go to the next command with ←→", async () => {
+    const worker = { ...server, id: "cd34", label: "worker", command: "pnpm worker", asset: "command:worker", log: "/logs/worker" };
+    const lines = (name: string) => Array.from({ length: 40 }, (_, at) => `${name} line ${at + 1}`).join("\n");
+    const app = await open(services({ runs: async () => [server, worker] as never, tail: async (log) => lines(log === "/logs/web" ? "web" : "worker") }));
+    await tick();
+    app.stdin.write("p");
+    await tick();
+    app.stdin.write("f");
+    await tick();
+    await tick();
+    expect(app.lastFrame()).toContain("web line 40");
+    for (const key of ["k", "k", "k"]) {
+      app.stdin.write(key);
+      await tick();
+    }
+    expect(app.lastFrame()).toContain("↑ 3 lines back");
+    expect(app.lastFrame()).not.toContain("web line 40");
+    // Paging far past the top stops there: one line down is one line down, not twenty.
+    for (const key of ["u", "u", "u", "u", "u"]) {
+      app.stdin.write(key);
+      await tick();
+    }
+    expect(app.lastFrame()).toMatch(/web line 1\s+│/);
+    app.stdin.write("j");
+    await tick();
+    expect(app.lastFrame()).not.toMatch(/web line 1\s+│/);
+    // → goes to the next command, past the bolt rows, back at its newest line.
+    app.stdin.write("\u001B[C");
+    await tick();
+    await tick();
+    expect(app.lastFrame()).toContain("worker line 40");
+    app.stdin.write("\u001B[D");
+    await tick();
+    await tick();
+    expect(app.lastFrame()).toContain("web line 40");
+  });
+
   it("have tabs beside the list, [ and ] switch them, and the tab stays while moving between rows", async () => {
     const crashed = { ...server, id: "ef56", alive: false, exitCode: 1, startedAt: new Date(Date.now() - 3_600_000).toISOString() };
     const other = { ...server, id: "gh78", label: "worker", command: "pnpm worker", asset: "command:worker" };
@@ -801,6 +838,89 @@ describe("panes", () => {
     await tick();
     await tick();
     expect(app.lastFrame()).toContain("ready on :3000");
+  });
+});
+
+describe("filtering logs", () => {
+  it("keeps only the matching lines of a running command's log, with / when the log is full screen", async () => {
+    const server = { id: "ab12", kind: "background", label: "web", command: "pnpm dev", workspace: acme.workspace.file, workspaceName: "Acme", asset: "command:web", pid: 1, startedAt: new Date().toISOString(), alive: true, log: "/logs/web" };
+    const log = ["ready on :3000", "GET /cart 200", "ERROR cart total is NaN", "GET /cart 500", "error: retrying the cart"].join("\n");
+    const tail = vi.fn(async () => log);
+    const app = await open(services({ runs: async () => [server] as never, tail }));
+    await tick();
+    app.stdin.write("p");
+    await tick();
+    app.stdin.write("f");
+    await tick();
+    for (const key of ["/", "e", "r", "r"]) {
+      app.stdin.write(key);
+      await tick();
+    }
+    await tick();
+    let frame = app.lastFrame() ?? "";
+    expect(frame).toContain("/ err");
+    expect(frame).toContain("2 of 5 lines");
+    expect(frame).toMatch(/3 ERROR cart total is NaN/);
+    expect(frame).toMatch(/5 error: retrying the cart/);
+    expect(frame).not.toContain("GET /cart 200");
+    // Filtering reads more of the log than the last screens.
+    expect(tail).toHaveBeenLastCalledWith("/logs/web", 20_000, 4 * 1024 * 1024);
+
+    // Kept while you look around; esc clears it.
+    app.stdin.write("\r");
+    await tick();
+    expect(app.lastFrame()).toContain("esc clears");
+    app.stdin.write("\u001B");
+    await tick();
+    await tick();
+    frame = app.lastFrame() ?? "";
+    expect(frame).toContain("GET /cart 200");
+    expect(frame).not.toContain("/ err");
+  });
+
+  it("filters every step's log of a past run, and says where the matches are", async () => {
+    const entry = {
+      id: "c7", number: 7, workspace: acme.workspace.file, workspaceName: "Acme", bolt: "Check", job: true, ok: false,
+      startedAt: new Date(Date.now() - 600_000).toISOString(), finishedAt: new Date(Date.now() - 597_000).toISOString(),
+      steps: [
+        { kind: "command" as const, label: "lint", value: "pnpm lint", ok: true, durationMs: 900, log: "/logs/1" },
+        { kind: "command" as const, label: "test", value: "pnpm test", ok: false, error: "exited with code 1", durationMs: 2100, log: "/logs/2" },
+      ],
+    };
+    const readLog = vi.fn(async (path: string) => (path === "/logs/2" ? "✓ adds\n✓ subtracts\nFAIL divides by zero\nFAIL rounds" : "lint ok"));
+    const app = render(<App services={services({ history: async () => [entry] as never, readLog })} glyphs={unicode} size={{ columns: 120, rows: 30 }} />);
+    await tick();
+    app.stdin.write("h");
+    await tick();
+    await tick();
+    app.stdin.write("\r");
+    await tick();
+    await tick();
+    for (const key of ["/", "f", "a", "i", "l"]) {
+      app.stdin.write(key);
+      await tick();
+    }
+    await tick();
+    const frame = app.lastFrame() ?? "";
+    expect(frame).toContain("2 matches in 1 step");
+    expect(frame).toMatch(/run test .*2 matches/);
+    expect(frame).toMatch(/run lint .*no match/);
+    expect(frame).toMatch(/3 FAIL divides by zero/);
+    expect(frame).toMatch(/4 FAIL rounds/);
+    expect(frame).not.toContain("subtracts");
+    // Every step's log is read for it, not only the open one's.
+    expect(readLog).toHaveBeenCalledWith("/logs/1");
+
+    app.stdin.write("\r");
+    await tick();
+    app.stdin.write("\u001B");
+    await tick();
+    expect(app.lastFrame()).not.toContain("matches in");
+    expect(app.lastFrame()).toContain("subtracts");
+    // A second esc goes back to the runs, as before.
+    app.stdin.write("\u001B");
+    await tick();
+    expect(app.lastFrame()).toContain("All bolts");
   });
 });
 

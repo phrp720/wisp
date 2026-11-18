@@ -174,6 +174,7 @@ export function HelpPanel({ glyphs, height }: { glyphs: Glyphs; height: number }
         ["↑↓  j k", "move"],
         ["1 2 3", "the tabs: bolts · running · history"],
         ["[  ]", "on Running: logs · info · past runs"],
+        ["f", "on Running: the log full screen: ↑↓ scroll, ←→ next, / filters"],
         ["mouse", "click to select · wheel to scroll · off in settings"],
         ["←→  tab", "between workspaces and bolts"],
         ["t", "review and allow what a file would run"],

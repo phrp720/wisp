@@ -26,7 +26,13 @@ ask for it once with `--window`.
 The panel beside the list has tabs for the command you've selected. `[` and `]` switch
 between them, and the tab you pick stays as you move down the list:
 
-- **Logs:** its live output.
+- **Logs:** its live output. `f` shows it full screen: `↑↓` scroll it, `←→` go to the
+  command before or after, and `/` filters it. Only the lines with every word you type stay,
+  the words highlighted, with each line's number. The filter stays as you move to another
+  command, so you can look for the same error in each.
+
+  A dev server that clears the screen for each message (Vite does) shows every message
+  here, one after another, without the screenful of blank lines it pads each clear with.
 - **Info:** what it runs and in which folder, its `env` (values that look like secrets are
   hidden), its restart policy, its PID, and the `wisp logs` and `wisp stop` lines to reach
   it from a shell.

@@ -45,14 +45,15 @@ export interface Services {
   runs(): Promise<RunStatus[]>;
   stop(run: RunStatus): boolean;
   restart(run: RunStatus): Promise<StartResult>;
-  tail(log: string | undefined, lines: number): Promise<string>;
+  /** The end of a log: `lines` of it, from at most `maxBytes` (256 KiB unless said). */
+  tail(log: string | undefined, lines: number, maxBytes?: number): Promise<string>;
   /** Hand the terminal to an editor, and take it back when it closes. */
   edit(file: string): Promise<void>;
 
   /** The containers of these compose files — or why Docker could not say. */
   containers(files: string[]): Promise<{ containers: Container[]; error?: string }>;
   containerStats(names: string[]): Promise<Map<string, ContainerStats>>;
-  containerLogs(name: string): Promise<string>;
+  containerLogs(name: string, lines?: number): Promise<string>;
   containerAction(name: string, action: "start" | "stop" | "restart"): Promise<void>;
 
   /** What Wisp would set up in the folder it was opened in, if that folder has none. */

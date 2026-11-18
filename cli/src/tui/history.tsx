@@ -7,6 +7,7 @@ import type { Glyphs } from "./glyphs.js";
 import { spell } from "./spells.js";
 import { TONE } from "./tones.js";
 import { matchesAll, shortUrl, windowed, type Services } from "./model.js";
+import { FilterLine, filterLog, MatchLine } from "./logfilter.js";
 import { useMouse } from "./mouse.js";
 
 export interface HistoryScreenProps {
@@ -352,9 +353,28 @@ function RunDetail(props: {
   const [top, setTop] = useState(0);
   // Whether you scrolled yourself (u, d, or past the ends with ↑↓), so the view stays put.
   const [scrolled, setScrolled] = useState(false);
+  // The log filter: every step's log, down to the lines with every word of it. `typing`
+  // while it is written; refs too, as keys can arrive faster than a redraw.
+  const [query, setQueryState] = useState("");
+  const [typing, setTypingState] = useState(false);
+  const queryRef = useRef("");
+  const typingRef = useRef(false);
+  const setQuery = (change: (prior: string) => string) => {
+    queryRef.current = change(queryRef.current);
+    setQueryState(queryRef.current);
+    // A new filter starts at the top of what it found.
+    setScrolled(false);
+    setTop(0);
+  };
+  const setTyping = (next: boolean) => {
+    typingRef.current = next;
+    setTypingState(next);
+  };
+  const filtering = query !== "";
 
   useEffect(() => {
-    for (const at of expanded) {
+    // Filtering reads every step's log, not just the open ones.
+    for (const at of filtering ? entry.steps.keys() : expanded) {
       const step = entry.steps[at];
       if (!step?.log || logs.has(at)) continue;
       void services
@@ -364,7 +384,7 @@ function RunDetail(props: {
         })
         .catch(() => setLogs((prior) => new Map(prior).set(at, GONE)));
     }
-  }, [expanded, entry, services, logs]);
+  }, [expanded, entry, services, logs, filtering]);
 
   // The steps and their open logs, as one list of rows to scroll through. `lines`: how many
   // a row takes when it wraps, so a click below it still finds the right step.
@@ -372,9 +392,19 @@ function RunDetail(props: {
   const longest = Math.max(1, ...entry.steps.map((step) => step.durationMs));
   // As wide as the longest step, so a step's time sits beside it rather than across the screen.
   const labelWidth = Math.min(Math.max(24, columns - 34), Math.max(16, ...entry.steps.map((step) => describeHistoryStep(step, entry.job).length + 2)));
+  let matches = 0;
+  let matchingSteps = 0;
+  let reading = false;
   entry.steps.forEach((step, at) => {
     const isSelected = at === selected;
     const isOpen = expanded.has(at);
+    const read = logs.get(at);
+    const found = filtering && read && read !== GONE ? filterLog(read, query) : undefined;
+    if (filtering && step.log && !read) reading = true;
+    if (found && found.length > 0) {
+      matches += found.length;
+      matchingSteps += 1;
+    }
     const bar = step.durationMs > 0 ? "▇".repeat(Math.max(1, Math.round((step.durationMs / longest) * 12))) : "";
     rows.push({
       key: `s${at}`,
@@ -386,10 +416,22 @@ function RunDetail(props: {
           <Text dimColor>{` ${formatDuration(step.durationMs).padStart(6)}  `}</Text>
           <Text color={step.ok ? TONE.accent : "red"}>{bar.padEnd(12)}</Text>
           {"  "}
-          {step.error ? <Text color="red">{step.error}</Text> : step.note && !step.note.startsWith("logs:") ? <Text dimColor>{step.note}</Text> : null}
+          {filtering ? (
+            found && found.length > 0 ? <Text color="yellow">{`${found.length} match${found.length === 1 ? "" : "es"}`}</Text> : <Text dimColor>{step.log ? (read ? "no match" : "reading…") : "no output"}</Text>
+          ) : step.error ? (
+            <Text color="red">{step.error}</Text>
+          ) : step.note && !step.note.startsWith("logs:") ? (
+            <Text dimColor>{step.note}</Text>
+          ) : null}
         </Text>
       ),
     });
+    // Filtering: under each step, its matching lines, whether it was open or not.
+    if (filtering) {
+      const width = String(read?.length ?? 0).length;
+      for (const match of found ?? []) rows.push({ key: `m${at}:${match.at}`, node: <MatchLine at={match.at} text={match.text} query={query} width={width} indent={8} /> });
+      return;
+    }
     if (isOpen) {
       const lines = logs.get(at);
       const say = (text: string) => rows.push({ key: `l${at}`, lines: wrappedLines(`        ${text}`, columns - 4), node: <Text dimColor wrap="wrap">{`        ${text}`}</Text> });
@@ -417,7 +459,7 @@ function RunDetail(props: {
 
   const graph = pipeline(entry);
   const graphRows = graph.length > 1 ? Math.max(1, Math.ceil(graphWidth(graph) / Math.max(20, columns - 6))) : 0;
-  const room = Math.max(3, height - 8 - graphRows * 3);
+  const room = Math.max(3, height - 8 - graphRows * 3 - (filtering || typing ? 1 : 0));
   const selectedRow = Math.max(0, rows.findIndex((row) => row.step === selected));
   // The view follows the selected step, until you scroll yourself: then it stays where you
   // put it (it used to snap straight back to the step, so u and d seemed to do nothing).
@@ -468,6 +510,23 @@ function RunDetail(props: {
   });
 
   useInput((input, key) => {
+    // Typing the filter: letters go into it; ⏎ or ↓ keeps it.
+    if (typingRef.current) {
+      if (key.escape) {
+        setQuery(() => "");
+        return setTyping(false);
+      }
+      if (key.return || key.downArrow || key.tab) return setTyping(false);
+      if (key.backspace || key.delete) return setQuery((text) => text.slice(0, -1));
+      if (input && !key.ctrl && !key.meta) setQuery((text) => text + input);
+      return;
+    }
+    // Fast typing arrives as one chunk: "/err" is "/" and the start of the filter.
+    if (input.startsWith("/")) {
+      setTyping(true);
+      return setQuery((text) => text + input.slice(1));
+    }
+    if (key.escape && queryRef.current) return setQuery(() => "");
     if (key.escape || key.leftArrow || input === "q") return onBack();
     if (input === "r" && !entry.ok) return onRetry();
     if (input === "R") return onRerun();
@@ -523,13 +582,33 @@ function RunDetail(props: {
       ) : (
         <Text> </Text>
       )}
+      {filtering || typing ? (
+        <FilterLine
+          query={query}
+          typing={typing}
+          found={
+            !filtering ? (
+              <Text dimColor>type to keep only the log lines with it</Text>
+            ) : matches > 0 ? (
+              <Text dimColor>{`${matches} match${matches === 1 ? "" : "es"} in ${matchingSteps} step${matchingSteps === 1 ? "" : "s"}${reading ? ", reading the rest…" : ""}`}</Text>
+            ) : (
+              <Text color={reading ? undefined : "red"} dimColor={reading}>{reading ? "reading the logs…" : "no line matches in any step"}</Text>
+            )
+          }
+        />
+      ) : null}
       </Box>
       {visible.map((row) => (
         <Box key={row.key}>{row.node}</Box>
       ))}
       <Box flexGrow={1} />
       <Text dimColor wrap="truncate-end">
-        {["↑↓ steps", "⏎ show or hide its log", "u d scroll", entry.ok ? "" : "r retry what failed", "R run again", "esc back to the runs"].filter(Boolean).join(" · ")}
+        {(typing
+          ? ["type to filter the logs", "⏎ keep it", "esc clear"]
+          : ["↑↓ steps", "⏎ show or hide its log", "/ filter the logs", "u d scroll", entry.ok ? "" : "r retry what failed", "R run again", filtering ? "esc clear the filter" : "esc back to the runs"]
+        )
+          .filter(Boolean)
+          .join(" · ")}
       </Text>
     </Box>
   );

@@ -41,6 +41,9 @@ export type View =
       typing?: boolean;
       /** The tab of the panel beside the list. Kept while moving between rows, as lazydocker does. */
       tab?: PaneTab;
+      /** Shows only the log lines that match, kept while moving between rows; `logTyping` while it is written. */
+      logQuery?: string;
+      logTyping?: boolean;
     }
   | { kind: "help" }
   | { kind: "history" }
@@ -152,6 +155,8 @@ export interface PaneGroup {
   workspaceName: string;
   bolt?: string;
   title: string;
+  /** The run its pipeline comes from, as History numbers it: kept here, so a filter that hides the steps keeps it. */
+  number?: number;
 }
 
 export const KIND: Record<StepKind, string> = {
