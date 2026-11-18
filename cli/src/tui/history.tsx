@@ -287,6 +287,8 @@ function RunDetail(props: {
   const [expanded, setExpanded] = useState<Set<number>>(() => new Set(entry.ok ? [] : [firstFailed]));
   const [logs, setLogs] = useState<Map<number, string[]>>(new Map());
   const [top, setTop] = useState(0);
+  // Whether you scrolled yourself (u, d, or past the ends with ↑↓), so the view stays put.
+  const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
     for (const at of expanded) {
@@ -353,25 +355,38 @@ function RunDetail(props: {
   const graphRows = graph.length > 1 ? Math.max(1, Math.ceil(graphWidth(graph) / Math.max(20, columns - 6))) : 0;
   const room = Math.max(3, height - 8 - graphRows * 3);
   const selectedRow = Math.max(0, rows.findIndex((row) => row.step === selected));
-  // The view follows the selected step; page keys move it on their own.
+  // The view follows the selected step, until you scroll yourself: then it stays where you
+  // put it (it used to snap straight back to the step, so u and d seemed to do nothing).
   const most = Math.max(0, rows.length - room);
-  const first = Math.min(most, Math.max(0, selectedRow < top ? selectedRow : selectedRow >= top + room ? selectedRow - room + 1 : top));
+  const first = scrolled
+    ? Math.min(most, Math.max(0, top))
+    : Math.min(most, Math.max(0, selectedRow < top ? selectedRow : selectedRow >= top + room ? selectedRow - room + 1 : top));
   const visible = rows.slice(first, first + room);
 
   useInput((input, key) => {
     if (key.escape || key.leftArrow || input === "q") return onBack();
     if (input === "r" && !entry.ok) return onRetry();
     if (input === "R") return onRerun();
+    const scrollTo = (next: number) => {
+      setScrolled(true);
+      setTop(Math.min(most, Math.max(0, next)));
+    };
     if (key.upArrow || input === "k") {
+      // Above the first step, ↑ scrolls back up through what was read.
+      if (selectedRef.current === 0 && first > 0) return scrollTo(first - 1);
+      setScrolled(false);
       setTop(first);
       return setSelected((at) => Math.max(0, at - 1));
     }
     if (key.downArrow || input === "j") {
+      // Past the last step, ↓ reads on down its log, a line at a time.
+      if (selectedRef.current >= entry.steps.length - 1) return scrollTo(first + 1);
+      setScrolled(false);
       setTop(first);
       return setSelected((at) => Math.min(entry.steps.length - 1, at + 1));
     }
-    if (key.pageDown || input === "d") return setTop(Math.min(most, first + room));
-    if (key.pageUp || input === "u") return setTop(Math.max(0, first - room));
+    if (key.pageDown || input === "d") return scrollTo(first + room);
+    if (key.pageUp || input === "u") return scrollTo(first - room);
     if (key.return || input === " ") {
       const at = selectedRef.current;
       setTop(first);
