@@ -20,17 +20,7 @@ import { TONE } from "./tones.js";
  */
 export function WorkspaceList(props: { reads: WorkspaceRead[]; index: number; here?: string | undefined; focused: boolean; glyphs: Glyphs; height: number; width: number }) {
   const { reads, index, here, focused, glyphs, height, width } = props;
-  const group = (read: WorkspaceRead) => (read.workspace.file === here ? "This folder" : read.workspace.personal ? "Yours" : "Projects");
-
-  // Headings and workspaces as rows, so a long list scrolls with its headings in place.
-  const rows: ({ heading: string } | { read: WorkspaceRead; at: number })[] = [];
-  reads.forEach((read, at) => {
-    const previous = reads[at - 1];
-    if (!previous || group(previous) !== group(read)) rows.push({ heading: group(read) });
-    rows.push({ read, at });
-  });
-  const selectedRow = Math.max(0, rows.findIndex((row) => "at" in row && row.at === index));
-  const { items } = windowed(rows, selectedRow, height - 3);
+  const items = workspaceRows(reads, here, index, height);
 
   return (
     <Box flexDirection="column" width={width} flexShrink={0} borderStyle={glyphs.border} borderColor={focused ? TONE.accent : "gray"} paddingX={1} overflow="hidden">
@@ -63,6 +53,39 @@ export function WorkspaceList(props: { reads: WorkspaceRead[]; index: number; he
   );
 }
 
+/** How wide the workspace list is, the bolts panel taking the rest. */
+export function workspaceListWidth(columns: number): number {
+  return Math.min(32, Math.max(18, Math.floor(columns * 0.28)));
+}
+
+/**
+ * The workspace list's lines that fit: headings and workspaces as rows, so a long list
+ * scrolls with its headings in place. Drawn from this, and clicks are matched against it.
+ */
+export function workspaceRows(reads: WorkspaceRead[], here: string | undefined, index: number, height: number): ({ heading: string } | { read: WorkspaceRead; at: number })[] {
+  const group = (read: WorkspaceRead) => (read.workspace.file === here ? "This folder" : read.workspace.personal ? "Yours" : "Projects");
+  const rows: ({ heading: string } | { read: WorkspaceRead; at: number })[] = [];
+  reads.forEach((read, at) => {
+    const previous = reads[at - 1];
+    if (!previous || group(previous) !== group(read)) rows.push({ heading: group(read) });
+    rows.push({ read, at });
+  });
+  const selectedRow = Math.max(0, rows.findIndex((row) => "at" in row && row.at === index));
+  return windowed(rows, selectedRow, height - 3).items;
+}
+
+/** The line of the bolts panel its first bolt is on, counted from the panel's top border. */
+export const FIRST_BOLT_LINE = 6;
+
+/** The bolts that fit in the panel, and the index of the first one shown. */
+export function boltWindow<T>(bolts: T[], boltIndex: number, height: number): { items: T[]; offset: number; stepRoom: number } {
+  // Lines above and between the lists, so the lists take what is left.
+  const fixed = 7;
+  const listRoom = Math.max(2, height - 2 - fixed);
+  const boltRoom = Math.max(1, Math.min(bolts.length, Math.ceil(listRoom / 2)));
+  return { ...windowed(bolts, boltIndex, boltRoom), stepRoom: Math.max(1, listRoom - boltRoom) };
+}
+
 export function WorkspacePanel(props: { read: WorkspaceRead; boltIndex: number; focused: boolean; glyphs: Glyphs; height: number; runs: RunStatus[]; containers: Container[]; history: HistoryEntry[] }) {
   const { read, boltIndex, focused, glyphs, height, runs, containers, history } = props;
   const lastRun = (label: string) => history.find((entry) => baseLabel(entry.bolt) === label);
@@ -80,13 +103,7 @@ export function WorkspacePanel(props: { read: WorkspaceRead; boltIndex: number; 
       })
     : [];
 
-  // Lines above and between the lists, so the lists take what is left.
-  // Room kept at the bottom for the workspace's recent runs, when it has any.
-  const fixed = 7;
-  const listRoom = Math.max(2, height - 2 - fixed);
-  const boltRoom = Math.max(1, Math.min(bolts.length, Math.ceil(listRoom / 2)));
-  const stepRoom = Math.max(1, listRoom - boltRoom);
-  const { items: shownBolts, offset } = windowed(bolts, boltIndex, boltRoom);
+  const { items: shownBolts, offset, stepRoom } = boltWindow(bolts, boltIndex, height);
   const stepLines = [
     ...steps.map((step) => ({ key: `${step.kind}:${step.id}:${step.label}`, label: `${step.kind === "bolt" ? glyphs.bolt : ""}${describeStep(step, false, selected?.job ?? false).replace("›", glyphs.arrow)}`, note: step.workspace ? ` (from ${step.workspace})` : "", waiting: false })),
     ...waiting.map((item) => ({ key: `held:${item.id}`, label: item.kind === "command" ? `start ${item.label}` : `start ${item.label}`, note: "", waiting: true })),

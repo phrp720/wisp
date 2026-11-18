@@ -9,17 +9,18 @@ import type { RunStatus } from "../core/processes.js";
 import { composeFiles, retryPlan } from "../core/switch.js";
 import type { Bolt, SwitchResult, WorkspaceRead } from "../core/types.js";
 import { BoltView, flow } from "./boltview.js";
-import { Footer, Header } from "./chrome.js";
+import { Footer, Header, headerTabAt, runningStatus } from "./chrome.js";
 import { SetupPanel, TrustPanel } from "./dialogs.js";
 import { BoltEditor } from "./editor.js";
 import { Choice, Confirm, Form } from "./forms.js";
 import { type Glyphs, glyphs as defaultGlyphs } from "./glyphs.js";
 import { HistoryScreen } from "./history.js";
-import { Empty, SearchPanel, WorkspaceList, WorkspacePanel } from "./home.js";
+import { boltWindow, Empty, FIRST_BOLT_LINE, SearchPanel, WorkspaceList, workspaceListWidth, WorkspacePanel, workspaceRows } from "./home.js";
 import { type Library, ordered, search, type Services } from "./model.js";
 import { CheckPanel, HelpPanel, RunPanel } from "./panels.js";
 import { SettingsScreen } from "./settings.js";
-import { filterPanes, groupPanes, paneKey, PanesPanel } from "./running.js";
+import { type MouseListener, MouseContext, type MouseSource } from "./mouse.js";
+import { filterPanes, groupPanes, nextTab, paneKey, PanesPanel, paneSpotAt, shownTab } from "./running.js";
 import { type Activity, clamp, type Focus, markFirst, needsTrust, type Notice, type PaneItem, type RunState, SELF_DRIVEN, useLatest, useTerminalSize, type View, visibleRuns, waitingForTrust } from "./state.js";
 import { spell } from "./spells.js";
 import { TONE } from "./tones.js";
@@ -29,9 +30,14 @@ export interface AppProps {
   glyphs?: Glyphs;
   /** Fixed size, for tests; otherwise the terminal's, kept up to date on resize. */
   size?: { columns: number; rows: number };
+  /** Clicks and the wheel. Without it (in tests, or piped), the dashboard is keys only. */
+  mouse?: MouseSource;
 }
 
-export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
+/** Screens the tabs along the top can be clicked from: not one with a form half filled in. */
+const TABS_CLICKABLE = new Set<View["kind"]>(["browse", "processes", "history", "help", "check", "run", "view", "search"]);
+
+export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProps) {
   const { exit } = useApp();
   const { columns, rows } = useTerminalSize(size);
 
@@ -88,6 +94,20 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
     const timer = setTimeout(() => setNotice(undefined), 9000);
     return () => clearTimeout(timer);
   }, [notice]);
+
+  // The mouse is on unless turned off in Settings. The terminal is asked for it only once
+  // the setting is read, and told to stop when the dashboard closes.
+  const [mouseOn, setMouseOn] = useState(false);
+  useEffect(() => {
+    void services.settings
+      .mouse()
+      .then(setMouseOn)
+      .catch(() => setMouseOn(true));
+  }, [services]);
+  useEffect(() => {
+    mouse?.enable(mouseOn);
+  }, [mouse, mouseOn]);
+  useEffect(() => () => mouse?.enable(false), [mouse]);
 
   // Runs started from here: when they start and how they end.
   const loggedRun = useRef<RunState | undefined>(undefined);
@@ -655,6 +675,12 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
           .catch((error: unknown) => setMessage(describe(error)));
         return;
       }
+      // [ and ]: the tabs of the panel beside the list (logs, info, past runs), as in lazydocker.
+      if (input === "[" || input === "]") {
+        const tab = nextTab(item, view.tab, input === "]" ? 1 : -1);
+        if (tab) setView({ ...view, tab, scroll: 0 });
+        return;
+      }
       const page = Math.max(1, bodyHeight - 4);
       if (key.upArrow || input === "k") return setView({ ...rest, index: Math.max(0, at - 1), scroll: 0 });
       if (key.downArrow || input === "j") return setView({ ...rest, index: Math.min(list.length - 1, at + 1), scroll: 0 });
@@ -788,16 +814,101 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
 
   const bodyHeight = Math.max(4, rows - 2);
   const hereLabel = library?.here ? tildify(library.here.replace(/[\\/]\.wisp\.json$/, "")) : undefined;
+  const runningCount = runs.filter((run) => run.alive).length + containers.filter((container) => container.state === "running").length;
+  const failing = containers.filter((container) => container.health === "unhealthy" || ((container.state === "exited" || container.state === "dead") && container.exitCode !== 0)).map((container) => `${container.service} ${containerMood(container).word}`);
+
+  /**
+   * A click or a wheel turn: what is under it, worked out from the layout each screen is
+   * drawn from. Returns whether it did something; a wheel turn it didn't use becomes an
+   * arrow key, so lists without their own handling scroll as they always did.
+   */
+  const onMouse = useRef<MouseListener>(() => false);
+  onMouse.current = (event) => {
+    const view = viewRef.current;
+    if (!library) return false;
+    // The tabs along the top.
+    if (event.y === 0) {
+      if (event.kind !== "click" || !TABS_CLICKABLE.has(view.kind)) return false;
+      const tab = headerTabAt(event.x, glyphs, runningStatus(glyphs, runningCount, failing)?.text ?? "");
+      if (tab === "bolts" && view.kind !== "browse") setView({ kind: "browse" });
+      if (tab === "running" && view.kind !== "processes") setView(activity());
+      if (tab === "history" && view.kind !== "history") setView(history_());
+      return tab !== undefined;
+    }
+    // From the panels' top border down.
+    const y = event.y - 1;
+    if (y >= bodyHeight) return false;
+
+    if (view.kind === "processes") {
+      const spot = paneSpotAt({ x: event.x, y, items: paneItems, active, index: processIndex, height: bodyHeight, columns, full: view.full, searching: Boolean(view.typing || view.query), activity: events.length, dockerError, glyphs });
+      if (!spot) return false;
+      if (event.kind === "wheel") {
+        // Over the list, the wheel moves the selection (as an arrow key); over the logs, it scrolls them.
+        if (spot.area !== "panel" && spot.area !== "tab") return false;
+        if (shownTab(paneItems[processIndex], view.tab) === "logs") setView({ ...view, scroll: Math.max(0, view.scroll - event.by * 3) });
+        return true;
+      }
+      if (spot.area === "row") {
+        const { focus: _focus, ...rest } = view;
+        setView({ ...rest, index: spot.at, scroll: 0, typing: false });
+        return true;
+      }
+      if (spot.area === "tab") {
+        setView({ ...view, tab: spot.tab, scroll: 0 });
+        return true;
+      }
+      return false;
+    }
+
+    if (view.kind === "browse" && reads.length > 0) {
+      // The workspace list on the left.
+      if (event.x < workspaceListWidth(columns)) {
+        if (event.kind === "wheel") {
+          setWsIndex(clamp(wsRef.current + event.by, reads.length));
+          setBoltIndex(0);
+          setFocus("workspaces");
+          return true;
+        }
+        const row = workspaceRows(reads, library.here, wsRef.current, bodyHeight)[y - 2];
+        if (row && "at" in row) {
+          if (row.at !== wsRef.current) setBoltIndex(0);
+          setWsIndex(row.at);
+          setFocus("workspaces");
+        }
+        return true;
+      }
+      // The selected workspace's bolts. A click selects one; ⏎ runs it, as ever.
+      const list = reads[Math.min(wsRef.current, reads.length - 1)]?.workspace.bolts ?? [];
+      if (list.length === 0) return event.kind === "wheel";
+      if (event.kind === "wheel") {
+        setFocus("bolts");
+        setBoltIndex(clamp(boltRef.current + event.by, list.length));
+        return true;
+      }
+      const { items, offset } = boltWindow(list, boltRef.current, bodyHeight);
+      const at = y - FIRST_BOLT_LINE;
+      if (at >= 0 && at < items.length) {
+        setFocus("bolts");
+        setBoltIndex(offset + at);
+      }
+      return true;
+    }
+    return false;
+  };
+  useEffect(() => mouse?.subscribe((event) => onMouse.current(event)), [mouse]);
+  // Screens with state of their own (History) take their clicks themselves, from under the tabs.
+  const mouseArea = useMemo(() => (mouse ? { source: mouse, top: 1 } : undefined), [mouse]);
 
   return (
+    <MouseContext.Provider value={mouseArea}>
     <Box flexDirection="column" width={columns} height={rows}>
       <Header
         services={services}
         glyphs={glyphs}
         columns={columns}
         here={hereLabel}
-        running={runs.filter((run) => run.alive).length + containers.filter((container) => container.state === "running").length}
-        failing={containers.filter((container) => container.health === "unhealthy" || ((container.state === "exited" || container.state === "dead") && container.exitCode !== 0)).map((container) => `${container.service} ${containerMood(container).word}`)}
+        running={runningCount}
+        failing={failing}
         tab={view.kind === "processes" ? "running" : view.kind === "history" ? "history" : "bolts"}
       />
 
@@ -947,7 +1058,7 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
           onEdit={() => setView({ kind: "editor", file: view.file, bolt: view.bolt })}
         />
       ) : view.kind === "settings" ? (
-        <SettingsScreen services={services} glyphs={glyphs} height={bodyHeight} onClose={() => setView({ kind: "browse" })} onSaved={(text) => {
+        <SettingsScreen services={services} glyphs={glyphs} height={bodyHeight} onMouse={setMouseOn} onClose={() => setView({ kind: "browse" })} onSaved={(text) => {
           say(text);
           // Each workspace fixes which app opens its folders and files when it is read, so
           // read them again: the next run uses the new choice, without restarting Wisp.
@@ -1070,7 +1181,7 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
           }}
         />
       ) : view.kind === "processes" ? (
-        <PanesPanel items={paneItems} activity={events} history={recent} query={view.query ?? ""} typing={Boolean(view.typing)} runs={runs} containers={containers} active={active} tick={tick} stats={stats} dockerError={dockerError} all={view.all} index={processIndex} log={watchingActive ? (active?.output ?? []).join("\n") : log} scroll={view.scroll} full={view.full} glyphs={glyphs} height={bodyHeight} columns={columns} />
+        <PanesPanel items={paneItems} activity={events} history={recent} query={view.query ?? ""} typing={Boolean(view.typing)} runs={runs} containers={containers} active={active} tick={tick} stats={stats} dockerError={dockerError} all={view.all} index={processIndex} log={watchingActive ? (active?.output ?? []).join("\n") : log} scroll={view.scroll} full={view.full} tab={view.tab} reads={reads} glyphs={glyphs} height={bodyHeight} columns={columns} />
       ) : view.kind === "help" ? (
         <HelpPanel glyphs={glyphs} height={bodyHeight} />
       ) : view.kind === "search" ? (
@@ -1079,7 +1190,7 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
         <Empty glyphs={glyphs} height={bodyHeight} unreadable={library.unreadable.length} />
       ) : (
         <Box height={bodyHeight}>
-          <WorkspaceList reads={reads} index={wsIndex} here={library.here} focused={focus === "workspaces"} glyphs={glyphs} height={bodyHeight} width={Math.min(32, Math.max(18, Math.floor(columns * 0.28)))} />
+          <WorkspaceList reads={reads} index={wsIndex} here={library.here} focused={focus === "workspaces"} glyphs={glyphs} height={bodyHeight} width={workspaceListWidth(columns)} />
           {current ? (
             <WorkspacePanel
               read={current}
@@ -1097,5 +1208,6 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
 
       <Footer view={view} notice={notice} message={message ?? (library?.unreadable.length ? `${library.unreadable.length} workspace file(s) could not be read — \`wisp list\`` : undefined)} />
     </Box>
+    </MouseContext.Provider>
   );
 }

@@ -5,15 +5,17 @@ import { useEffect, useRef, useState } from "react";
 
 import { Form, Picker } from "./forms.js";
 import type { Glyphs } from "./glyphs.js";
+import { useMouse, useRefs } from "./mouse.js";
 import type { OpenWith, Services } from "./model.js";
 import { TONE } from "./tones.js";
 
 type Key = "folder" | "file" | "terminal";
 
-const ROWS: { key: Key; label: string; what: string }[] = [
+const ROWS: { key: Key | "mouse"; label: string; what: string }[] = [
   { key: "folder", label: "Folders open in", what: "a bolt's folder steps, like apps/api" },
   { key: "file", label: "Files open in", what: "a bolt's file steps, like docs/runbook.md" },
   { key: "terminal", label: "Commands run", what: "a bolt's commands, like pnpm dev" },
+  { key: "mouse", label: "Mouse", what: "click rows and tabs, scroll output with the wheel. Off: select text without holding Shift" },
 ];
 
 const DEFAULT = "__default";
@@ -21,8 +23,9 @@ const OTHER = "__other";
 
 type Mode = { kind: "list" } | { kind: "pick"; key: Key } | { kind: "other"; key: Key };
 
-export function SettingsScreen({ services, glyphs, height, onClose, onSaved }: { services: Services; glyphs: Glyphs; height: number; onClose: () => void; onSaved: (text: string) => void }) {
+export function SettingsScreen({ services, glyphs, height, onClose, onSaved, onMouse }: { services: Services; glyphs: Glyphs; height: number; onClose: () => void; onSaved: (text: string) => void; onMouse?: (on: boolean) => void }) {
   const [current, setCurrent] = useState<OpenWith>();
+  const [mouse, setMouse] = useState<boolean>();
   const [index, setIndexState] = useState(0);
   const indexRef = useRef(0);
   const setIndex = (next: number) => {
@@ -34,7 +37,16 @@ export function SettingsScreen({ services, glyphs, height, onClose, onSaved }: {
 
   useEffect(() => {
     void services.settings.get().then(setCurrent);
+    void services.settings.mouse().then(setMouse);
   }, [services]);
+
+  // On and off, so ⏎ flips it rather than opening a list of two.
+  const toggleMouse = async () => {
+    const next = await services.settings.setMouse(!(mouse ?? true));
+    setMouse(next);
+    onMouse?.(next);
+    onSaved(`Mouse: ${next ? "on" : "off"}`);
+  };
 
   const save = async (key: Key, value: string) => {
     const next = await services.settings.set({ [key]: value });
@@ -44,12 +56,32 @@ export function SettingsScreen({ services, glyphs, height, onClose, onSaved }: {
     onSaved(`${row.label}: ${describe(key, next[key])}`);
   };
 
+  // Open the selected setting: a list to choose from, or on and off for the mouse.
+  const change = (at: number) => {
+    const chosen = (ROWS[at] as (typeof ROWS)[number]).key;
+    if (chosen === "mouse") return void toggleMouse();
+    setMode({ kind: "pick", key: chosen });
+  };
+  // A click chooses a setting; a click on the chosen one changes it, as ⏎ does.
+  const rowNodes = useRefs<number>();
+  useMouse(
+    (event, at) => {
+      if (event.kind !== "click") return false;
+      const hit = rowNodes.entries().find(([, node]) => at(node));
+      if (!hit) return false;
+      if (hit[0] === indexRef.current) change(hit[0]);
+      else setIndex(hit[0]);
+      return true;
+    },
+    mode.kind === "list",
+  );
+
   useInput(
     (input, key) => {
       if (key.escape || input === "q" || input === "s") return onClose();
       if (key.upArrow || input === "k") return setIndex(Math.max(0, indexRef.current - 1));
       if (key.downArrow || input === "j") return setIndex(Math.min(ROWS.length - 1, indexRef.current + 1));
-      if (key.return || input === " ") return setMode({ kind: "pick", key: (ROWS[indexRef.current] as (typeof ROWS)[number]).key });
+      if (key.return || input === " ") return change(indexRef.current);
     },
     { isActive: mode.kind === "list" },
   );
@@ -116,11 +148,11 @@ export function SettingsScreen({ services, glyphs, height, onClose, onSaved }: {
       {ROWS.map((row, at) => {
         const selected = at === index;
         return (
-          <Box key={row.key} flexDirection="column" marginBottom={1}>
+          <Box key={row.key} ref={rowNodes.set(at)} flexDirection="column" marginBottom={1}>
             <Text wrap="truncate-end">
               <Text color={TONE.accent}>{selected ? `${glyphs.pointer} ` : "  "}</Text>
               <Text bold={selected} color={selected ? TONE.accent : undefined}>{row.label.padEnd(18)}</Text>
-              <Text>{current ? describe(row.key, current[row.key]) : "…"}</Text>
+              <Text>{row.key === "mouse" ? (mouse === undefined ? "…" : mouse ? "on" : "off") : current ? describe(row.key, current[row.key]) : "…"}</Text>
             </Text>
             <Text dimColor>{`    ${row.what}`}</Text>
           </Box>

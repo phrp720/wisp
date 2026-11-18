@@ -58,6 +58,21 @@ export async function setOpenWithDefaults(next: OpenWithDefaults): Promise<OpenW
   return config.openWith ?? {};
 }
 
+/** Whether the dashboard takes clicks and the scroll wheel. On unless you turned it off. */
+export async function getMouse(): Promise<boolean> {
+  const config = await loadConfig().catch(() => undefined);
+  return config?.mouse ?? true;
+}
+
+/** Turn the dashboard's mouse support on or off. Only "off" is written down: on is the default. */
+export async function setMouse(on: boolean): Promise<boolean> {
+  const config = await updateConfig((current) => {
+    const { mouse: _previous, ...rest } = current;
+    return on ? rest : { ...rest, mouse: false };
+  });
+  return config.mouse ?? true;
+}
+
 /**
  * Remember a project file, so it can be listed and run from anywhere.
  *
@@ -136,6 +151,8 @@ function normalizeConfig(value: unknown): Config {
   if (Array.isArray(noSetup)) {
     config.noSetup = noSetup.filter((dir): dir is string => typeof dir === "string" && !!dir.trim());
   }
+
+  if (typeof value["mouse"] === "boolean") config.mouse = value["mouse"];
 
   const projects = value["projects"];
   if (Array.isArray(projects)) {

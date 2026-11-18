@@ -4,7 +4,8 @@ import type { Container } from "../core/docker.js";
 import type { HistoryEntry } from "../core/history.js";
 import type { RunStatus } from "../core/processes.js";
 import { interpret } from "../core/project.js";
-import { groupPanes } from "./running.js";
+import { RESTART_MARK } from "../core/shell.js";
+import { containerDetails, groupPanes, maskEnv, nextTab, pastRuns, runDetails, shownTab, tabsOf, when } from "./running.js";
 import type { PaneItem } from "./state.js";
 
 const file = "/dev/shop/.wisp.json";
@@ -14,7 +15,7 @@ const shop = interpret(
       name: "Shop",
       bolts: [
         { label: "Services", targets: [{ compose: "compose.yaml", services: ["postgres"] }] },
-        { label: "Work on shop", targets: [{ bolt: "Services" }, { run: "pnpm dev", label: "web" }] },
+        { label: "Work on shop", targets: [{ bolt: "Services" }, { run: "pnpm dev", label: "web", restart: "on-failure", env: { PORT: 3000, STRIPE_SECRET: "sk_live_1", DATABASE_URL: "postgres://shop:hunter2@localhost/shop" } }] },
       ],
     },
   },
@@ -79,5 +80,74 @@ describe("the Running list", () => {
     const items = groupPanes([], [web], [postgres], [shop], [servicesRun, workRun]);
     expect(titles(items)).toContain("group Services");
     expect(titles(items)).toContain("group Work on shop");
+  });
+});
+
+describe("the panel's tabs", () => {
+  const run: PaneItem = { type: "run", run: web, group: "g" };
+  const container: PaneItem = { type: "container", container: postgres, group: "g" };
+
+  it("are logs, info and past runs for a command; logs and info for a container; none for a bolt", () => {
+    expect(tabsOf(run)).toEqual(["logs", "info", "runs"]);
+    expect(tabsOf(container)).toEqual(["logs", "info"]);
+    expect(tabsOf({ type: "group", group: { key: "g", workspaceName: "Shop", title: "Services" } })).toEqual([]);
+  });
+
+  it("go round with [ and ], and fall back to logs where a row lacks the tab chosen", () => {
+    expect(nextTab(run, undefined, 1)).toBe("info");
+    expect(nextTab(run, "runs", 1)).toBe("logs");
+    expect(nextTab(run, "logs", -1)).toBe("runs");
+    expect(shownTab(container, "runs")).toBe("logs");
+    expect(nextTab(container, "runs", 1)).toBe("info");
+    expect(nextTab({ type: "current" }, "info", 1)).toBeUndefined();
+  });
+
+  it("show a command's env from its file, with secrets hidden", () => {
+    const rows = runDetails(web, [shop], [], []);
+    const values = rows.map((row) => `${row.label}|${row.value}`);
+    expect(values).toContain("Command|pnpm dev");
+    expect(values).toContain("Env|PORT=3000");
+    expect(values).toContain("|STRIPE_SECRET=****");
+    expect(values).toContain("|DATABASE_URL=postgres://shop:****@localhost/shop");
+    expect(values).toContain("State|running, PID 1");
+    expect(values).toContain("Restart|on-failure");
+    expect(values).toContain("From a shell|wisp logs aaaaaaaaaaaa -f · wisp stop aaaaaaaaaaaa");
+    expect(values.join("\n")).not.toContain("hunter2");
+  });
+
+  it("count the restarts a command's output records", () => {
+    const rows = runDetails(web, [shop], [], ["listening", `${RESTART_MARK} in 1s`, "listening", `${RESTART_MARK} in 2s`]);
+    expect(rows.find((row) => row.label === "Restart")?.value).toBe("on-failure, restarted 2×");
+  });
+
+  it("hide what looks like a secret, and nothing else", () => {
+    expect(maskEnv("GITHUB_TOKEN", "ghp_1")).toBe("****");
+    expect(maskEnv("DB_PASSWORD", "x")).toBe("****");
+    expect(maskEnv("AWS_SECRET_ACCESS_KEY", "x")).toBe("****");
+    expect(maskEnv("API_KEY", "x")).toBe("****");
+    expect(maskEnv("NODE_ENV", "development")).toBe("development");
+    expect(maskEnv("KEYBOARD", "us")).toBe("us");
+    expect(maskEnv("REDIS_URL", "redis://default:pw@cache:6379")).toBe("redis://default:****@cache:6379");
+  });
+
+  it("list the times a command ran, newest first, and only that command's", () => {
+    const earlier = { ...web, id: "bbbbbbbbbbbb", alive: false, exitCode: 1, startedAt: "2026-11-18T09:00:00Z" };
+    const other = { ...web, id: "cccccccccccc", asset: "command:api", startedAt: "2026-11-18T11:00:00Z" };
+    expect(pastRuns(web, [earlier, other, web]).map((entry) => entry.id)).toEqual(["aaaaaaaaaaaa", "bbbbbbbbbbbb"]);
+  });
+
+  it("show a container's ports and what it is using", () => {
+    const rows = containerDetails(postgres, { cpu: "0.4%", memory: "48MiB / 7.6GiB" });
+    const values = rows.map((row) => `${row.label}|${row.value}`);
+    expect(values).toContain("Ports|localhost:5432");
+    expect(values).toContain("CPU|0.4%");
+    expect(values).toContain("Memory|48MiB / 7.6GiB");
+    expect(values).toContain("State|healthy, Up 2 minutes (healthy)");
+  });
+
+  it("say when with the time today, and the day before today", () => {
+    const now = new Date(2026, 10, 18, 15, 0);
+    expect(when(new Date(2026, 10, 18, 9, 5).toISOString(), now)).toBe("09:05");
+    expect(when(new Date(2026, 10, 17, 23, 30).toISOString(), now)).toBe("Nov 17 23:30");
   });
 });

@@ -1,6 +1,6 @@
 /** Questions that need an answer before going on: trusting a file, setting a folder up. */
 
-import { Box, Text, useInput } from "ink";
+import { Box, type DOMElement, Text, useInput } from "ink";
 import { useRef, useState } from "react";
 
 import { tildify } from "../core/paths.js";
@@ -8,6 +8,7 @@ import type { WorkspaceRead } from "../core/types.js";
 import { Choice } from "./forms.js";
 import type { Glyphs } from "./glyphs.js";
 import { type SetupSuggestion, windowed } from "./model.js";
+import { useMouse, useRefs } from "./mouse.js";
 import { KIND } from "./state.js";
 import { TONE } from "./tones.js";
 
@@ -89,6 +90,24 @@ export function SetupPanel({ suggestion, glyphs, height, onAnswer }: { suggestio
     }
   });
 
+  // A click on a bolt ticks or unticks it; on the button, sets up the ones ticked.
+  const rows = useRefs<number>();
+  const button = useRef<DOMElement>(null);
+  useMouse((event, at) => {
+    if (event.kind !== "click" || answered.current) return false;
+    if (at(button.current)) {
+      const chosen = suggestion.bolts.map((bolt) => bolt.label).filter((label) => tickedRef.current.has(label));
+      if (chosen.length > 0) answer(chosen);
+      return true;
+    }
+    const hit = rows.entries().find(([, node]) => at(node));
+    const bolt = hit ? suggestion.bolts[hit[0]] : undefined;
+    if (!hit || !bolt) return false;
+    setIndex(hit[0]);
+    toggle(bolt.label);
+    return true;
+  });
+
   const count = ticked.size;
   return (
     <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor={TONE.accent} paddingX={1} overflow="hidden">
@@ -105,7 +124,7 @@ export function SetupPanel({ suggestion, glyphs, height, onAnswer }: { suggestio
         const on = ticked.has(bolt.label);
         const selected = at === index;
         return (
-          <Box key={bolt.label} flexDirection="column">
+          <Box key={bolt.label} ref={rows.set(at)} flexDirection="column">
             <Text wrap="truncate-end">
               <Text color={TONE.accent}>{selected ? `${glyphs.pointer} ` : "  "}</Text>
               <Text color={on ? TONE.accent : undefined} dimColor={!on}>{on ? "[✓] " : "[ ] "}</Text>
@@ -118,10 +137,12 @@ export function SetupPanel({ suggestion, glyphs, height, onAnswer }: { suggestio
       })}
       <Box flexGrow={1} />
       <Text dimColor>It's saved as .wisp.json in this folder, and you can change all of it afterwards with e.</Text>
-      <Text>
-        <Text color={count > 0 ? "black" : undefined} backgroundColor={count > 0 ? TONE.accent : undefined} bold dimColor={count === 0}>{count > 0 ? ` ▸ ${count === 1 ? (suggestion.bolts.length === 1 ? "Set up this bolt" : "Set up 1 bolt") : count === suggestion.bolts.length ? `Set up all ${count} bolts` : `Set up ${count} bolts`} ` : " Tick at least one "}</Text>
+      <Box>
+        <Box ref={button}>
+          <Text color={count > 0 ? "black" : undefined} backgroundColor={count > 0 ? TONE.accent : undefined} bold dimColor={count === 0}>{count > 0 ? ` ▸ ${count === 1 ? (suggestion.bolts.length === 1 ? "Set up this bolt" : "Set up 1 bolt") : count === suggestion.bolts.length ? `Set up all ${count} bolts` : `Set up ${count} bolts`} ` : " Tick at least one "}</Text>
+        </Box>
         <Text dimColor>{"   space tick · a all/none · ⏎ set up · esc not now · d don't ask again"}</Text>
-      </Text>
+      </Box>
     </Box>
   );
 }

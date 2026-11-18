@@ -2,6 +2,7 @@ import { render } from "ink";
 
 import { stopAttached } from "../core/switch.js";
 import { App } from "./App.js";
+import { mouseStdin, terminalMouse } from "./mouse.js";
 import { ENTER_SCREEN, LEAVE_SCREEN, realServices } from "./services.js";
 
 /**
@@ -12,7 +13,16 @@ export async function startTui(): Promise<void> {
   const { stdout, stdin } = process;
   let instance: ReturnType<typeof render> | undefined;
 
-  const leave = () => stdout.write(LEAVE_SCREEN + "\u001B[?25h");
+  // Clicks and the wheel come in on stdin with the keys: Ink is given a view of stdin with
+  // them taken out, and the dashboard gets them as events.
+  const mouse = terminalMouse((data) => stdout.write(data));
+  const input = mouseStdin(stdin, (event) => mouse.emit(event));
+
+  const leave = () => {
+    // Never leave the shell with the mouse still reported: clicks would type escape codes.
+    mouse.pause();
+    stdout.write(LEAVE_SCREEN + "\u001B[?25h");
+  };
   stdout.write(ENTER_SCREEN + "\u001B[?25l");
   process.once("exit", leave);
   // Closed window, `kill`, logged out: whatever Wisp was running attached goes with it,
@@ -33,12 +43,13 @@ export async function startTui(): Promise<void> {
     },
     resume: () => {
       stdout.write(ENTER_SCREEN + "\u001B[?25l");
+      mouse.resume();
       stdin.setRawMode?.(true);
       instance?.clear();
     },
   });
 
-  instance = render(<App services={services} />, { exitOnCtrlC: true, patchConsole: false });
+  instance = render(<App services={services} mouse={mouse} />, { stdin: input, exitOnCtrlC: true, patchConsole: false });
   try {
     await instance.waitUntilExit();
   } finally {

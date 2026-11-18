@@ -166,13 +166,15 @@ Run flags: `--dry-run` (show what would happen and where, change nothing), `--in
 
 ## The TUI
 
-`wisp` at a terminal opens it. Everything above can be done there without writing
-JSON: a folder with no file is offered a setup; `e` edits the selected bolt through forms
-(add, change, move, remove steps; rename; make it a job), `a` adds a bolt, `N` a personal
-workspace; `v` shows a bolt whole and read-only, its dependencies opened up; `p` (or `2`)
-shows what is running, grouped by the bolt that started it, with live output; `h` (or `3`)
-the history of every run; `/` searches. `x` on a bolt that needed others asks whether to
-stop those too (`wisp down <bolt> --deps` on the command line). Agents should use the
+`wisp` at a terminal opens it. Everything above can be done there without writing JSON:
+a folder with no file is offered a setup; `e` edits the selected bolt through forms
+(add, change, move, remove steps; rename; make it a job), `a` adds a bolt, `N` a
+personal workspace; `v` shows a bolt whole and read-only, its dependencies opened up;
+`p` (or `2`) shows what is running, grouped by the bolt that started it, with live
+output (`[` and `]` switch to a command's details and past runs); `h` (or `3`) the
+history of every run; `/` searches. It takes the mouse too (clicks select, the wheel
+scrolls), unless turned off in Settings. `x` on a bolt that needed others asks whether
+to stop those too (`wisp down <bolt> --deps` on the command line). Agents should use the
 CLI instead.
 
 ## Output and exit codes

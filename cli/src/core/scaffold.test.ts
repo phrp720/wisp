@@ -70,7 +70,7 @@ describe("init reads what the project already has", () => {
     ]);
     expect(parsed.bolts[2]!.targets).toContainEqual({ url: "http://localhost:3000" });
     expect(parsed.bolts[4]).toEqual({ label: "Check", job: true, targets: [{ run: "pnpm lint", label: "lint" }, { run: "pnpm test", label: "test" }] });
-    expect(detected.sources).toContain("compose.yaml (db, cache)");
+    expect(detected.sources).toContain("2 Docker services: db, cache");
   });
 
   it("finds a development compose file below the root, and never the production one", async () => {

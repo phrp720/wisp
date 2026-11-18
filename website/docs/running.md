@@ -21,6 +21,20 @@ wisp stop api        # stop one
 Prefer a window per command, or a tmux session? Choose it in [Settings](./settings) (`s`), or
 ask for it once with `--window`.
 
+## In the Running tab
+
+The panel beside the list has tabs for the command you've selected. `[` and `]` switch
+between them, and the tab you pick stays as you move down the list:
+
+- **Logs:** its live output.
+- **Info:** what it runs and in which folder, its `env` (values that look like secrets are
+  hidden), its restart policy, its PID, and the `wisp logs` and `wisp stop` lines to reach
+  it from a shell.
+- **Runs:** the times it ran before, newest first, and how each ended. Handy when something
+  keeps crashing.
+
+A container has **Logs** and **Info**, with its image, ports, CPU and memory.
+
 ## Commands that ask something
 
 A bolt is meant to run without you, so a command that stops to ask (*"Use port 3001
@@ -38,7 +52,8 @@ Then fix the step, one of three ways:
 ## Docker containers
 
 A bolt's `compose` services show up in the Running tab beside its commands: each container
-with its health, its ports, and its logs on the right. `wisp down` stops them.
+with its health, its ports, and its logs on the right (`]` for its CPU and memory). `wisp down`
+stops them.
 
 ## Up and down
 

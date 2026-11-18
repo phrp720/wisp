@@ -6,6 +6,7 @@ import type { SwitchResult, TrustState, WorkspaceRead } from "../core/types.js";
 import { App } from "./App.js";
 import { glyphs } from "./glyphs.js";
 import { score, search, windowed, type Library, type Services } from "./model.js";
+import { terminalMouse } from "./mouse.js";
 
 const unicode = glyphs({ LANG: "en_US.UTF-8" }, "darwin");
 
@@ -50,6 +51,8 @@ function services(overrides: Partial<Services> = {}, library: Library = { reads:
       get: async () => ({}),
       set: async (change) => change,
       choices: () => ({ editors: [{ label: "Visual Studio Code", value: "Visual Studio Code" }], terminals: ["Terminal", "Ghostty", "tmux"] }),
+      mouse: async () => true,
+      setMouse: async (on) => on,
     },
     editing: {
       bolt: async (_file, bolt) => ({ label: bolt, targets: [] }),
@@ -466,7 +469,7 @@ describe("the TUI", () => {
 
   it("changes your own settings from a screen of their own, with s", async () => {
     const set = vi.fn(async (change: Record<string, string>) => change);
-    const app = await open(services({ settings: { get: async () => ({}), set, choices: () => ({ editors: [{ label: "Visual Studio Code", value: "Visual Studio Code" }], terminals: ["Ghostty", "tmux"] }) } }));
+    const app = await open(services({ settings: { get: async () => ({}), set, choices: () => ({ editors: [{ label: "Visual Studio Code", value: "Visual Studio Code" }], terminals: ["Ghostty", "tmux"] }), mouse: async () => true, setMouse: async (on) => on } }));
     await tick();
     app.stdin.write("s");
     await tick();
@@ -480,6 +483,29 @@ describe("the TUI", () => {
     await tick();
     await tick();
     expect(set).toHaveBeenCalledWith({ folder: "Visual Studio Code" });
+  });
+
+  it("turns the mouse off and on from settings, with ⏎ on its row", async () => {
+    const setMouse = vi.fn(async (on: boolean) => on);
+    const enable = vi.fn();
+    const mouse = { subscribe: () => () => undefined, enable };
+    const api = services();
+    const app = render(<App services={{ ...api, settings: { ...api.settings, setMouse } }} mouse={mouse} glyphs={unicode} size={{ columns: 100, rows: 24 }} />);
+    await tick();
+    await tick();
+    expect(enable).toHaveBeenLastCalledWith(true);
+    app.stdin.write("s");
+    await tick();
+    await tick();
+    expect(app.lastFrame()).toMatch(/Mouse +on/);
+    for (const key of ["j", "j", "j", "\r"]) {
+      app.stdin.write(key);
+      await tick();
+    }
+    await tick();
+    expect(setMouse).toHaveBeenCalledWith(false);
+    expect(app.lastFrame()).toMatch(/Mouse +off/);
+    expect(enable).toHaveBeenLastCalledWith(false);
   });
 
   it("sets up only the suggested bolts left ticked", async () => {
@@ -733,6 +759,48 @@ describe("panes", () => {
     app.stdin.write("f");
     await tick();
     expect(app.lastFrame()).not.toContain("Running  History");
+  });
+
+  it("have tabs beside the list, [ and ] switch them, and the tab stays while moving between rows", async () => {
+    const crashed = { ...server, id: "ef56", alive: false, exitCode: 1, startedAt: new Date(Date.now() - 3_600_000).toISOString() };
+    const other = { ...server, id: "gh78", label: "worker", command: "pnpm worker", asset: "command:worker" };
+    const app = await open(services({ runs: async () => [server, crashed, other] as never, tail: async () => "ready on :3000" }));
+    await tick();
+    app.stdin.write("p");
+    await tick();
+    await tick();
+    let frame = app.lastFrame() ?? "";
+    expect(frame).toContain("Logs │ Info │ Runs");
+    expect(frame).toContain("ready on :3000");
+
+    app.stdin.write("]");
+    await tick();
+    frame = app.lastFrame() ?? "";
+    expect(frame).toMatch(/Command +pnpm dev/);
+    expect(frame).toMatch(/State +running, PID 1/);
+    expect(frame).toContain("wisp logs ab12 -f");
+    expect(frame).not.toContain("ready on :3000");
+
+    app.stdin.write("]");
+    await tick();
+    frame = app.lastFrame() ?? "";
+    expect(frame).toMatch(/ab12/);
+    expect(frame).toMatch(/failed \(exit 1\) +ef56/);
+    expect(frame).not.toContain("gh78");
+
+    // Back to Info, then to the next command: still on Info, now about that one.
+    app.stdin.write("[");
+    await tick();
+    app.stdin.write("j");
+    await tick();
+    await tick();
+    frame = app.lastFrame() ?? "";
+    expect(frame).toMatch(/Command +pnpm worker/);
+
+    app.stdin.write("[");
+    await tick();
+    await tick();
+    expect(app.lastFrame()).toContain("ready on :3000");
   });
 });
 
@@ -1062,5 +1130,250 @@ describe("history steps", () => {
     expect(describeHistoryStep(step("link", "http://localhost:3000"), false)).toBe("open http://localhost:3000");
     expect(describeHistoryStep(step("command", "Payments Service dev", "pnpm dev"), false)).toBe("start Payments Service dev");
     expect(describeHistoryStep(step("command", "test", "pnpm test"), true)).toBe("run test");
+  });
+});
+
+describe("the mouse", () => {
+  /** Where a piece of text is drawn: its column and line, for a click on it. */
+  const at = (frame: string, text: string, after = 0): { x: number; y: number } => {
+    const lines = frame.split("\n");
+    for (let y = after; y < lines.length; y += 1) {
+      const x = (lines[y] ?? "").indexOf(text);
+      if (x >= 0) return { x: x + 1, y };
+    }
+    throw new Error(`"${text}" is not on the screen`);
+  };
+  const withMouse = async (api: Services) => {
+    const mouse = terminalMouse(() => undefined);
+    const app = render(<App services={api} mouse={mouse} glyphs={unicode} size={{ columns: 100, rows: 24 }} />);
+    await tick();
+    await tick();
+    return { app, mouse, frame: () => app.lastFrame() ?? "" };
+  };
+  const server = { kind: "background", workspace: acme.workspace.file, workspaceName: "Acme", pid: 1, startedAt: new Date().toISOString(), alive: true, log: "/l" };
+  const web = { ...server, id: "w1", label: "web dev", command: "pnpm dev", asset: "command:web dev" };
+  const worker = { ...server, id: "k1", label: "worker", command: "pnpm worker", asset: "command:worker" };
+
+  it("switches screens from the tabs along the top", async () => {
+    const { mouse, frame } = await withMouse(services());
+    // The header's own first line: the frame's first line, which has the crystal ball (two columns, two code units).
+    const header = frame().split("\n")[0] ?? "";
+    expect(mouse.emit({ kind: "click", x: header.indexOf("2 Running") + 1, y: 0 })).toBe(true);
+    await tick();
+    expect(frame()).toContain("Nothing is running");
+    mouse.emit({ kind: "click", x: header.indexOf("3 History") + 1, y: 0 });
+    await tick();
+    await tick();
+    expect(frame()).toContain("Nothing has run yet");
+    mouse.emit({ kind: "click", x: header.indexOf("1 Bolts") + 1, y: 0 });
+    await tick();
+    expect(frame()).toContain("Workspaces");
+    expect(mouse.emit({ kind: "click", x: 2, y: 0 })).toBe(false);
+  });
+
+  it("selects a row on Running with a click, and a tab beside it", async () => {
+    const { app, mouse, frame } = await withMouse(services({ runs: async () => [web, worker] as never, tail: async () => "ready" }));
+    app.stdin.write("p");
+    await tick();
+    await tick();
+    expect(frame()).toMatch(/❯ +● web dev/);
+    mouse.emit({ kind: "click", ...at(frame(), "worker") });
+    await tick();
+    await tick();
+    expect(frame()).toMatch(/❯ +● worker/);
+    mouse.emit({ kind: "click", ...at(frame(), "Info │") });
+    await tick();
+    expect(frame()).toMatch(/Command +pnpm worker/);
+    mouse.emit({ kind: "click", ...at(frame(), "Runs   [ ]") });
+    await tick();
+    expect(frame()).toContain("wisp logs <id> prints any of them");
+  });
+
+  it("scrolls the logs with the wheel over them, and moves the selection over the list", async () => {
+    const lines = Array.from({ length: 80 }, (_, line) => `line ${line + 1}`).join("\n");
+    const { app, mouse, frame } = await withMouse(services({ runs: async () => [web, worker] as never, tail: async () => lines }));
+    app.stdin.write("p");
+    await tick();
+    await tick();
+    expect(frame()).toContain("line 80");
+    const log = at(frame(), "line 80");
+    expect(mouse.emit({ kind: "wheel", ...log, by: -1 })).toBe(true);
+    await tick();
+    expect(frame()).toContain("↑ 3 lines back");
+    expect(frame()).not.toContain("line 80");
+    mouse.emit({ kind: "wheel", ...log, by: 1 });
+    await tick();
+    expect(frame()).toContain("line 80");
+    // Over the list, it is left to become an arrow key, which moves the selection.
+    expect(mouse.emit({ kind: "wheel", ...at(frame(), "● web dev"), by: 1 })).toBe(false);
+  });
+
+  it("selects workspaces and bolts on the Bolts tab, and runs nothing", async () => {
+    const run = vi.fn(services().run);
+    const { mouse, frame } = await withMouse(services({ run }));
+    mouse.emit({ kind: "click", ...at(frame(), "Work on web") });
+    await tick();
+    expect(frame()).toContain("❯ Work on web");
+    mouse.emit({ kind: "click", ...at(frame(), "infra", 2) });
+    await tick();
+    expect(frame()).toContain("Database");
+    expect(frame()).not.toContain("Work on web");
+    // The wheel over the workspace list moves through the workspaces.
+    mouse.emit({ kind: "wheel", ...at(frame(), "infra !", 2), by: 1 });
+    await tick();
+    expect(frame()).toContain("Start the day");
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("fills in a form by clicking: an option, a field to type in, a place in its text, the button", async () => {
+    const addBolt = vi.fn(async () => undefined);
+    const api = services();
+    const { app, mouse, frame } = await withMouse({ ...api, editing: { ...api.editing, addBolt } });
+    const type = async (text: string) => {
+      for (const key of text) {
+        app.stdin.write(key);
+        await tick();
+      }
+    };
+    app.stdin.write("a");
+    await tick();
+    mouse.emit({ kind: "click", ...at(frame(), "a job") });
+    await tick();
+    expect(frame()).toContain("● a job");
+    mouse.emit({ kind: "click", ...at(frame(), "Name") });
+    await tick();
+    await type("Lint");
+    // On the "L" of "› Lint": the cursor goes there, and typing goes in before it.
+    const value = at(frame(), "› Lint");
+    mouse.emit({ kind: "click", x: value.x + 1, y: value.y });
+    await tick();
+    await type("X");
+    expect(frame()).toContain("› XLint");
+    mouse.emit({ kind: "click", ...at(frame(), "[ Create bolt ]") });
+    await tick();
+    await tick();
+    expect(addBolt).toHaveBeenCalledWith(acme.workspace.file, "XLint", { job: true });
+    // Straight to its first step: a click on one picks it.
+    expect(frame()).toContain("The first step of");
+    mouse.emit({ kind: "click", ...at(frame(), "Open a folder") });
+    await tick();
+    expect(frame()).toContain("Adding step 1 of");
+  });
+
+  it("ticks bolts to set up with a click, and sets them up from the button", async () => {
+    const suggestion = {
+      dir: "/dev/shop",
+      name: "Shop",
+      found: ["package.json pnpm dev"],
+      bolts: [
+        { label: "Services", job: false, steps: ["start Docker services: postgres"] },
+        { label: "Check", job: true, steps: ["run test"] },
+      ],
+      contents: "{}",
+    };
+    const setUp = vi.fn(async () => infra.workspace.file);
+    const { mouse, frame } = await withMouse(services({ suggestSetup: async () => suggestion, setUp }, { reads: [infra], unreadable: [] }));
+    await tick();
+    mouse.emit({ kind: "click", ...at(frame(), "Services") });
+    await tick();
+    expect(frame()).toContain("[ ] ⚡ Services");
+    mouse.emit({ kind: "click", ...at(frame(), "Set up 1 bolt") });
+    await tick();
+    await tick();
+    expect(setUp).toHaveBeenCalledWith(suggestion, ["Check"]);
+  });
+
+  it("chooses a setting with a click, and changes it with a second", async () => {
+    const setMouse = vi.fn(async (on: boolean) => on);
+    const api = services();
+    const { app, mouse, frame } = await withMouse({ ...api, settings: { ...api.settings, setMouse } });
+    app.stdin.write("s");
+    await tick();
+    await tick();
+    mouse.emit({ kind: "click", ...at(frame(), "Mouse") });
+    await tick();
+    expect(setMouse).not.toHaveBeenCalled();
+    mouse.emit({ kind: "click", ...at(frame(), "Mouse") });
+    await tick();
+    await tick();
+    expect(setMouse).toHaveBeenCalledWith(false);
+    expect(frame()).toMatch(/Mouse +off/);
+  });
+
+  it("chooses a step in the bolt editor with a click, and opens it with a second", async () => {
+    const api = services();
+    const bolt = async (_file: string, label: string) => ({ label, targets: [{ folder: "apps/api" }, { run: "pnpm dev" }] });
+    const { app, mouse, frame } = await withMouse({ ...api, editing: { ...api.editing, bolt } as never });
+    app.stdin.write("e");
+    await tick();
+    await tick();
+    mouse.emit({ kind: "click", ...at(frame(), "pnpm dev") });
+    await tick();
+    expect(frame()).toMatch(/❯ .*pnpm dev/);
+    mouse.emit({ kind: "click", ...at(frame(), "pnpm dev") });
+    await tick();
+    expect(frame()).toContain("Changing step 2 of");
+  });
+
+  it("chooses and opens runs in History, shows a step's log with a click, and filters by bolt", async () => {
+    const at10 = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
+    const check = {
+      id: "c7", number: 7, workspace: acme.workspace.file, workspaceName: "Acme", bolt: "Check", job: true, startedAt: at10(10), finishedAt: at10(9), ok: false,
+      steps: [
+        { kind: "command" as const, label: "postgres", value: "docker compose up", ok: true, durationMs: 1200, bolt: "Database" },
+        { kind: "command" as const, label: "lint", value: "pnpm lint", ok: true, durationMs: 900, log: "/logs/1" },
+        { kind: "command" as const, label: "test", value: "pnpm test", ok: false, error: "exited with code 1", durationMs: 2100, log: "/logs/2" },
+      ],
+    };
+    const web = { id: "w3", number: 3, workspace: acme.workspace.file, workspaceName: "Acme", bolt: "Work on web", job: false, startedAt: at10(20), finishedAt: at10(20), ok: true, steps: [{ kind: "folder" as const, label: "web", value: "apps/web", ok: true, durationMs: 5 }] };
+    const lint = Array.from({ length: 60 }, (_, line) => `lint line ${line + 1}`).join("\n");
+    const readLog = vi.fn(async (path: string) => (path === "/logs/2" ? "FAIL divides by zero" : lint));
+    const mouse = terminalMouse(() => undefined);
+    const app = render(<App services={services({ history: async () => [check, web] as never, readLog })} mouse={mouse} glyphs={unicode} size={{ columns: 130, rows: 30 }} />);
+    const frame = () => app.lastFrame() ?? "";
+    await tick();
+    app.stdin.write("h");
+    await tick();
+    await tick();
+
+    // One click chooses a run; a second on the chosen one opens it.
+    mouse.emit({ kind: "click", ...at(frame(), "Work on web #3") });
+    await tick();
+    expect(frame()).toMatch(/❯ ✓ Work on web #3/);
+    mouse.emit({ kind: "click", ...at(frame(), "Work on web #3") });
+    await tick();
+    expect(frame()).toContain("Total duration");
+    app.stdin.write("\u001B");
+    await tick();
+
+    mouse.emit({ kind: "click", ...at(frame(), "Check #7") });
+    await tick();
+    mouse.emit({ kind: "click", ...at(frame(), "Check #7") });
+    await tick();
+    await tick();
+    expect(frame()).toContain("FAIL divides by zero");
+    // Below the summary and the pipeline: a click on a step hides its log, or shows it.
+    mouse.emit({ kind: "click", ...at(frame(), "run test") });
+    await tick();
+    expect(frame()).not.toContain("FAIL divides by zero");
+    mouse.emit({ kind: "click", ...at(frame(), "run lint") });
+    await tick();
+    await tick();
+    expect(frame()).toContain("lint line 1");
+    expect(readLog).toHaveBeenCalledWith("/logs/1");
+    const log = at(frame(), "lint line 2");
+    mouse.emit({ kind: "wheel", ...log, by: 1 });
+    mouse.emit({ kind: "wheel", ...log, by: 1 });
+    await tick();
+    expect(frame()).not.toContain("run postgres");
+    expect(frame()).toContain("lint line 9");
+
+    // Back to the runs: the bolts on the left filter them.
+    app.stdin.write("\u001B");
+    await tick();
+    mouse.emit({ kind: "click", ...at(frame(), "Work on web", 2) });
+    await tick();
+    expect(frame()).toMatch(/Work on web +1 run/);
+    expect(frame()).not.toContain("Check #7");
   });
 });
