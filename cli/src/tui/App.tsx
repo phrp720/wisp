@@ -20,6 +20,7 @@ import { type Library, ordered, search, type Services } from "./model.js";
 import { CheckPanel, HelpPanel, RunPanel } from "./panels.js";
 import { filterPanes, groupPanes, paneKey, PanesPanel } from "./running.js";
 import { type Activity, clamp, type Focus, markFirst, needsTrust, type Notice, type PaneItem, type RunState, SELF_DRIVEN, useLatest, useTerminalSize, type View, visibleRuns } from "./state.js";
+import { spell } from "./spells.js";
 import { TONE } from "./tones.js";
 
 export interface AppProps {
@@ -778,7 +779,10 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
         </Box>
       ) : !library ? (
         <Box height={bodyHeight} paddingX={1}>
-          <Text dimColor>reading workspaces…</Text>
+          <Text>
+            <Text color={TONE.accent}>{`${spell()}… `}</Text>
+            <Text dimColor>reading your workspaces</Text>
+          </Text>
         </Box>
       ) : view.kind === "setup" ? (
         <SetupPanel

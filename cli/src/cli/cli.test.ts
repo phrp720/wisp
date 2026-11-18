@@ -2,10 +2,12 @@ import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { withImplicitUse } from "./lib/argv.js";
 import { COMMANDS, verbs } from "./lib/commands.js";
+import { fail } from "./lib/define.js";
+import { WispError } from "../core/errors.js";
 import { shortest } from "./lib/render.js";
 import { SPEC } from "./spec.js";
 import { VERSION } from "./version.js";
@@ -20,7 +22,13 @@ describe("withImplicitUse", () => {
     expect(withImplicitUse(argv("api", "-n"), commands)).toEqual(argv("use", "api", "-n"));
   });
 
-  it("leaves commands, flags and bare wisp alone", () => {
+  it("reads `wisp help agents` as the reference for agents, not help about a command", () => {
+    expect(withImplicitUse(argv("help", "agents"), commands)).toEqual(argv("spec"));
+    expect(withImplicitUse(argv("agents"), commands)).toEqual(argv("agents"));
+    expect(withImplicitUse(argv("help", "use"), commands)).toEqual(argv("help", "use"));
+  });
+
+    it("leaves commands, flags and bare wisp alone", () => {
     expect(withImplicitUse(argv("list"), commands)).toEqual(argv("list"));
     expect(withImplicitUse(argv("--help"), commands)).toEqual(argv("--help"));
     expect(withImplicitUse(argv(), commands)).toEqual(argv());
@@ -68,6 +76,29 @@ describe("spec", () => {
   it("mentions every command", () => {
     for (const command of COMMANDS.filter((entry) => entry.name !== "use" && entry.name !== "open-with")) {
       expect(SPEC).toContain(`wisp ${command.name}`);
+    }
+  });
+});
+
+describe("failing", () => {
+  it("says so in JSON when JSON was asked for, with the code and what to try", () => {
+    const printed: string[] = [];
+    const log = vi.spyOn(console, "log").mockImplementation((line: string) => void printed.push(line));
+    const exit = vi.spyOn(process, "exit").mockImplementation(((code: number) => {
+      throw new Error(`exit ${code}`);
+    }) as never);
+    const before = process.argv;
+    process.argv = ["node", "wisp", "nope", "--json"];
+    try {
+      expect(() => fail(new WispError("No bolt called nope", "NO_BOLT"))).toThrow("exit 1");
+      expect(JSON.parse(printed.join("\n"))).toEqual({
+        ok: false,
+        error: { code: "NO_BOLT", message: "No bolt called nope", hint: "Run `wisp` to see this project's bolts." },
+      });
+    } finally {
+      process.argv = before;
+      log.mockRestore();
+      exit.mockRestore();
     }
   });
 });

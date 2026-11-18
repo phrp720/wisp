@@ -63,13 +63,18 @@ export function register<Options>(program: Command, def: CommandDef<Options>): C
 
 export function fail(error: unknown): never {
   const message = error instanceof Error ? error.message : String(error);
-  console.error(`${red("✗")} ${message}`);
+  const code = error instanceof WispError ? error.code : "ERROR";
+  const hint = error instanceof WispError ? HINTS[error.code] : undefined;
 
-  if (error instanceof WispError) {
-    const hint = HINTS[error.code];
-    if (hint) console.error(dim(hint));
+  // Asked for JSON, a failure is JSON too, on stdout where the answer would have been:
+  // an agent reads one shape either way, and the exit code still says it failed.
+  if (process.argv.includes("--json")) {
+    console.log(JSON.stringify({ ok: false, error: { code, message, ...(hint ? { hint } : {}) } }, null, 2));
+    process.exit(1);
   }
 
+  console.error(`${red("✗")} ${message}`);
+  if (hint) console.error(dim(hint));
   process.exit(1);
 }
 

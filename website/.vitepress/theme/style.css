@@ -1,32 +1,81 @@
-/* Wisp's purple, the colour of its TUI's accent, in both themes. */
+/* Wisp's purple, the colour of its TUI's accent, in both themes. Light first, then dark. */
 :root {
-  --vp-c-brand-1: #7c3aed;
-  --vp-c-brand-2: #8b5cf6;
-  --vp-c-brand-3: #a78bfa;
-  --vp-c-brand-soft: rgba(139, 92, 246, 0.14);
+  --vp-c-brand-1: #6d28d9;
+  --vp-c-brand-2: #7c3aed;
+  --vp-c-brand-3: #7c3aed;
+  --vp-c-brand-soft: rgba(124, 58, 237, 0.1);
+  /* A solid button, darker only on hover, so it never looks hovered at rest. */
+  --vp-button-brand-bg: #7c3aed;
+  --vp-button-brand-border: transparent;
+  --vp-button-brand-text: #ffffff;
+  --vp-button-brand-hover-bg: #6d28d9;
+  --vp-button-brand-hover-border: transparent;
+  --vp-button-brand-hover-text: #ffffff;
+  --vp-button-brand-active-bg: #5b21b6;
+  --vp-button-brand-active-border: transparent;
+  --vp-button-brand-active-text: #ffffff;
   --vp-home-hero-name-color: transparent;
-  --vp-home-hero-name-background: linear-gradient(120deg, #a78bfa 10%, #f0abfc 90%);
-  --vp-home-hero-image-background-image: radial-gradient(circle, rgba(167, 139, 250, 0.45) 0%, rgba(240, 171, 252, 0.15) 45%, transparent 70%);
-  --vp-home-hero-image-filter: blur(56px);
-  --wisp-terminal-bg: #12111a;
-  --wisp-terminal-fg: #e4e1f0;
-  --wisp-dim: #8b87a0;
-  --wisp-ok: #4ade80;
-  --wisp-bad: #f87171;
-  --wisp-accent: #a78bfa;
+  --vp-home-hero-name-background: linear-gradient(120deg, #6d28d9 10%, #c026d3 90%);
+  /* The terminal, the pictures and the bands, light: lilac paper, dark ink. */
+  --wisp-terminal-bg: #faf8ff;
+  --wisp-terminal-fg: #231d36;
+  --wisp-dim: #6b6580;
+  --wisp-ok: #15803d;
+  --wisp-bad: #dc2626;
+  --wisp-accent: #6d28d9;
+  --wisp-key: #6d28d9;
+  --wisp-str: #15803d;
+  --wisp-output: #3d3752;
+  --wisp-line: rgba(124, 58, 237, 0.16);
+  --wisp-divider: rgba(35, 29, 54, 0.08);
+  --wisp-shadow: 0 20px 48px -28px rgba(91, 33, 182, 0.3);
+  --wisp-band-bg: #f3effc;
+  --wisp-band-title: #1c1530;
+  --wisp-band-text: #4b4560;
+  --wisp-band-code-bg: rgba(124, 58, 237, 0.1);
+  --wisp-band-code: #5b21b6;
+  --wisp-dots: #ddd6ea;
 }
 
 .dark {
   --vp-c-brand-1: #a78bfa;
   --vp-c-brand-2: #8b5cf6;
   --vp-c-brand-3: #7c3aed;
+  --vp-c-brand-soft: rgba(139, 92, 246, 0.14);
   --vp-c-bg: #0d0c12;
   --vp-c-bg-alt: #121118;
   --vp-c-bg-soft: #17151f;
+  --vp-button-brand-bg: #7c3aed;
+  --vp-button-brand-hover-bg: #8b5cf6;
+  --vp-button-brand-active-bg: #6d28d9;
+  --vp-home-hero-name-background: linear-gradient(120deg, #a78bfa 10%, #f0abfc 90%);
+  --wisp-terminal-bg: #12111a;
+  --wisp-terminal-fg: #e4e1f0;
+  --wisp-dim: #8b87a0;
+  --wisp-ok: #4ade80;
+  --wisp-bad: #f87171;
+  --wisp-accent: #a78bfa;
+  --wisp-key: #c4b5fd;
+  --wisp-str: #86efac;
+  --wisp-output: #cfcbe0;
+  --wisp-line: rgba(167, 139, 250, 0.18);
+  --wisp-divider: rgba(255, 255, 255, 0.06);
+  --wisp-shadow: 0 24px 64px -24px rgba(124, 58, 237, 0.35);
+  --wisp-band-bg: #0a0910;
+  --wisp-band-title: #ffffff;
+  --wisp-band-text: #b9b4cc;
+  --wisp-band-code-bg: rgba(167, 139, 250, 0.14);
+  --wisp-band-code: #ddd6fe;
+  --wisp-dots: #3a3646;
 }
 
-.VPHero .image-src {
-  font-size: 0;
-  max-width: 200px;
-  max-height: 200px;
+/* The hero's own glow is the orb's; the theme's would sit behind it twice. */
+.VPHero .image-bg { display: none; }
+
+/* The line under the hero saying where the name comes from. */
+.wisp-name {
+  margin-top: 14px;
+  font-size: 15px;
+  font-style: italic;
+  color: var(--vp-c-text-2);
 }

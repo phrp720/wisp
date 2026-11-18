@@ -13,6 +13,7 @@ import type { Glyphs } from "./glyphs.js";
 import { describeHistoryStep, SearchLine } from "./history.js";
 import { describeStep, matchesAll, windowed } from "./model.js";
 import { type Activity, clock, type PaneGroup, type PaneItem, type RunState, since } from "./state.js";
+import { spell } from "./spells.js";
 import { TONE } from "./tones.js";
 
 /**
@@ -132,7 +133,7 @@ export function PanesPanel(props: {
       ) : (
         <Text color={TONE.up}>{glyphs.ok}</Text>
       );
-      line("current", selected, 0, mark, `${glyphs.bolt}${active.bolt}`, active.stopped ? "stopped" : now ? describeStep(now.target, true, active.job) : active.done ? (failed ? "failed" : "done") : "starting…", failed || active.stopped ? TONE.failed : undefined);
+      line("current", selected, 0, mark, `${glyphs.bolt}${active.bolt}`, active.stopped ? "stopped" : now ? describeStep(now.target, true, active.job) : active.done ? (failed ? "failed" : "done") : `${spell(7)}…`, failed || active.stopped ? TONE.failed : undefined);
       return;
     }
     if (entry.type === "step") {

@@ -38,37 +38,31 @@ async function copy() {
   }
 }
 
+/** One line-icon set for the features, drawn on a 24px grid: paths only, stroked in the brand colour. */
+const icons: Record<string, string[]> = {
+  // A bolt, and the smaller bolt it needs beside it
+  needs: ["M6.5 7L3 13h2.8L4.8 18l4.4-6.5H6.5L8 7z", "M16 2.5L10 12.5h4.5L13 21.5l7.5-11.5H16l2-7.5z"],
+  // Shipping containers, stacked
+  docker: ["M3 13h8v7H3z", "M13 13h8v7h-8z", "M8 5h8v7H8z", "M5.5 15.5v2", "M8.5 15.5v2", "M15.5 15.5v2", "M18.5 15.5v2", "M10.5 7.5v2", "M13.5 7.5v2"],
+  // Around again, and running
+  restart: ["M20 12a8 8 0 1 1 -2.3 -5.7", "M20 4v4h-4", "M10.5 9l4.5 3l-4.5 3z"],
+  // A git branch
+  git: ["M4 5a2 2 0 1 0 4 0a2 2 0 1 0 -4 0", "M4 19a2 2 0 1 0 4 0a2 2 0 1 0 -4 0", "M16 7a2 2 0 1 0 4 0a2 2 0 1 0 -4 0", "M6 7v10", "M18 9v1a5 5 0 0 1 -5 5h-4.5a2.5 2.5 0 0 0 -2.5 2.5"],
+  // A laptop
+  laptop: ["M5 5h14a1 1 0 0 1 1 1v9H4V6a1 1 0 0 1 1 -1z", "M2.5 18h19", "M4 15l-1.5 3", "M20 15l1.5 3"],
+  // A terminal split into panes, as tmux does
+  tmux: ["M4 4h16a1 1 0 0 1 1 1v14a1 1 0 0 1 -1 1H4a1 1 0 0 1 -1 -1V5a1 1 0 0 1 1 -1z", "M13 4v16", "M13 12h8", "M6 9.5l2.5 2l-2.5 2", "M9.5 15h1.5"],
+};
+
 const more = [
-  { icon: "⚡", title: "Bolts that need bolts", text: "Start the database before the API, even from another project. Each runs once per run." },
-  { icon: "🐳", title: "Docker services", text: "Point at a compose file. Wisp waits until they're healthy, and shows their logs." },
-  { icon: "♻️", title: "Restart on crash", text: "\"restart\": \"on-failure\" brings a server back, with a growing pause, like Kubernetes." },
-  { icon: "🪝", title: "Git hooks and cron", text: "Run your Check before every push, or a Release every night." },
-  { icon: "🖥️", title: "macOS, Linux, Windows", text: "One file for every machine. Per-OS commands when they differ." },
-  { icon: "🔌", title: "Over SSH, inside tmux", text: "Works the same on a server. Links are shown instead of opened." },
+  { icon: "needs", title: "Bolts that need bolts", text: "Start the database before the API, even from another project. Each runs once per run." },
+  { icon: "docker", title: "Docker services", text: "Point at a compose file. Wisp waits until they're healthy, and shows their logs." },
+  { icon: "restart", title: "Restart on crash", text: "\"restart\": \"on-failure\" brings a server back, with a growing pause, like Kubernetes." },
+  { icon: "git", title: "Git hooks and cron", text: "Run your Check before every push, or a Release every night." },
+  { icon: "laptop", title: "macOS, Linux, Windows", text: "One file for every machine. Per-OS commands when they differ." },
+  { icon: "tmux", title: "Over SSH, inside tmux", text: "Works the same on a server. Links are shown instead of opened." },
 ];
 
-const faq = [
-  {
-    q: "How is this different from package.json scripts, make or mise?",
-    a: "Those run one command. Wisp runs the whole start of a task, in order, and keeps watching: the database, then the API once the database answers, then the page in your browser. It knows what is up, stops what it started, and keeps a history of every run. Your scripts stay as they are; a bolt simply calls them.",
-  },
-  {
-    q: "Does it replace Docker or docker compose?",
-    a: "No. A bolt can start your compose services and wait until they're healthy, next to the commands that run outside Docker. Wisp is the conductor, not the orchestra.",
-  },
-  {
-    q: "Is it really free?",
-    a: "Yes. Wisp is open source under the MIT license, with no account, no telemetry and nothing to pay for. It runs entirely on your machine.",
-  },
-  {
-    q: "Is it safe to open a repository someone else wrote?",
-    a: "Yes. A .wisp.json from a clone runs nothing until you have read what it would run and allowed that exact file. Any change, a git pull included, asks again.",
-  },
-  {
-    q: "Do I need to write JSON?",
-    a: "No. wisp init writes the file from what your project already has, and the TUI adds, changes and removes bolts and steps through simple forms.",
-  },
-];
 </script>
 
 <template>
@@ -193,22 +187,17 @@ const faq = [
       <h2 class="center">Also in Wisp</h2>
       <ul class="grid">
         <li v-for="item in more" :key="item.title">
-          <span class="icon" aria-hidden="true">{{ item.icon }}</span>
+          <span class="icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+              <path v-for="d in icons[item.icon]" :key="d" :d="d" />
+            </svg>
+          </span>
           <div>
             <p class="title">{{ item.title }}</p>
             <p class="text">{{ item.text }}</p>
           </div>
         </li>
       </ul>
-    </section>
-
-    <!-- FAQ -->
-    <section class="wrap narrow">
-      <h2 class="center">Questions</h2>
-      <details v-for="item in faq" :key="item.q">
-        <summary>{{ item.q }}</summary>
-        <p>{{ item.a }}</p>
-      </details>
     </section>
 
     <!-- Install -->
@@ -243,45 +232,39 @@ h2.center { text-align: center; margin-bottom: 40px; }
 .more:hover { text-decoration: underline; }
 
 pre { margin: 0; font-family: var(--vp-font-family-mono); font-size: 13px; line-height: 1.6; white-space: pre; overflow-x: auto; }
-.terminal, .code, .screen { background: var(--wisp-terminal-bg); color: var(--wisp-terminal-fg); border-radius: 14px; border: 1px solid rgba(167, 139, 250, 0.18); box-shadow: 0 24px 64px -24px rgba(124, 58, 237, 0.35); }
+.terminal, .code, .screen { background: var(--wisp-terminal-bg); color: var(--wisp-terminal-fg); border-radius: 14px; border: 1px solid var(--wisp-line); box-shadow: var(--wisp-shadow); }
 .code, .screen { padding: 22px 24px; }
 .demo-wrap { padding-top: 8px; padding-bottom: 72px; border-top: 0 !important; }
 .terminal { max-width: 760px; margin: 0 auto; overflow: hidden; }
 .terminal pre { padding: 20px 24px 24px; min-height: 270px; font-size: 14px; }
-.bar { display: flex; gap: 8px; align-items: center; padding: 12px 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
-.bar span { width: 12px; height: 12px; border-radius: 50%; background: #3a3646; }
+.bar { display: flex; gap: 8px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--wisp-divider); }
+.bar span { width: 12px; height: 12px; border-radius: 50%; background: var(--wisp-dots); }
 .bar em { margin-left: auto; font-style: normal; font-size: 12px; color: var(--wisp-dim); font-family: var(--vp-font-family-mono); }
 .dim { color: var(--wisp-dim); }
 .ok { color: var(--wisp-ok); }
 .bad { color: var(--wisp-bad); }
 .accent { color: var(--wisp-accent); }
-.key { color: #c4b5fd; }
-.str { color: #86efac; }
+.key { color: var(--wisp-key); }
+.str { color: var(--wisp-str); }
 .caret { animation: blink 1s steps(1) infinite; color: var(--wisp-accent); }
 @keyframes blink { 50% { opacity: 0; } }
 
-.band { background: #0a0910; color: #e4e1f0; border: 0 !important; }
-.band h2 { color: #fff; }
-.band .lead { color: #b9b4cc; }
-.band code { background: rgba(167, 139, 250, 0.14); color: #ddd6fe; }
+.band { background: var(--wisp-band-bg); color: var(--wisp-band-text); border: 0 !important; }
+.band h2 { color: var(--wisp-band-title); }
+.band .lead { color: var(--wisp-band-text); }
+.band code { background: var(--wisp-band-code-bg); color: var(--wisp-band-code); }
 
 .grid { list-style: none; padding: 0; margin: 0; display: grid; gap: 28px 40px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
 .grid li { display: flex; gap: 14px; align-items: flex-start; margin: 0; }
-.icon { font-size: 22px; line-height: 1.2; }
+.icon { flex-shrink: 0; width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; color: var(--vp-c-brand-1); background: var(--vp-c-brand-soft); border: 1px solid rgba(167, 139, 250, 0.25); }
 .title { font-weight: 600; margin: 0 0 4px; color: var(--vp-c-text-1); }
 .text { margin: 0; color: var(--vp-c-text-2); line-height: 1.55; font-size: 15px; }
 
-details { border-bottom: 1px solid var(--vp-c-divider); padding: 18px 4px; }
-summary { cursor: pointer; font-weight: 600; font-size: 17px; list-style: none; display: flex; justify-content: space-between; gap: 16px; }
-summary::-webkit-details-marker { display: none; }
-summary::after { content: "+"; color: var(--vp-c-brand-1); font-weight: 400; font-size: 22px; line-height: 1; }
-details[open] summary::after { content: "−"; }
-details p { color: var(--vp-c-text-2); line-height: 1.65; margin: 12px 0 0; }
-
+.center-text { text-align: center; }
 .cta { text-align: center; }
 .install { margin: 18px auto 12px; display: inline-flex; gap: 12px; align-items: center; font-family: var(--vp-font-family-mono); font-size: 15px; background: var(--wisp-terminal-bg); color: var(--wisp-terminal-fg); border: 1px solid rgba(167, 139, 250, 0.3); border-radius: 12px; padding: 14px 18px; cursor: pointer; }
 .install:hover { border-color: var(--vp-c-brand-1); }
-.copy { font-family: var(--vp-font-family-base); font-size: 12px; color: var(--wisp-accent); border-left: 1px solid rgba(255, 255, 255, 0.12); padding-left: 12px; }
+.copy { font-family: var(--vp-font-family-base); font-size: 12px; color: var(--wisp-accent); border-left: 1px solid var(--wisp-line); padding-left: 12px; }
 .small { font-size: 14px; color: var(--vp-c-text-2); }
 .small a { color: var(--vp-c-brand-1); }
 
@@ -297,5 +280,5 @@ details p { color: var(--vp-c-text-2); line-height: 1.65; margin: 12px 0 0; }
 .step.selected { color: var(--wisp-accent); font-weight: 600; }
 .step.selected::before { content: "❯"; position: absolute; left: 0; color: var(--wisp-accent); }
 .right { float: right; padding-left: 8px; }
-.output { color: #cfcbe0; }
+.output { color: var(--wisp-output); }
 </style>

@@ -4,18 +4,6 @@ Starting work on a project is rarely one command. It's the database, then the AP
 database answers, then the web app, then the page in your browser, and the right folder in
 your editor. Every time. Wisp turns that into one word, and then keeps an eye on it.
 
-## What it adds to the tools you have
-
-| You have | It runs | What Wisp adds |
-|---|---|---|
-| `package.json` scripts, `make`, `just`, `mise` tasks | one command | the whole sequence, in order, with waits between steps |
-| `docker compose` | containers | the commands outside Docker, your editor and browser, and one place to see both |
-| tmuxinator, a shell script | windows or commands | knowing what is up, stopping what it started, never starting a second copy |
-| CI | checks, on a server | the same, on your laptop: jobs that stop at the first failure, with history |
-
-Wisp doesn't replace any of them. A bolt calls your scripts, starts your compose services
-and runs your checks. It's the conductor, not the orchestra.
-
 ## What it's like to use
 
 - **One word.** `wisp api`. Any distinctive word of a bolt's name runs it.

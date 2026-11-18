@@ -13,7 +13,7 @@ cli/schema/
 cli/README.md
 cli/LICENSE
 
-# The website
-.vitepress/cache/
-.vitepress/dist/
-.wrangler/
+# The website: VitePress's build cache and output, and Wrangler's local state
+website/.vitepress/cache/
+website/.vitepress/dist/
+website/.wrangler/

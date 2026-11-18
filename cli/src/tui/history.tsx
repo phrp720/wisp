@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { cleanOutput } from "../core/ansi.js";
 import { baseLabel, type HistoryEntry, type HistoryStep } from "../core/history.js";
 import type { Glyphs } from "./glyphs.js";
+import { spell } from "./spells.js";
 import { TONE } from "./tones.js";
 import { matchesAll, shortUrl, windowed, type Services } from "./model.js";
 
@@ -136,7 +137,10 @@ export function HistoryScreen(props: HistoryScreenProps) {
   if (!entries) {
     return (
       <Box height={height} borderStyle={glyphs.border} paddingX={1}>
-        <Text dimColor>reading history…</Text>
+        <Text>
+          <Text color={TONE.accent}>{`${spell(3)}… `}</Text>
+          <Text dimColor>reading history</Text>
+        </Text>
       </Box>
     );
   }
