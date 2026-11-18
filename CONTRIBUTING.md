@@ -70,7 +70,7 @@ Keep them small and focused, and say *why* as well as what. Before you open one:
 pnpm typecheck && pnpm test && pnpm build && pnpm website:build
 ```
 
-Releases are cut by the maintainers; [RELEASING.md](RELEASING.md) explains how.
+Releases are cut by the maintainers; [RELEASING.md](.github/RELEASING.md) explains how.
 
 ## License
 
