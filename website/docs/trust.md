@@ -10,6 +10,9 @@ wisp trust    # allow this exact file
 
 In the TUI, press `t` on a workspace. It lists every command the file would run, and the
 **Trust this file** button starts unselected, so a stray `⏎` allows nothing.
+A bolt never starts only half of what it lists. Press `⏎` on one that needs trust and the
+same list opens first, with **Trust and run**. `wisp api` asks the same at a terminal; in a
+script or a git hook it stops with `NOT_TRUSTED` and runs nothing.
 
 ## How it works
 

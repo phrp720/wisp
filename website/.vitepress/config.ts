@@ -94,8 +94,5 @@ export default defineConfig({
     search: { provider: "local" },
     outline: { level: [2, 3], label: "On this page" },
     editLink: { pattern: "https://github.com/phrp720/wisp/edit/main/website/:path", text: "Edit this page on GitHub" },
-    footer: {
-      message: 'Released under the <a href="https://github.com/phrp720/wisp/blob/main/LICENSE">MIT License</a>.',
-    },
   },
 });

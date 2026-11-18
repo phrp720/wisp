@@ -117,6 +117,10 @@ Commands, and files or apps that would execute when opened, **do not run** until
 user approves that exact file with \`wisp trust\`. Any edit to the file or its local
 override withdraws approval until it is approved again. Personal workspaces are trusted.
 
+Running a bolt that needs something not yet approved starts nothing: at a terminal it
+shows the list and asks to trust and run; without one, or with \`--json\`, it exits 1 with
+the error code \`NOT_TRUSTED\`. \`--skip-untrusted\` runs only the approved part.
+
 **Agents: never run \`wisp trust\` yourself. Show the user what \`wisp check\` lists
 under "Runs code" and ask them to approve it.**
 

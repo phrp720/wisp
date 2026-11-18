@@ -24,7 +24,8 @@ export type View =
   | { kind: "search"; query: string; index: number }
   | { kind: "run" }
   | { kind: "check"; read?: WorkspaceRead; scroll: number }
-  | { kind: "trust"; read: WorkspaceRead }
+  /** `then`: the bolt you pressed ⏎ on, run as soon as you say yes. */
+  | { kind: "trust"; read: WorkspaceRead; then?: string }
   | {
       kind: "processes";
       index: number;
@@ -180,6 +181,8 @@ export function counts(read: WorkspaceRead): string {
 export function needsTrust(read: WorkspaceRead): boolean {
   return !read.workspace.personal && !read.workspace.trusted && read.withheld.length > 0;
 }
+
+export { waitingForTrust } from "../core/waiting.js";
 
 export function visibleRuns(runs: RunStatus[], all: boolean): RunStatus[] {
   const list = all ? runs : runs.filter((run) => run.alive);

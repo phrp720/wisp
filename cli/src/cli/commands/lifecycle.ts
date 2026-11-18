@@ -214,7 +214,7 @@ WISP_TRIGGER=hook exec wisp use '${here.workspace.file.replace(/'/g, `'\\''`)}' 
 
     console.log(`${green("✓")} ${name} runs ${bold(bolt.label)} ${dim(`— ${tildify(path)}`)}`);
     if (!bolt.job) console.log(yellow(`! "${bolt.label}" is not a job, so a failure would not stop the ${name}. Add "job": true to it.`));
-    if (!here.workspace.trusted && here.withheld.length > 0) console.log(yellow("! its commands wait for `wisp trust` — until then the hook runs nothing"));
+    if (!here.workspace.trusted && here.withheld.length > 0) console.log(yellow("! its commands wait for `wisp trust` — until then the hook stops, rather than pass without checking"));
   },
 };
 

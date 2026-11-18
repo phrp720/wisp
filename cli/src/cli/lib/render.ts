@@ -1,3 +1,4 @@
+import { dirname } from "node:path";
 import { tildify } from "../../core/paths.js";
 import type { RunStatus } from "../../core/processes.js";
 import { boltStatus, collectBoltTargets, collectDownTargets } from "../../core/switch.js";
@@ -177,4 +178,24 @@ export function resultLine(result: {
   const detail = result.error ? ` ${red(`(${result.error})`)}` : result.note ? ` ${dim(`· ${result.note}`)}` : "";
   const time = result.durationMs && result.durationMs >= 1000 ? dim(` ${(result.durationMs / 1000).toFixed(1)}s`) : "";
   return `  ${mark} ${dim(kindLabel(result.kind))} ${named(result.label, shown(result), from)}${time}${detail}`;
+}
+
+/**
+ * Everything a file would be allowed to run, as `wisp trust` and a run that needs trust both
+ * show it. Trust is granted to what you have read, so it is printed every time.
+ */
+export function printWithheld(read: WorkspaceRead): void {
+  const path = read.workspace.file;
+  console.log(dim(tildify(path)));
+  if (read.workspace.local) console.log(dim(`+ ${tildify(read.workspace.local)}`));
+  if (read.trust === "stale") console.log(yellow("! this file has changed since you last trusted it"));
+  console.log();
+  console.log(bold(`Would allow ${plural(read.withheld.length, "item")} to run:`));
+  for (const item of read.withheld) {
+    const where = whereLine(item.cwd, dirname(path));
+    const why = item.reason ? dim(` (${item.reason})`) : "";
+    console.log(`  ${dim(kindLabel(item.kind))} ${named(item.label, tildify(item.value))}${where}${why}`);
+  }
+  console.log();
+  console.log(dim("These run on your machine, with your shell, as you."));
 }

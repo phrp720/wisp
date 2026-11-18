@@ -20,7 +20,7 @@ import { type Library, ordered, search, type Services } from "./model.js";
 import { CheckPanel, HelpPanel, RunPanel } from "./panels.js";
 import { SettingsScreen } from "./settings.js";
 import { filterPanes, groupPanes, paneKey, PanesPanel } from "./running.js";
-import { type Activity, clamp, type Focus, markFirst, needsTrust, type Notice, type PaneItem, type RunState, SELF_DRIVEN, useLatest, useTerminalSize, type View, visibleRuns } from "./state.js";
+import { type Activity, clamp, type Focus, markFirst, needsTrust, type Notice, type PaneItem, type RunState, SELF_DRIVEN, useLatest, useTerminalSize, type View, visibleRuns, waitingForTrust } from "./state.js";
 import { spell } from "./spells.js";
 import { TONE } from "./tones.js";
 
@@ -393,6 +393,9 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
 
   const runBolt = useCallback(
     async (read: WorkspaceRead, label: string, dryRun: boolean) => {
+      // Not half a run: a bolt with steps waiting for trust asks first. A dry run still goes
+      // ahead, since showing what would be skipped is its point.
+      if (!dryRun && waitingForTrust(read, label).length > 0) return setView({ kind: "trust", read, then: label });
       const job = read.workspace.bolts.find((entry) => entry.label === label)?.job ?? false;
       await launch(read, label, job, dryRun, (callbacks) => services.run(read, label, callbacks), `${read.workspace.name} ${glyphs.arrow} ${label}`);
     },
@@ -998,16 +1001,21 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
       ) : view.kind === "trust" ? (
         <TrustPanel
           read={view.read}
+          {...(view.then ? { then: view.then } : {})}
           glyphs={glyphs}
           height={bodyHeight}
           onAnswer={(yes) => {
-            const read = view.read;
+            const { read, then } = view;
             setView({ kind: "browse" });
-            if (!yes) return setMessage("not trusted");
+            if (!yes) return setMessage(then ? `didn't run "${then}": it waits for trust (t to review)` : "not trusted");
             void services
               .trust(read.workspace.file, read.hash)
               .then(() => reload(read.workspace.file))
-              .then(() => say(`trusted ${read.workspace.name} — its commands will run`))
+              .then(async (next) => {
+                say(`trusted ${read.workspace.name} — its commands will run`);
+                const fresh = next ? ordered(next).find((entry) => entry.workspace.file === read.workspace.file) : undefined;
+                if (then && fresh) await runBolt(fresh, then, false);
+              })
               .catch((error: unknown) => setMessage(describe(error)));
           }}
         />

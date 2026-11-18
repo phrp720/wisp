@@ -6,7 +6,10 @@ import type { Bolt, RunMode, SwitchOptions, SwitchResult, SwitchTarget, TargetRe
 import { bold, cyan, dim, green, kindLabel, plural, red, title, yellow } from "../format.js";
 import { emitJson, findWorkspaceForDependency, resolveRun } from "../lib/context.js";
 import type { CommandDef } from "../lib/define.js";
-import { diagnosticSummary, resultLine, suggestBolts, trustLine } from "../lib/render.js";
+import { diagnosticSummary, printWithheld, resultLine, suggestBolts, trustLine } from "../lib/render.js";
+import { tildify } from "../../core/paths.js";
+import { trustProject } from "../../core/trust.js";
+import { waitingForTrust } from "../../core/waiting.js";
 import { Prompter } from "../prompt.js";
 
 interface Options {
@@ -16,6 +19,7 @@ interface Options {
   detach?: boolean;
   window?: boolean;
   retry?: boolean;
+  skipUntrusted?: boolean;
   json?: boolean;
 }
 
@@ -34,6 +38,7 @@ export const use: CommandDef<Options> = {
     ["-w, --window", "run commands in terminal windows (or tmux windows, inside tmux)"],
     ["-d, --detach", "run commands in the background, even if you chose a terminal"],
     ["-r, --retry", "run again only what failed last time — and what that kept from running"],
+    ["--skip-untrusted", "run only what the file is allowed to, skipping what waits for `wisp trust`"],
     ["--json", "print the result as JSON"],
   ],
   examples: [
@@ -44,8 +49,10 @@ export const use: CommandDef<Options> = {
   ],
 
   async run([first, second], options) {
-    const { read, bolt: named, workspaceRef } = await resolveRun(first, second, undefined);
-    const { workspace } = read;
+    const resolved = await resolveRun(first, second, undefined);
+    const { bolt: named, workspaceRef } = resolved;
+    let { read } = resolved;
+    let { workspace } = read;
     const mode: RunMode = options.inline ? "inline" : options.detach ? "background" : options.window ? "terminal" : "auto";
 
     const bolt = named ?? (options.all ? undefined : await chooseBolt(workspace, options));
@@ -54,6 +61,39 @@ export const use: CommandDef<Options> = {
       console.log(`${dim("in")} ${title(workspace)}`);
       suggestBolts(workspace, workspaceRef);
       return;
+    }
+
+    // Not half a run: when steps it needs wait for trust, ask (at a terminal) or stop, and
+    // start nothing. A dry run goes ahead, since showing what would be skipped is its point.
+    if (!options.dryRun && !options.skipUntrusted) {
+      const waitLabel = bolt ? boltLabel(workspace, bolt) : undefined;
+      const waiting = waitingForTrust(read, waitLabel);
+      if (waiting.length > 0) {
+        const what = waitLabel ? `"${waitLabel}"` : "Everything";
+        const needs = `${what} needs ${plural(waiting.length, "thing")} this file isn't allowed to run yet`;
+        if (options.json || !process.stdin.isTTY || !process.stdout.isTTY) throw new WispError(needs, "NOT_TRUSTED");
+        console.log(yellow(`! ${needs}. Run without them, it would start only part of it.`));
+        console.log();
+        printWithheld(read);
+        const prompt = new Prompter();
+        let yes = false;
+        try {
+          yes = await prompt.confirm(waitLabel ? `Trust it and run "${waitLabel}"?` : "Trust it and run everything?");
+        } finally {
+          prompt.close();
+        }
+        if (!yes) {
+          console.log(dim("Nothing ran. `wisp check` shows the file, `wisp trust` allows it."));
+          process.exitCode = 1;
+          return;
+        }
+        // The hash of what was shown: if the file changed while you read, this refuses.
+        await trustProject(workspace.file, read.hash);
+        console.log(`${green("✓")} trusted ${dim(tildify(workspace.file))}`);
+        console.log();
+        read = (await resolveRun(first, second, undefined)).read;
+        workspace = read.workspace;
+      }
     }
 
     // Remembered when you run it, so it can be listed and run from anywhere after.

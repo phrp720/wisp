@@ -179,7 +179,23 @@ describe("the TUI", () => {
     expect(app.lastFrame()).toContain("❯ infra › Database");
     app.stdin.write("\r");
     await tick();
-    expect(run).toHaveBeenCalledWith(infra, "Database", expect.anything());
+    // infra isn't trusted and Database runs a command: it asks rather than run half of it.
+    expect(app.lastFrame()).toContain("Trust infra?");
+    expect(run).not.toHaveBeenCalled();
+    app.stdin.write("\r");
+    await tick();
+    await tick();
+
+    app.stdin.write("/");
+    await tick();
+    for (const char of "web") {
+      app.stdin.write(char);
+      await tick();
+    }
+    expect(app.lastFrame()).toContain("❯ Acme › Work on web");
+    app.stdin.write("\r");
+    await tick();
+    expect(run).toHaveBeenCalledWith(acme, "Work on web", expect.anything());
   });
 
   it("does nothing else with the ⏎ that cancels a trust dialog — it does not run the bolt behind it", async () => {
@@ -235,6 +251,72 @@ describe("the TUI", () => {
     app.stdin.write("\r");
     await tick();
     expect(trust).toHaveBeenCalledWith(infra.workspace.file, infra.hash);
+  });
+
+  it("asks before running a bolt that would start only half, and runs it once trusted", async () => {
+    const shop = (trust: TrustState) =>
+      read("/dev/shop/.wisp.json", {
+        name: "Shop",
+        bolts: [
+          { label: "Work on web", targets: [{ bolt: "Database" }, { url: "http://localhost:3000" }] },
+          { label: "Database", targets: [{ run: "postgres" }] },
+          { label: "Docs", targets: [{ url: "https://docs.shop.test" }] },
+        ],
+      }, trust);
+    let current = shop("untrusted");
+    const ran: string[] = [];
+    const base = services();
+    const api = services({
+      load: async () => ({ reads: [current], here: current.workspace.file, unreadable: [] }),
+      trust: vi.fn(async () => {
+        current = shop("trusted");
+      }),
+      run: async (target, bolt, callbacks) => {
+        ran.push(`${bolt}:${target.workspace.trusted ? "trusted" : "untrusted"}`);
+        return base.run(target, bolt, callbacks);
+      },
+    });
+    const app = await open(api);
+
+    // Its own step is a link, but the bolt it needs runs a command: ⏎ asks, nothing starts.
+    app.stdin.write("\r");
+    await tick();
+    expect(app.lastFrame()).toContain("Trust Shop?");
+    expect(app.lastFrame()).toContain('"Work on web" needs some of these');
+    expect(app.lastFrame()).toMatch(/Trust and run[\s\S]*Cancel/);
+    expect(ran).toEqual([]);
+
+    // Cancel runs nothing at all, rather than the half that was allowed.
+    app.stdin.write("\r");
+    await tick();
+    await tick();
+    expect(ran).toEqual([]);
+    expect(app.lastFrame()).toContain("didn't run");
+
+    // A bolt with nothing waiting for trust runs straight away.
+    app.stdin.write(ARROW_DOWN);
+    await tick();
+    app.stdin.write(ARROW_DOWN);
+    await tick();
+    app.stdin.write("\r");
+    await tick();
+    expect(ran).toEqual(["Docs:untrusted"]);
+    app.stdin.write("\u001B");
+    await tick();
+
+    // Trust and run: trusts the file, then runs the bolt, whole.
+    app.stdin.write("\u001B[A");
+    await tick();
+    app.stdin.write("\u001B[A");
+    await tick();
+    app.stdin.write("\r");
+    await tick();
+    app.stdin.write(ARROW_LEFT);
+    await tick();
+    app.stdin.write("\r");
+    for (let i = 0; i < 5; i++) await tick();
+    expect(api.trust).toHaveBeenCalled();
+    expect(ran).toEqual(["Docs:untrusted", "Work on web:trusted"]);
   });
 
   it("shows a bolt whole with v: its order, the bolts it needs opened up, what each runs", async () => {

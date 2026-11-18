@@ -11,12 +11,13 @@ import { type SetupSuggestion, windowed } from "./model.js";
 import { KIND } from "./state.js";
 import { TONE } from "./tones.js";
 
-export function TrustPanel({ read, glyphs, height, onAnswer }: { read: WorkspaceRead; glyphs: Glyphs; height: number; onAnswer: (yes: boolean) => void }) {
+export function TrustPanel({ read, then, glyphs, height, onAnswer }: { read: WorkspaceRead; then?: string; glyphs: Glyphs; height: number; onAnswer: (yes: boolean) => void }) {
   return (
     <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor="yellow" paddingX={1}>
       <Text bold>{`Trust ${read.workspace.name}?`}</Text>
       <Text dimColor wrap="truncate-start">{tildify(read.workspace.file) + (read.workspace.local ? "  + local" : "")}</Text>
       {read.trust === "stale" ? <Text color="yellow">this file has changed since you last trusted it</Text> : null}
+      {then ? <Text color="yellow">{`"${then}" needs some of these. Run it without them and only part of it would start.`}</Text> : null}
       <Text> </Text>
       <Text>{`It would be allowed to run ${read.withheld.length} thing${read.withheld.length === 1 ? "" : "s"}:`}</Text>
       {windowed(read.withheld, 0, height - 12).items.map((item) => (
@@ -30,7 +31,7 @@ export function TrustPanel({ read, glyphs, height, onAnswer }: { read: Workspace
       <Text> </Text>
       <Text dimColor>These run on your machine, as you. Any later edit to the file asks again.</Text>
       <Text> </Text>
-      <Choice yes="Trust this file" no="Cancel" danger onAnswer={onAnswer} />
+      <Choice yes={then ? "Trust and run" : "Trust this file"} no="Cancel" danger onAnswer={onAnswer} />
     </Box>
   );
 }
