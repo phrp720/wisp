@@ -6,7 +6,7 @@ import type { Bolt, RunMode, SwitchOptions, SwitchResult, SwitchTarget, TargetRe
 import { bold, cyan, dim, green, kindLabel, plural, red, title, yellow } from "../format.js";
 import { emitJson, findWorkspaceForDependency, resolveRun } from "../lib/context.js";
 import type { CommandDef } from "../lib/define.js";
-import { diagnosticSummary, printWithheld, resultLine, suggestBolts, trustLine } from "../lib/render.js";
+import { diagnosticSummary, named as showNamed, printWithheld, resultLine, suggestBolts, trustLine } from "../lib/render.js";
 import { tildify } from "../../core/paths.js";
 import { trustProject } from "../../core/trust.js";
 import { waitingForTrust } from "../../core/waiting.js";
@@ -150,6 +150,8 @@ export const use: CommandDef<Options> = {
         ? await retryLast(workspace, label, isJob, runOptions, find)
         : await switchToWorkspace(workspace, { ...runOptions, ...(bolt ? { bolt } : {}) }, find);
 
+    const untrusted = waitingForTrust(read, result.bolt?.label ?? label);
+
     if (json) {
       return emitJson({
         workspace: workspace.name,
@@ -159,15 +161,21 @@ export const use: CommandDef<Options> = {
         dryRun: result.dryRun,
         history: result.historyId ?? null,
         targets: result.targets,
+        waitingForTrust: untrusted.map(({ kind, label: name, value, cwd }) => ({ kind, label: name, value, ...(cwd ? { cwd } : {}) })),
       });
     }
 
     if (result.targets.length === 0) {
-      // A bolt that resolved to nothing ran nothing. Say why, rather than listing bolts as
-      // if the name had been wrong — and fail, so a script or an agent notices.
       if (result.bolt) {
-        const waiting = read.withheld.length > 0 && !workspace.trusted;
-        console.log(dim(waiting ? "  nothing ran — every step waits for `wisp trust` (see `wisp check`)" : "  nothing ran — this bolt has no steps here"));
+        if (result.dryRun && untrusted.length > 0) {
+          console.log(dim("  every step waits for `wisp trust`. Once allowed, it would run:"));
+          for (const item of untrusted) console.log(`  ${dim(kindLabel(item.kind))} ${showNamed(item.label, tildify(item.value))}`);
+          console.log(dim("  `wisp check` shows the whole file, `wisp trust` allows it"));
+          return;
+        }
+        // A bolt that resolved to nothing ran nothing. Say why, rather than listing bolts as
+        // if the name had been wrong — and fail, so a script or an agent notices.
+        console.log(dim(untrusted.length > 0 ? "  nothing ran — every step waits for `wisp trust` (see `wisp check`)" : "  nothing ran — this bolt has no steps here"));
         process.exitCode = 1;
         return;
       }

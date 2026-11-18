@@ -163,6 +163,7 @@ Run flags: \`--dry-run\` (show what would happen and where, change nothing), \`-
    need the same thing. Keep paths relative.
 3. \`wisp check --json\`: exit code 1 means errors. Fix them until \`errors\` is 0.
 4. \`wisp <bolt> --dry-run --json\`: confirm the plan and where each command would run.
+   Steps the file is not allowed to run yet are listed under \`waitingForTrust\`.
 5. If \`check\` shows commands waiting for trust, ask the user to run \`wisp trust\`.
 6. \`wisp <bolt> --inline\` to run and read the output directly, or \`--detach\` for
    servers and then \`wisp logs <name>\` / \`wisp ps --json\` / \`wisp down <bolt>\`.
