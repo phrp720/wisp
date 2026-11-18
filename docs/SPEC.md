@@ -135,7 +135,7 @@ under "Runs code" and ask them to approve it.**
 | `wisp ps [--all] [--json]` · `wisp logs <run> [-f]` · `wisp stop <run> \| --all` | what Wisp has running |
 | `wisp scan <dir>` | find project files under a directory |
 | `wisp doctor [--json]` | what works here, and where files live |
-| `wisp spec` | this reference |
+| `wisp help agents` · `wisp spec` | this reference |
 
 Run flags: `--dry-run` (show what would happen and where, change nothing), `--inline`
 (run commands attached, output here), `--detach` (run commands in the background),
@@ -168,7 +168,9 @@ CLI instead.
 
 ## Output and exit codes
 
-- `--json` prints one JSON document to stdout. Errors go to stderr.
+- `--json` prints one JSON document to stdout. A failure is JSON too, on stdout:
+  `{"ok": false, "error": {"code": "NO_BOLT", "message": "…", "hint": "…"}}`, with exit 1.
+  Without `--json`, errors go to stderr.
 - Exit 0: everything ran. Exit 1: a step failed, `check` found errors, or the command
   was refused (the message says why, and usually what to run instead).
 - Without a terminal Wisp never prompts: `wisp` with no bolt lists the bolts.

@@ -57,6 +57,10 @@ ${dim("In a project with a .wisp.json:")}
 ${dim("  wisp            open the TUI: every workspace, its bolts, ⏎ to run")}
 ${dim("  wisp api        run its api bolt")}
 ${dim("  wisp init       give a project a .wisp.json")}
+
+${dim("AI agents: run `wisp help agents` for the full reference. Most commands take --json.")}
+
+${dim("Wisp, as in will-o'-the-wisp: the little light that leads the way.")}
 `,
 );
 

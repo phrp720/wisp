@@ -7,7 +7,8 @@ import { describe, expect, it } from "vitest";
 
 import { PROJECT_SCHEMA_URL, interpret } from "./project.js";
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+// The repository's root: the schema lives there, beside cli/, at the address files link to.
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
 async function load(path: string): Promise<Record<string, unknown>> {
   return JSON.parse(await readFile(join(ROOT, path), "utf8"));

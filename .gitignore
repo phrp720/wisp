@@ -7,3 +7,13 @@ bin/
 .env.local
 .idea
 .vscode
+
+# Copied into the package only while packing (see cli/package.json)
+cli/schema/
+cli/README.md
+cli/LICENSE
+
+# The website: VitePress's build cache and output, and Wrangler's local state
+website/.vitepress/cache/
+website/.vitepress/dist/
+website/.wrangler/

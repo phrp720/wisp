@@ -9,6 +9,8 @@
  * A bolt sharing a name with a command is still reachable as `wisp use list`.
  */
 export function withImplicitUse(argv: string[], commands: Set<string>): string[] {
+  // `wisp help agents` is the reference itself, not help about a command called agents.
+  if (argv[2] === "help" && argv[3] === "agents") return [...argv.slice(0, 2), "spec", ...argv.slice(4)];
   const first = argv[2];
   if (!first || first.startsWith("-") || commands.has(first)) return argv;
   return [...argv.slice(0, 2), "use", ...argv.slice(2)];

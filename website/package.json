@@ -1,0 +1,17 @@
+{
+  "name": "wisp-website",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vitepress dev",
+    "build": "vitepress build",
+    "preview": "vitepress preview",
+    "deploy": "vitepress build && wrangler deploy"
+  },
+  "devDependencies": {
+    "@hugeicons/core-free-icons": "4.3.5",
+    "vitepress": "1.6.4",
+    "wrangler": "4.164.0"
+  }
+}

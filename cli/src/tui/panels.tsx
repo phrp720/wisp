@@ -11,6 +11,7 @@ import type { Diagnostic } from "../core/types.js";
 import type { Glyphs } from "./glyphs.js";
 import { describeStep, windowed } from "./model.js";
 import { KIND, type RunState, type View } from "./state.js";
+import { spell } from "./spells.js";
 import { TONE } from "./tones.js";
 
 export function RunPanel({ view, glyphs, height, tick }: { view: RunState; glyphs: Glyphs; height: number; tick: number }) {
@@ -28,7 +29,7 @@ export function RunPanel({ view, glyphs, height, tick }: { view: RunState; glyph
   return (
     <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor={view.done ? (failed > 0 || view.error ? "red" : "green") : TONE.accent} paddingX={1}>
       <Text bold>
-        {view.dryRun ? <Text color="yellow">dry run </Text> : view.done ? null : <Text color={TONE.accent}>running </Text>}
+        {view.dryRun ? <Text color="yellow">dry run </Text> : view.done ? null : <Text color={TONE.accent}>{`${spell()}… `}</Text>}
         {view.title}
       </Text>
       <Text> </Text>
@@ -195,6 +196,7 @@ export function HelpPanel({ glyphs, height }: { glyphs: Glyphs; height: number }
       </Box>
       <Box flexGrow={1} />
       <Text dimColor>`wisp --help` for the command line · `wisp spec` for the file format</Text>
+      <Text dimColor italic>Wisp, as in will-o'-the-wisp: the little light that leads the way.</Text>
     </Box>
   );
 }
