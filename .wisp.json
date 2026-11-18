@@ -29,8 +29,7 @@
       "label": "Work on the website",
       "color": "#f472b6",
       "targets": [
-        { "folder": "website" },
-        { "run": "pnpm --filter wisp-website dev", "label": "website" },
+        { "run": "pnpm --filter wisp-website install && pnpm --filter wisp-website dev", "label": "website" },
         { "wait": "http://localhost:5173" },
         { "url": "http://localhost:5173", "label": "Website" }
       ]
@@ -53,9 +52,7 @@
         { "bolt": "Make wisp-dev" },
         { "run": "pnpm --filter @squaredasher/wisp exec tsc -p tsconfig.json --watch --preserveWatchOutput", "label": "rebuild wisp-dev as you edit" }
       ],
-      "down": [
-        { "run": "rm -f \"$HOME/.local/bin/wisp-dev\"", "label": "remove wisp-dev" }
-      ]
+      "down": [{ "run": "rm -f \"$HOME/.local/bin/wisp-dev\"", "label": "remove wisp-dev" }]
     },
     {
       "label": "Make wisp-dev",

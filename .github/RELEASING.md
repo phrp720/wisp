@@ -36,8 +36,3 @@ Secrets are encrypted and never appear in logs or in this repository.
 npm packages are published with provenance, so npm shows they were built by this workflow
 from this repository.
 
-## Before the repository is public
-
-- Never commit a token, a `.env` or a machine's own paths; `.gitignore` covers the usual ones.
-- Commits show their author's email. To keep yours private, use GitHub's noreply address:
-  `git config user.email <id>+<user>@users.noreply.github.com`.
