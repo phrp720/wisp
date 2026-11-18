@@ -256,6 +256,51 @@ describe("the TUI", () => {
     expect(trust).toHaveBeenCalledWith(infra.workspace.file, infra.hash);
   });
 
+  it("scrolls a long log on a run's page, and stays where you scrolled to", async () => {
+    const entry = {
+      id: "c1e2a3",
+      number: 1,
+      workspace: acme.workspace.file,
+      workspaceName: "Acme",
+      bolt: "Cleanup",
+      job: false,
+      startedAt: new Date(Date.now() - 60_000).toISOString(),
+      finishedAt: new Date(Date.now() - 58_000).toISOString(),
+      ok: true,
+      steps: [{ kind: "command" as const, label: "Cleanup", value: "mo clean", ok: true, durationMs: 1500, log: "/logs/clean" }],
+    };
+    const text = Array.from({ length: 80 }, (_, at) => `cleaned item ${at + 1}`).join("\n");
+    const app = render(<App services={services({ history: async () => [entry], readLog: async () => text })} glyphs={unicode} size={{ columns: 100, rows: 24 }} />);
+    await tick();
+    for (const key of ["h", "\r"]) {
+      app.stdin.write(key);
+      await tick();
+      await tick();
+    }
+    // Open its log, if it didn't open by itself.
+    if ((app.lastFrame() ?? "").includes("▸ ✓ start Cleanup")) app.stdin.write("\r");
+    await tick();
+    await tick();
+    const shown = () => [...(app.lastFrame() ?? "").matchAll(/cleaned item (\d+)/g)].map((match) => Number(match[1]));
+    expect(shown()[0]).toBe(1);
+
+    app.stdin.write("d");
+    await tick();
+    await tick();
+    const paged = shown()[0] ?? 0;
+    expect(paged).toBeGreaterThan(5);
+
+    // ↓ past the only step reads on a line at a time; u goes back up to the top.
+    app.stdin.write("\u001B[B");
+    await tick();
+    expect(shown()[0]).toBe(paged + 1);
+    for (const key of ["u", "u", "u"]) {
+      app.stdin.write(key);
+      await tick();
+    }
+    expect(shown()[0]).toBe(1);
+  });
+
   it("cancelling the delete-workspace dialog leaves the dashboard as it was: no run, focus unmoved", async () => {
     const run = vi.fn(services().run);
     const forgetProject = vi.fn(async () => undefined);
