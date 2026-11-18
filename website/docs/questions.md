@@ -8,6 +8,12 @@ Yes, by naming the project too: `wisp acme api`. Inside the project, `wisp api` 
 `wisp list` shows every project Wisp knows; `wisp scan ~/dev` finds the ones you haven't
 used yet. [Getting started](./getting-started#_4-run-it)
 
+### Is there tab completion?
+
+Yes: `wisp completion --install`, then open a new terminal. `wisp ⇥` offers commands, this
+project's bolts and every workspace; `wisp flower-testbed ⇥` offers that workspace's bolts.
+`wisp completion zsh` prints the script, if you'd rather set it up yourself.
+
 ### Does it work without a `.wisp.json`?
 
 Open `wisp` in the project, or run `wisp init`: it suggests bolts from what the project has.

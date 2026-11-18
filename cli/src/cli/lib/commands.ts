@@ -1,4 +1,5 @@
 import { check } from "../commands/check.js";
+import { completion } from "../commands/completion.js";
 import { doctor } from "../commands/doctor.js";
 import { init } from "../commands/init.js";
 import { down, history, hook, restart } from "../commands/lifecycle.js";
@@ -33,6 +34,7 @@ export const COMMANDS: CommandDef<never>[] = [
   scan,
   openWith,
   doctor,
+  completion,
   spec,
 ] as CommandDef<never>[];
 

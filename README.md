@@ -45,6 +45,8 @@ npm install -g @squaredasher/wisp
 Or download it from [Releases](https://github.com/phrp720/wisp/releases): macOS, Linux and
 Windows.
 
+Tab completion for your workspaces and bolts (zsh, bash, fish): `wisp completion --install`.
+
 ## Quick start
 
 ```bash

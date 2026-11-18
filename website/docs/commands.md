@@ -47,6 +47,7 @@ would stop.
 | `wisp scan ~/dev` | find the projects you already have, so they show up everywhere |
 | `wisp hook pre-push check` | run a job from a git hook; the push stops if it fails |
 | `wisp open-with` | your editor and terminal; the same as [Settings](./settings) |
+| `wisp completion --install` | tab completion for your shell (zsh, bash, fish): commands, workspaces, bolts, running commands |
 
 | Option | |
 |---|---|

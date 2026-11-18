@@ -139,6 +139,7 @@ under "Runs code" and ask them to approve it.**
 | `wisp ps [--all] [--json]` · `wisp logs <run> [-f]` · `wisp stop <run> \| --all` | what Wisp has running |
 | `wisp scan <dir>` | find project files under a directory |
 | `wisp doctor [--json]` | what works here, and where files live |
+| `wisp completion [zsh\|bash\|fish] [--install]` | tab completion for workspaces, bolts and commands (for the user to set up) |
 | `wisp help agents` · `wisp spec` | this reference |
 
 Run flags: `--dry-run` (show what would happen and where, change nothing), `--inline`

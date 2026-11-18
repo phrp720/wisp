@@ -41,7 +41,7 @@ for (const command of COMMANDS) register(program, command);
 program
   .command("status")
   .helpGroup("More:")
-  .description("Print what this project can run, without opening the TUI")
+  .description("Print what this project can run, without opening the dashboard")
   .action(async () => {
     try {
       await status();
@@ -54,7 +54,7 @@ program.addHelpText(
   "after",
   `
 ${dim("In a project with a .wisp.json:")}
-${dim("  wisp            open the TUI: every workspace, its bolts, ⏎ to run")}
+${dim("  wisp            open the dashboard: every workspace, its bolts, ⏎ to run")}
 ${dim("  wisp api        run its api bolt")}
 ${dim("  wisp init       give a project a .wisp.json")}
 
@@ -64,4 +64,18 @@ ${dim("Wisp, as in will-o'-the-wisp: the little light that leads the way.")}
 `,
 );
 
-program.parseAsync(withImplicitUse(process.argv, verbs())).catch(fail);
+// What the shells' completion scripts call on ⇥: the suggestions for the word being typed,
+// one per line. Quiet and quick, and never an error: a broken completion is just no help.
+if (process.argv[2] === "__complete") {
+  const words = process.argv.slice(3);
+  if (words[0] === "--") words.shift();
+  try {
+    const { complete, formatCandidates } = await import("./lib/complete.js");
+    const text = formatCandidates(await complete(words.length > 0 ? words : [""]));
+    if (text) process.stdout.write(`${text}\n`);
+  } catch {
+    // no suggestions
+  }
+} else {
+  program.parseAsync(withImplicitUse(process.argv, verbs())).catch(fail);
+}

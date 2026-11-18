@@ -7,12 +7,18 @@ the right folder, the page in your browser. You describe it once, as a **bolt** 
 ## 1. Install
 
 ```bash
-curl -fsSL https://willowisp.dev/install.sh | sh     # macOS and Linux
-npm install -g @squaredasher/wisp                     # anywhere, with Node 22.12+
+curl -fsSL https://willowisp.dev/install.sh | sh    # macOS and Linux
+npm install -g @squaredasher/wisp                   # anywhere, Node 22.12+
 ```
 
 Windows without Node: download `wisp-windows-x64.zip` from
 [Releases](https://github.com/phrp720/wisp/releases) and put `wisp.exe` in a folder on your PATH.
+
+Then, for tab completion of your workspaces and bolts (zsh, bash or fish):
+
+```bash
+wisp completion --install     # adds one line to your shell's config; open a new terminal
+```
 
 ## 2. Write the file
 
