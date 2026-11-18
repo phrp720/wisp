@@ -10,8 +10,27 @@ it started, look back at past runs. It works the same at your desk, over SSH and
 - **`1` Bolts:** your projects (and your own workspaces) on the left, their bolts on the
   right. `⏎` runs one and shows each step.
 - **`2` Running:** what each bolt started, as a pipeline, with live output, health and
-  ports, and a log of what crashed and came back.
+  ports, and a log of what crashed and came back. Beside the list, each command has tabs
+  for its logs, its details and its past runs, as in lazydocker.
 - **`3` History:** every run like a CI run, with its branch, commit, and each step's output.
+
+## The mouse
+
+Click a tab along the top, a workspace, a bolt, a row on Running or a tab beside it. In
+History, click a run to choose it and again to open it, then click a step to show or hide
+its log. The wheel scrolls the list under it, or the output when it is over a log. A click
+selects; `⏎` still runs a bolt, so a stray click never starts anything.
+
+Forms take clicks too: a field to type in it (on its text, the cursor goes where you
+click), an option to choose it, the button to save. So do the lists you pick from, the
+setup checklist and Settings. Allowing a project's commands and confirming a delete stay
+on the keyboard, so a stray click can never do either.
+
+It works over SSH too, since your own terminal sends the clicks. In tmux it needs
+`set -g mouse on` in your `.tmux.conf`.
+
+While Wisp has the mouse, selecting text takes Shift (Option in iTerm2), as in any
+terminal app that uses the mouse. Rather select freely? Turn it off in [Settings](./settings) (`s`).
 
 ## No JSON needed
 
@@ -34,6 +53,7 @@ filled in through short forms. `E` opens the file itself if you'd rather.
 | `↑↓` `j k` · `←→` `tab` | move · between workspaces and bolts |
 | `/` | search, on any tab |
 | `o` | on Running: show the ones that stopped too |
+| `[` · `]` | on Running: the selected command's tabs: logs, info, past runs |
 | `u` · `d` · `G` | scroll output up · down · back to the newest |
 | `t` · `c` | allow a file's commands · check it for problems |
 | `s` | settings: your editor, and where commands run |

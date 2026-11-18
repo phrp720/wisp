@@ -84,6 +84,9 @@ export interface SettingsService {
   set(change: OpenWith): Promise<OpenWith>;
   /** What can be chosen here: installed editors, and the terminals Wisp can drive. */
   choices(): { editors: { label: string; value: string }[]; terminals: string[] };
+  /** Whether the dashboard takes clicks and the wheel: on unless turned off. */
+  mouse(): Promise<boolean>;
+  setMouse(on: boolean): Promise<boolean>;
 }
 
 /** The edits the TUI's forms make — the core's, passed in so a test can watch them. */

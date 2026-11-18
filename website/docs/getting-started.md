@@ -38,8 +38,9 @@ wisp init
 ```
 
 Wisp reads what the project already has (package.json, compose files, Django, Gradle, a
-Makefile and [more](./file#wisp-init)) and suggests bolts. Keep them all with `⏎`, or type
-the numbers of the ones you want. Opening `wisp` in a project with no file offers the same.
+Makefile and [more](./file#wisp-init)) and offers to suggest bolts, each with what it would
+do. Keep the ones you want (space unticks, `⏎` writes), or say no and start from an empty
+file. Opening `wisp` in a project with no file offers the same.
 
 ![wisp init: it suggests three bolts, keeps two, writes the file, then wisp trust allows it and wisp blog runs it](/demo/init.gif)
 

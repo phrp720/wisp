@@ -6,13 +6,14 @@ import type { ReactNode } from "react";
 import { cleanOutput } from "../core/ansi.js";
 import { type Container, containerMood, type ContainerStats, shortStatus } from "../core/docker.js";
 import { baseLabel, type HistoryEntry, type HistoryStep } from "../core/history.js";
-import type { RunStatus } from "../core/processes.js";
+import { tildify } from "../core/paths.js";
+import { KEEP_FINISHED, type RunStatus } from "../core/processes.js";
 import { RESTART_MARK } from "../core/shell.js";
 import type { WorkspaceRead } from "../core/types.js";
 import type { Glyphs } from "./glyphs.js";
 import { describeHistoryStep, SearchLine } from "./history.js";
 import { describeStep, matchesAll, windowed } from "./model.js";
-import { type Activity, clock, type PaneGroup, type PaneItem, type RunState, since } from "./state.js";
+import { type Activity, clock, type PaneGroup, type PaneItem, type PaneTab, type RunState, since } from "./state.js";
 import { spell } from "./spells.js";
 import { TONE } from "./tones.js";
 
@@ -42,56 +43,49 @@ export function PanesPanel(props: {
   log: string;
   scroll: number;
   full: boolean;
+  /** The tab chosen for the panel; a row without it shows its logs. */
+  tab?: PaneTab | undefined;
+  /** The workspaces, to find a command's env and restart policy for its Info tab. */
+  reads?: WorkspaceRead[];
   glyphs: Glyphs;
   height: number;
   columns: number;
 }) {
-  const { items, activity, history, query, typing, active, tick, stats, dockerError, all, index, log, scroll, full, glyphs, height, columns } = props;
-  const listWidth = Math.min(42, Math.max(26, Math.floor(columns * 0.32)));
-  // The activity log takes the bottom of the list when there is room and something to say.
-  const logRoom = activity.length === 0 || height < 16 ? 0 : Math.min(activity.length + 1, 6);
+  const { items, activity, history, query, typing, runs, active, tick, stats, dockerError, all, index, log, scroll, full, reads = [], glyphs, height, columns } = props;
+  const listWidth = paneListWidth(columns);
   const item = items[index];
+  const tabs = tabsOf(item);
+  const tab = shownTab(item, props.tab);
   const lines = cleanOutput(log)
     .split("\n")
     .filter((line, at, every) => line !== "" || at < every.length - 1);
-  const room = Math.max(1, height - 3);
+  // Borders, the header, and the tab bar when the row has tabs.
+  const room = Math.max(1, height - 3 - (tabs.length > 0 ? 1 : 0));
   const end = Math.max(room, lines.length - scroll);
+  // Scrolled back: said where it can't be cut off. The tab bar has room; a long command in the header may not.
+  const back = scroll > 0 && tab === "logs" ? <Text color="yellow">{`↑ ${scroll} lines back — G to follow`}</Text> : null;
   const shown = lines.slice(Math.max(0, end - room), end);
 
   // Rows for the list: workspace headings, each bolt, then its pipeline — one line a step,
   // in the order its run went, with how each one is doing on the right.
-  type Row = { key: string; node: ReactNode };
-  const rows: Row[] = [];
-  let section = "";
+  const list = paneList({ items, active, index, height, searching: Boolean(typing || query), activity: activity.length });
   const width = listWidth - 4;
   /** One line: the left part truncates; the right part is always shown. */
-  const line = (key: string, selected: boolean, depth: number, mark: ReactNode, label: ReactNode, right: string, rightColor?: string | undefined) =>
-    rows.push({
-      key,
-      node: (
-        <Box width={width}>
-          <Box flexGrow={1} minWidth={0}>
-            <Text wrap="truncate-end">
-              <Text color={TONE.accent}>{selected ? glyphs.pointer : " "}</Text>
-              {" ".repeat(depth * 2 + 1)}
-              {mark}
-              {mark ? " " : ""}
-              <Text bold={selected} color={selected ? TONE.accent : undefined}>{label}</Text>
-            </Text>
-          </Box>
-          {right ? <Text color={rightColor} dimColor={!rightColor} wrap="truncate-end">{` ${clip(right, Math.floor(width * 0.45))}`}</Text> : null}
-        </Box>
-      ),
-    });
-  items.forEach((entry, at) => {
-    if (entry.type === "current" || entry.type === "group") {
-      const heading = entry.type === "current" ? (active?.done ? "Just finished" : "Running now") : entry.group.workspaceName;
-      if (heading !== section) {
-        if (section) rows.push({ key: `gap:${heading}`, node: <Text> </Text> });
-        section = heading;
-        rows.push({ key: `h:${heading}`, node: <Text bold dimColor>{heading.toUpperCase()}</Text> });
-      }
-    }
+  const line = (selected: boolean, depth: number, mark: ReactNode, label: ReactNode, right: string, rightColor?: string | undefined) => (
+    <Box width={width}>
+      <Box flexGrow={1} minWidth={0}>
+        <Text wrap="truncate-end">
+          <Text color={TONE.accent}>{selected ? glyphs.pointer : " "}</Text>
+          {" ".repeat(depth * 2 + 1)}
+          {mark}
+          {mark ? " " : ""}
+          <Text bold={selected} color={selected ? TONE.accent : undefined}>{label}</Text>
+        </Text>
+      </Box>
+      {right ? <Text color={rightColor} dimColor={!rightColor} wrap="truncate-end">{` ${clip(right, Math.floor(width * 0.45))}`}</Text> : null}
+    </Box>
+  );
+  const nodeOf = (entry: PaneItem, at: number): ReactNode => {
     const selected = at === index;
     if (entry.type === "group") {
       const tally = groupTally(items, entry.group.key);
@@ -108,8 +102,7 @@ export function PanesPanel(props: {
       // The run the pipeline below comes from, as History numbers it.
       const from = allMembers(items, entry.group.key).find((member) => member.type === "step");
       const number = from?.type === "step" && baseLabel(from.entry.bolt) === entry.group.bolt ? from.entry.number : undefined;
-      line(
-        `group:${entry.group.key}`,
+      return line(
         selected,
         0,
         null,
@@ -120,10 +113,9 @@ export function PanesPanel(props: {
         state.text,
         state.color,
       );
-      return;
     }
     if (entry.type === "current") {
-      if (!active) return;
+      if (!active) return null;
       const now = active.steps.find((step) => step.state === "running");
       const failed = active.steps.some((step) => step.result && !step.result.ok && !step.result.skipped);
       const mark = !active.done ? (
@@ -133,15 +125,13 @@ export function PanesPanel(props: {
       ) : (
         <Text color={TONE.up}>{glyphs.ok}</Text>
       );
-      line("current", selected, 0, mark, `${glyphs.bolt}${active.bolt}`, active.stopped ? "stopped" : now ? describeStep(now.target, true, active.job) : active.done ? (failed ? "failed" : "done") : `${spell(7)}…`, failed || active.stopped ? TONE.failed : undefined);
-      return;
+      return line(selected, 0, mark, `${glyphs.bolt}${active.bolt}`, active.stopped ? "stopped" : now ? describeStep(now.target, true, active.job) : active.done ? (failed ? "failed" : "done") : `${spell(7)}…`, failed || active.stopped ? TONE.failed : undefined);
     }
     if (entry.type === "step") {
       const step = entry.step;
       const mark = step.skipped ? <Text dimColor>{glyphs.skip}</Text> : step.ok ? <Text color={TONE.up}>{glyphs.ok}</Text> : <Text color={TONE.failed}>{glyphs.fail}</Text>;
       const label = step.kind === "bolt" ? `${glyphs.bolt}${step.label}` : shortStep(step, entry.entry.job ?? false);
-      line(`${paneKey(entry)}`, selected, entry.depth ?? 1, mark, label, step.skipped ? "" : !step.ok ? "failed" : step.durationMs >= 1000 ? `${(step.durationMs / 1000).toFixed(1)}s` : "", !step.ok && !step.skipped ? TONE.failed : undefined);
-      return;
+      return line(selected, entry.depth ?? 1, mark, label, step.skipped ? "" : !step.ok ? "failed" : step.durationMs >= 1000 ? `${(step.durationMs / 1000).toFixed(1)}s` : "", !step.ok && !step.skipped ? TONE.failed : undefined);
     }
     if (entry.type === "run") {
       const run = entry.run;
@@ -154,14 +144,13 @@ export function PanesPanel(props: {
           ? "gave up"
           : endedAs(run);
       const failedRun = restarts.gaveUp || (!run.alive && run.exitCode !== undefined && run.exitCode !== 0);
-      line(run.id, selected, entry.depth ?? 1, <Text color={run.waiting ? TONE.busy : run.alive ? TONE.up : failedRun ? TONE.failed : TONE.stopped}>{glyphs.dot}</Text>, run.label, right, run.waiting ? TONE.busy : failedRun ? TONE.failed : undefined);
-      return;
+      return line(selected, entry.depth ?? 1, <Text color={run.waiting ? TONE.busy : run.alive ? TONE.up : failedRun ? TONE.failed : TONE.stopped}>{glyphs.dot}</Text>, run.label, right, run.waiting ? TONE.busy : failedRun ? TONE.failed : undefined);
     }
     const container = entry.container;
     const mood = containerMood(container);
     const color = mood.tone === "good" ? TONE.up : mood.tone === "busy" ? TONE.busy : mood.tone === "bad" ? TONE.failed : TONE.stopped;
-    line(`container:${container.name}`, selected, entry.depth ?? 1, <Text color={color}>{glyphs.dot}</Text>, container.service, mood.word, mood.tone === "bad" ? TONE.failed : undefined);
-  });
+    return line(selected, entry.depth ?? 1, <Text color={color}>{glyphs.dot}</Text>, container.service, mood.word, mood.tone === "bad" ? TONE.failed : undefined);
+  };
 
   const header =
     item?.type === "current" && active ? (
@@ -210,14 +199,14 @@ export function PanesPanel(props: {
           {typing || query ? <SearchLine query={query} typing={typing} /> : null}
           {items.length === 0 ? <Text dimColor>{query ? `Nothing matches “${query}”. esc clears it.` : all ? "Nothing has run yet." : "Nothing is running right now. Run a bolt from the Bolts tab (1), or press \"o\" to show the ones that stopped."}</Text> : null}
           {dockerError ? <Text color="yellow" wrap="wrap">{`Docker: ${dockerError}`}</Text> : null}
-          {windowed(rows, Math.max(0, rows.findIndex((row) => row.key === (item ? paneKey(item) : ""))), height - (typing || query ? 4 : 3) - logRoom).items.map((row) => (
-            <Box key={row.key}>{row.node}</Box>
+          {list.visible.map((row) => (
+            <Box key={row.key}>{row.kind === "item" ? nodeOf(items[row.at] as PaneItem, row.at) : row.kind === "heading" ? <Text bold dimColor>{row.text}</Text> : <Text> </Text>}</Box>
           ))}
           <Box flexGrow={1} />
-          {logRoom > 0 ? (
+          {list.logRoom > 0 ? (
             <Box flexDirection="column">
               <Text bold dimColor>ACTIVITY</Text>
-              {activity.slice(0, logRoom - 1).map((entry) => (
+              {activity.slice(0, list.logRoom - 1).map((entry) => (
                 <Text key={`${entry.at}:${entry.text}`} wrap="truncate-end">
                   <Text dimColor>{`${clock(entry.at)} `}</Text>
                   <Text color={entry.tone === "bad" ? TONE.failed : entry.tone === "good" ? TONE.up : undefined} dimColor={entry.tone === "info"}>{entry.text}</Text>
@@ -245,12 +234,20 @@ export function PanesPanel(props: {
         }
         paddingX={1}
       >
+        {tabs.length > 0 ? <TabBar tabs={tabs} tab={tab} glyphs={glyphs} note={back} /> : null}
         <Text wrap="truncate-end">
           {header}
-          {scroll > 0 ? <Text color="yellow">{`  ↑ ${scroll} lines back — G to follow`}</Text> : null}
+          {back && tabs.length === 0 ? <Text>{"  "}{back}</Text> : null}
         </Text>
-        {item?.type === "run" && !item.run.log ? <Text dimColor>{`It runs in ${item.run.where ?? "a terminal window"} — its output is there.`}</Text> : null}
-        {item?.type === "group" ? (
+        {tab === "info" && item?.type === "run" ? (
+          <Details rows={runDetails(item.run, reads, history, lines)} room={room} />
+        ) : tab === "info" && item?.type === "container" ? (
+          <Details rows={containerDetails(item.container, stats.get(item.container.name))} room={room} />
+        ) : tab === "runs" && item?.type === "run" ? (
+          <PastRuns run={item.run} runs={runs} history={history} glyphs={glyphs} room={room} />
+        ) : item?.type === "run" && !item.run.log ? (
+          <Text dimColor>{`It runs in ${item.run.where ?? "a terminal window"} — its output is there.`}</Text>
+        ) : item?.type === "group" ? (
           <GroupSummary items={items} group={item.group} history={history} stats={stats} glyphs={glyphs} />
         ) : item?.type === "step" && shown.length === 0 ? (
           <Text dimColor wrap="wrap">
@@ -513,6 +510,98 @@ export function paneKey(item: PaneItem): string {
   return item.type === "run" ? item.run.id : `container:${item.container.name}`;
 }
 
+/** A line of the Running list: a heading, the gap before one, or one of the items. */
+export type PaneRow = { key: string; kind: "gap" | "heading"; text: string } | { key: string; kind: "item"; at: number };
+
+/**
+ * The Running list, line by line: each workspace's heading before its bolts, and the items.
+ * Drawn from this, and clicks are matched against it, so the two can't disagree.
+ */
+export function paneRows(items: PaneItem[], active: RunState | undefined): PaneRow[] {
+  const rows: PaneRow[] = [];
+  let section = "";
+  items.forEach((entry, at) => {
+    if (entry.type === "current" || entry.type === "group") {
+      const heading = entry.type === "current" ? (active?.done ? "Just finished" : "Running now") : entry.group.workspaceName;
+      if (heading !== section) {
+        if (section) rows.push({ key: `gap:${heading}`, kind: "gap", text: "" });
+        section = heading;
+        rows.push({ key: `h:${heading}`, kind: "heading", text: heading.toUpperCase() });
+      }
+    }
+    // The run in progress has a line only while there is one.
+    if (entry.type === "current" && !active) return;
+    rows.push({ key: paneKey(entry), kind: "item", at });
+  });
+  return rows;
+}
+
+/**
+ * The part of the Running list that fits, kept around the selection; and the room the
+ * activity log takes under it, when there is room and something to say.
+ */
+export function paneList(options: { items: PaneItem[]; active: RunState | undefined; index: number; height: number; searching: boolean; activity: number }): { visible: PaneRow[]; logRoom: number } {
+  const { items, active, index, height, searching, activity } = options;
+  const logRoom = activity === 0 || height < 16 ? 0 : Math.min(activity + 1, 6);
+  const rows = paneRows(items, active);
+  const item = items[index];
+  const selected = Math.max(0, rows.findIndex((row) => row.key === (item ? paneKey(item) : "")));
+  // Borders and the title, and the search line while there is one.
+  return { visible: windowed(rows, selected, height - (searching ? 4 : 3) - logRoom).items, logRoom };
+}
+
+/** What is under the mouse on the Running screen. */
+export type PaneSpot = { area: "row"; at: number } | { area: "tab"; tab: PaneTab } | { area: "list" } | { area: "panel" };
+
+/**
+ * What is at a point of the Running screen, for a click or the wheel. `y` counts from the
+ * panels' top border, the first line under the tabs along the top. Worked out from the same
+ * layout the screen is drawn from: `paneList` for the rows, and the tab bar's titles.
+ */
+export function paneSpotAt(options: {
+  x: number;
+  y: number;
+  items: PaneItem[];
+  active: RunState | undefined;
+  index: number;
+  height: number;
+  columns: number;
+  full: boolean;
+  searching: boolean;
+  activity: number;
+  dockerError?: string | undefined;
+  glyphs: Glyphs;
+}): PaneSpot | undefined {
+  const { x, y, items, index, height, columns, full, searching, glyphs } = options;
+  if (y < 0 || y >= height || x < 0 || x >= columns) return undefined;
+  const listWidth = full ? 0 : paneListWidth(columns);
+  if (x < listWidth) {
+    // Under the border and the title: the search line, Docker's error (wrapped), then the rows.
+    const docker = options.dockerError ? Math.ceil(`Docker: ${options.dockerError}`.length / Math.max(1, listWidth - 4)) : 0;
+    const top = 2 + (searching ? 1 : 0) + docker;
+    const row = paneList(options).visible[y - top];
+    return row?.kind === "item" ? { area: "row", at: row.at } : { area: "list" };
+  }
+  // The tab bar is the panel's first line, inside its border and padding.
+  const tabs = tabsOf(items[index]);
+  if (y === 1 && tabs.length > 0) {
+    const tab = tabAt(tabs, glyphs, x - listWidth - 2);
+    if (tab) return { area: "tab", tab };
+  }
+  return { area: "panel" };
+}
+
+/** The tab whose title is at `column` of the tab bar. */
+export function tabAt(tabs: PaneTab[], glyphs: Glyphs, column: number): PaneTab | undefined {
+  let at = 0;
+  for (const tab of tabs) {
+    const width = TAB_TITLE[tab].length;
+    if (column >= at && column < at + width) return tab;
+    at += width + tabSeparator(glyphs).length;
+  }
+  return undefined;
+}
+
 /** How often a command has been brought back, read from the marks its restart loop logs. */
 export function restartsOf(lines: string[]): { count: number; gaveUp: boolean } {
   let count = 0;
@@ -556,4 +645,178 @@ function endedAs(run: { exitCode?: number }): string {
   if (run.exitCode === 0) return "finished";
   if (run.exitCode !== undefined) return `failed (exit ${run.exitCode})`;
   return "stopped";
+}
+
+/** How wide the Running list is, the rest going to the panel beside it. */
+export function paneListWidth(columns: number): number {
+  return Math.min(42, Math.max(26, Math.floor(columns * 0.32)));
+}
+
+export const TAB_TITLE: Record<PaneTab, string> = { logs: "Logs", info: "Info", runs: "Runs" };
+
+/**
+ * The tabs of the panel beside the list, for the selected row. A command has its logs, what
+ * it is, and the times it ran before; a container its logs and what it is. Anything else (a
+ * bolt, a finished step) has one view, and no tabs.
+ */
+export function tabsOf(item: PaneItem | undefined): PaneTab[] {
+  if (item?.type === "run") return ["logs", "info", "runs"];
+  if (item?.type === "container") return ["logs", "info"];
+  return [];
+}
+
+/** The tab to show: the one chosen, where the selected row has it, and its logs otherwise. */
+export function shownTab(item: PaneItem | undefined, tab: PaneTab | undefined): PaneTab {
+  return tab && tabsOf(item).includes(tab) ? tab : "logs";
+}
+
+/** The tab after (or before) the one shown, going round. */
+export function nextTab(item: PaneItem | undefined, tab: PaneTab | undefined, by: 1 | -1): PaneTab | undefined {
+  const tabs = tabsOf(item);
+  if (tabs.length === 0) return undefined;
+  const at = tabs.indexOf(shownTab(item, tab));
+  return tabs[(at + by + tabs.length) % tabs.length];
+}
+
+/** Between two tab titles; a plain bar where box-drawing characters would show as boxes. */
+export function tabSeparator(glyphs: Glyphs): string {
+  return glyphs.border === "round" ? " │ " : " | ";
+}
+
+function TabBar({ tabs, tab, glyphs, note }: { tabs: PaneTab[]; tab: PaneTab; glyphs: Glyphs; note?: ReactNode }) {
+  return (
+    <Text wrap="truncate-end">
+      {tabs.map((entry, at) => (
+        <Text key={entry}>
+          {at > 0 ? <Text dimColor>{tabSeparator(glyphs)}</Text> : null}
+          {entry === tab ? (
+            <Text bold underline color={TONE.accent}>
+              {TAB_TITLE[entry]}
+            </Text>
+          ) : (
+            <Text dimColor>{TAB_TITLE[entry]}</Text>
+          )}
+        </Text>
+      ))}
+      {note ? <Text>{"   "}{note}</Text> : <Text dimColor>{"   [ ] switch"}</Text>}
+    </Text>
+  );
+}
+
+/** One line of an Info tab: what it is, its value, and a colour when the value is a state. */
+export type Detail = { label: string; value: string; color?: string | undefined };
+
+function Details({ rows, room }: { rows: Detail[]; room: number }) {
+  const width = Math.max(...rows.map((row) => row.label.length)) + 2;
+  return (
+    <Box flexDirection="column" marginTop={1}>
+      {rows.slice(0, Math.max(1, room - 1)).map((row, at) => (
+        <Text key={`${row.label}:${at}`} wrap="truncate-end">
+          <Text dimColor>{row.label.padEnd(width)}</Text>
+          <Text color={row.color}>{row.value}</Text>
+        </Text>
+      ))}
+    </Box>
+  );
+}
+
+/**
+ * Env names that usually hold a secret. Their values are hidden on the Info tab, which is
+ * the kind of screen that ends up shared in a call or a screenshot.
+ */
+const SECRET_NAME = /secret|token|passw|pwd|private|credential|api_?key|(^|_)key$/i;
+
+/** An env value as the Info tab shows it: secrets hidden, and so is a password inside a URL. */
+export function maskEnv(name: string, value: string): string {
+  if (SECRET_NAME.test(name) && value) return "****";
+  return value.replace(/(:\/\/[^:/@\s]+:)[^@\s]+@/, "$1****@");
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** When something started: the time today, with the day before that. */
+export function when(iso: string, now = new Date()): string {
+  const date = new Date(iso);
+  const time = clock(date.getTime());
+  return date.toDateString() === now.toDateString() ? time : `${MONTHS[date.getMonth()]} ${date.getDate()} ${time}`;
+}
+
+/**
+ * What a command is, for its Info tab: what it runs and where, its env and restart policy
+ * as the file says, how it is doing, and what to type to reach it from a shell.
+ */
+export function runDetails(run: RunStatus, reads: WorkspaceRead[], history: HistoryEntry[], lines: string[]): Detail[] {
+  const read = reads.find((candidate) => candidate.workspace.file === run.workspace);
+  const command = read?.workspace.commands.find((candidate) => candidate.id === run.asset);
+  const restarts = restartsOf(lines);
+  const failed = restarts.gaveUp || (!run.alive && run.exitCode !== undefined && run.exitCode !== 0);
+  const rows: Detail[] = [{ label: "Command", value: run.command }];
+  if (run.cwd) rows.push({ label: "Folder", value: tildify(run.cwd) });
+  Object.entries(command?.env ?? {}).forEach(([name, value], at) => rows.push({ label: at === 0 ? "Env" : "", value: `${name}=${maskEnv(name, value)}` }));
+  if (command?.shell) rows.push({ label: "Shell", value: command.shell });
+  rows.push(
+    run.alive && run.waiting
+      ? { label: "State", value: `waiting for an answer: "${run.waiting}"`, color: TONE.busy }
+      : run.alive
+        ? { label: "State", value: run.pid > 0 ? `running, PID ${run.pid}` : "running", color: TONE.up }
+        : { label: "State", value: restarts.gaveUp ? "gave up restarting" : endedAs(run), color: failed ? TONE.failed : TONE.stopped },
+  );
+  const restart = command?.restart ?? "off";
+  rows.push({ label: "Restart", value: restarts.count > 0 ? `${restart}, restarted ${restarts.count}×` : restart, ...(restarts.count > 0 ? { color: TONE.busy } : {}) });
+  rows.push({ label: "Started", value: `${when(run.startedAt)}, ${since(run.startedAt)}${startedBy(run, history, undefined, true)}` });
+  rows.push({ label: "Runs in", value: run.kind === "window" ? (run.where ?? "a terminal window") : "the background" });
+  if (run.log) rows.push({ label: "Output", value: tildify(run.log) });
+  rows.push({ label: "Workspace", value: `${read?.workspace.name ?? run.workspaceName}  ${tildify(run.workspace)}` });
+  rows.push({ label: "From a shell", value: `wisp logs ${run.id} -f · wisp stop ${run.id}` });
+  return rows;
+}
+
+/** What a container is, for its Info tab: image, state, ports, and what it is using now. */
+export function containerDetails(container: Container, stats: ContainerStats | undefined): Detail[] {
+  const mood = containerMood(container);
+  const color = mood.tone === "good" ? TONE.up : mood.tone === "busy" ? TONE.busy : mood.tone === "bad" ? TONE.failed : TONE.stopped;
+  const rows: Detail[] = [
+    { label: "Service", value: container.service },
+    { label: "Image", value: container.image },
+    { label: "State", value: `${mood.word}, ${container.status}`, color },
+    { label: "Ports", value: container.ports.length > 0 ? container.ports.map((port) => `localhost:${port.split("→")[0]}`).join(", ") : "none published" },
+  ];
+  if (stats) rows.push({ label: "CPU", value: stats.cpu }, { label: "Memory", value: stats.memory });
+  rows.push({ label: "Container", value: container.name }, { label: "Compose", value: `${tildify(container.file)}, project ${container.project}` });
+  return rows;
+}
+
+/** Every time Wisp ran this command that it still remembers, newest first. */
+export function pastRuns(run: RunStatus, runs: RunStatus[]): RunStatus[] {
+  return runs
+    .filter((candidate) => candidate.workspace === run.workspace && candidate.asset === run.asset)
+    .sort((left, right) => Date.parse(right.startedAt) - Date.parse(left.startedAt));
+}
+
+function PastRuns({ run, runs, history, glyphs, room }: { run: RunStatus; runs: RunStatus[]; history: HistoryEntry[]; glyphs: Glyphs; room: number }) {
+  const all = pastRuns(run, runs);
+  const list = all.length > 0 ? all : [run];
+  // Room for the list, a blank line above it and the note under it.
+  const fits = Math.max(1, room - 3);
+  return (
+    <Box flexDirection="column" marginTop={1}>
+      {list.slice(0, fits).map((candidate) => {
+        const failed = !candidate.alive && candidate.exitCode !== undefined && candidate.exitCode !== 0;
+        const state = candidate.alive ? (candidate.waiting ? "waiting for an answer" : "running") : endedAs(candidate);
+        const color = candidate.alive ? (candidate.waiting ? TONE.busy : TONE.up) : failed ? TONE.failed : TONE.stopped;
+        const self = candidate.id === run.id;
+        return (
+          <Text key={candidate.id} wrap="truncate-end">
+            <Text color={TONE.accent}>{self ? glyphs.pointer : " "}</Text>
+            <Text color={color}>{` ${glyphs.dot} `}</Text>
+            <Text bold={self}>{when(candidate.startedAt).padEnd(13)}</Text>
+            <Text color={failed ? TONE.failed : undefined} dimColor={!failed}>{state.padEnd(18)}</Text>
+            <Text dimColor>{`${candidate.id}${startedBy(candidate, history, undefined, true)}`}</Text>
+          </Text>
+        );
+      })}
+      {list.length > fits ? <Text dimColor>{`  and ${list.length - fits} more`}</Text> : null}
+      <Text dimColor wrap="truncate-end">{`  wisp logs <id> prints any of them. Wisp keeps the last ${KEEP_FINISHED} that ended.`}</Text>
+    </Box>
+  );
 }

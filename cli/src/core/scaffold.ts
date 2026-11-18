@@ -71,6 +71,17 @@ export interface Detected {
  * without anyone writing a line. The guesses are the ones a person would make from the
  * same files.
  */
+/** What each task runner calls the things it runs, one and many. */
+const RUNNER_NOUN: Record<string, [string, string]> = {
+  Makefile: ["target", "targets"],
+  justfile: ["recipe", "recipes"],
+};
+
+/** "1 check", "3 checks". */
+function count(many: number, one: string, more = `${one}s`): string {
+  return `${many} ${many === 1 ? one : more}`;
+}
+
 export async function draftProject(from: string = process.cwd(), options: { only?: string[] } = {}): Promise<ProjectDraft> {
   const root = resolve(expandHome(from));
   const detected = await detect(root);
@@ -138,16 +149,16 @@ export async function detect(root: string): Promise<Detected> {
     const scripts = scriptsOf(memberPkg);
     for (const name of CHECK_NAMES) if (scripts[name] !== undefined) memberChecks.push({ label: name, run: runScript(pm, name), cwd: member });
   }
-  if (apps.length > 0) sources.push(`${apps.length} package${apps.length === 1 ? "" : "s"} with a dev script`);
+  if (apps.length > 0) sources.push(`${count(apps.length, "dev script")} (package.json)`);
 
   let everything: Detected["everything"];
   const rootApp = appFrom(pkg, "", pm);
   if (rootApp && apps.length > 0) {
     everything = { label: "Run everything", steps: [{ label: rootApp.command, run: rootApp.command }] };
-    sources.push(`root ${rootApp.command}`);
+    sources.push(`a root dev script: ${rootApp.command}`);
   } else if (rootApp) {
     apps.push({ ...rootApp, name: projectName(pkg, root) });
-    sources.push(`package.json ${rootApp.command}`);
+    sources.push("1 dev script (package.json)");
   }
 
   // No package to start, but a task runner that knows how.
@@ -155,17 +166,16 @@ export async function detect(root: string): Promise<Detected> {
     const dev = [...tasks, ...eco.tasks].find((task) => DEV_NAMES.includes(task.name));
     if (dev) {
       apps.push({ name: projectName(pkg, root), dir: "", command: dev.run });
-      sources.push(`${dev.source} ${dev.name}`);
     }
   }
 
   if (procfile.length > 0) {
     everything = { label: "Run all", steps: procfile.map((entry) => ({ label: entry.name, run: entry.command })) };
-    sources.push(`Procfile (${procfile.length})`);
+    sources.push(count(procfile.length, "Procfile process", "Procfile processes"));
   }
 
   if (compose && compose.services.length > 0) {
-    sources.push(`${compose.file ?? "docker compose"} (${compose.services.map((service) => service.name).join(", ")})`);
+    sources.push(`${count(compose.services.length, "Docker service")}: ${compose.services.map((service) => service.name).join(", ")}`);
   }
 
   // Python, Java, Go, Rust, Ruby, PHP, .NET, Deno, Elixir: their servers and their checks.
@@ -180,7 +190,12 @@ export async function detect(root: string): Promise<Detected> {
   for (const check of eco.checks) {
     if (!checks.some((known) => known.run === check.run && (known.cwd ?? "") === (check.cwd ?? ""))) checks.push(check);
   }
-  if (checks.length > 0) sources.push(`checks: ${checks.map((check) => (check.cwd ? `${check.label} (${check.cwd})` : check.label)).join(", ")}`);
+  // Task runners by name and count: "4 Makefile targets", "2 mise tasks".
+  const runners = new Map<string, number>();
+  for (const task of [...tasks, ...eco.tasks]) runners.set(task.source, (runners.get(task.source) ?? 0) + 1);
+  for (const [source, many] of runners) sources.push(`${many} ${source} ${RUNNER_NOUN[source]?.[many === 1 ? 0 : 1] ?? (many === 1 ? "task" : "tasks")}`);
+
+  if (checks.length > 0) sources.push(`${count(checks.length, "check")}: ${checks.map((check) => (check.cwd ? `${check.label} (${check.cwd})` : check.label)).join(", ")}`);
 
   return {
     name: projectName(pkg, root),

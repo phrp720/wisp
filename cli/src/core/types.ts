@@ -194,6 +194,8 @@ export interface Config {
   projects?: KnownProject[];
   /** Folders where you said "don't ask again" to setting up a .wisp.json. */
   noSetup?: string[];
+  /** The dashboard takes clicks and the scroll wheel. Absent means yes; false turns it off. */
+  mouse?: boolean;
 }
 
 /**

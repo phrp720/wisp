@@ -1,4 +1,4 @@
-import { Box, Text, useInput } from "ink";
+import { Box, type DOMElement, measureElement, Text, useInput } from "ink";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { cleanOutput } from "../core/ansi.js";
@@ -7,6 +7,7 @@ import type { Glyphs } from "./glyphs.js";
 import { spell } from "./spells.js";
 import { TONE } from "./tones.js";
 import { matchesAll, shortUrl, windowed, type Services } from "./model.js";
+import { useMouse } from "./mouse.js";
 
 export interface HistoryScreenProps {
   services: Services;
@@ -25,7 +26,7 @@ export interface HistoryScreenProps {
 }
 
 /** A bolt in the sidebar: the filter, like a workflow in a CI's list. */
-interface BoltFilter {
+export interface BoltFilter {
   key: string;
   workspace?: string;
   workspaceName?: string;
@@ -75,6 +76,41 @@ export function HistoryScreen(props: HistoryScreenProps) {
   );
   const run = shown[Math.min(runIndex, Math.max(0, shown.length - 1))];
   const opened = open ? entries?.find((entry) => entry.id === open) : undefined;
+
+  // Clicks: a bolt on the left filters, a run on the right is chosen, and a click on the
+  // chosen run opens it, as ⏎ does. The wheel moves through the list under it.
+  useMouse((event) => {
+    if (!entries || entries.length === 0 || event.y >= height) return false;
+    if (event.x < historySideWidth(columns)) {
+      if (event.kind === "wheel") {
+        setFocus("bolts");
+        setFilterIndex((at) => Math.max(0, Math.min(filters.length - 1, at + event.by)));
+        setRunIndex(0);
+        return true;
+      }
+      const line = filterLines(filters, filterIndex, height)[event.y - 2];
+      if (line?.kind === "filter") {
+        setFocus("bolts");
+        if (line.at !== filterIndex) setRunIndex(0);
+        setFilterIndex(line.at);
+      }
+      return true;
+    }
+    if (event.kind === "wheel") {
+      setFocus("runs");
+      setRunIndex((at) => Math.max(0, Math.min(shown.length - 1, at + event.by)));
+      return true;
+    }
+    const at = runAt(shown, runIndex, height, event.y);
+    if (at === undefined) return true;
+    setTyping(false);
+    if (focus === "runs" && at === runIndex) setOpen(shown[at]?.id);
+    else {
+      setFocus("runs");
+      setRunIndex(at);
+    }
+    return true;
+  }, !opened);
 
   useInput(
     (input, key) => {
@@ -174,10 +210,8 @@ export function HistoryScreen(props: HistoryScreenProps) {
     );
   }
 
-  const sideWidth = Math.min(32, Math.max(22, Math.floor(columns * 0.24)));
-  const { items: filterRows, offset: filterOffset } = windowed(filters, filterIndex, height - 3);
-  const runRoom = Math.max(1, Math.floor((height - 5) / 2));
-  const { items: runRows, offset: runOffset } = windowed(shown, runIndex, runRoom);
+  const sideWidth = historySideWidth(columns);
+  const { items: runRows, offset: runOffset } = runWindow(shown, runIndex, height);
   const runWidth = Math.max(30, columns - sideWidth - 6);
 
   return (
@@ -186,21 +220,18 @@ export function HistoryScreen(props: HistoryScreenProps) {
         <Text bold>
           Bolts
         </Text>
-        {filterRows.map((entry, position) => {
-          const at = filterOffset + position;
-          const selected = at === filterIndex;
-          const heading = entry.bolt && (at === 0 || filters[at - 1]?.workspace !== entry.workspace);
+        {filterLines(filters, filterIndex, height).map((line) => {
+          if (line.kind === "heading") return <Text key={line.key} dimColor>{line.text}</Text>;
+          const entry = filters[line.at] as BoltFilter;
+          const selected = line.at === filterIndex;
           return (
-            <Box key={entry.key} flexDirection="column">
-              {heading ? <Text dimColor>{(entry.workspaceName ?? "").toUpperCase()}</Text> : null}
-              <Box>
-                <Box flexGrow={1} minWidth={0}>
-                  <Text wrap="truncate-end" inverse={selected && focus === "bolts"} bold={selected}>
-                    {selected ? glyphs.pointer : " "} {entry.bolt ?? "All bolts"}
-                  </Text>
-                </Box>
-                <Text dimColor>{` ${entry.count}`}</Text>
+            <Box key={entry.key}>
+              <Box flexGrow={1} minWidth={0}>
+                <Text wrap="truncate-end" inverse={selected && focus === "bolts"} bold={selected}>
+                  {selected ? glyphs.pointer : " "} {entry.bolt ?? "All bolts"}
+                </Text>
               </Box>
+              <Text dimColor>{` ${entry.count}`}</Text>
             </Box>
           );
         })}
@@ -262,6 +293,38 @@ export function HistoryScreen(props: HistoryScreenProps) {
   );
 }
 
+/** How wide the bolts on the left are, the runs taking the rest. */
+export function historySideWidth(columns: number): number {
+  return Math.min(32, Math.max(22, Math.floor(columns * 0.24)));
+}
+
+/**
+ * The bolts on the left that fit, line by line: a workspace's name before its first bolt.
+ * Drawn from this, and clicks are matched against it.
+ */
+export function filterLines(filters: BoltFilter[], filterIndex: number, height: number): ({ kind: "heading"; key: string; text: string } | { kind: "filter"; at: number })[] {
+  const { items, offset } = windowed(filters, filterIndex, height - 3);
+  const lines: ({ kind: "heading"; key: string; text: string } | { kind: "filter"; at: number })[] = [];
+  items.forEach((entry, position) => {
+    const at = offset + position;
+    if (entry.bolt && (at === 0 || filters[at - 1]?.workspace !== entry.workspace)) lines.push({ kind: "heading", key: `h:${entry.key}`, text: (entry.workspaceName ?? "").toUpperCase() });
+    lines.push({ kind: "filter", at });
+  });
+  return lines;
+}
+
+/** The runs that fit on the right, two lines each, kept around the chosen one. */
+export function runWindow<T>(shown: T[], runIndex: number, height: number): { items: T[]; offset: number } {
+  return windowed(shown, runIndex, Math.max(1, Math.floor((height - 5) / 2)));
+}
+
+/** The run at a line of the runs panel, counted from its top border: the title, the search line, then two lines a run. */
+export function runAt<T>(shown: T[], runIndex: number, height: number, y: number): number | undefined {
+  const { items, offset } = runWindow(shown, runIndex, height);
+  const position = Math.floor((y - 3) / 2);
+  return y >= 3 && position < items.length ? offset + position : undefined;
+}
+
 /** One run, as a CI's run page: the summary, the pipeline, then each step with its log. */
 function RunDetail(props: {
   entry: HistoryEntry;
@@ -303,8 +366,9 @@ function RunDetail(props: {
     }
   }, [expanded, entry, services, logs]);
 
-  // The steps and their open logs, as one list of rows to scroll through.
-  const rows: { key: string; step?: number; node: ReactNode }[] = [];
+  // The steps and their open logs, as one list of rows to scroll through. `lines`: how many
+  // a row takes when it wraps, so a click below it still finds the right step.
+  const rows: { key: string; step?: number; lines?: number; node: ReactNode }[] = [];
   const longest = Math.max(1, ...entry.steps.map((step) => step.durationMs));
   // As wide as the longest step, so a step's time sits beside it rather than across the screen.
   const labelWidth = Math.min(Math.max(24, columns - 34), Math.max(16, ...entry.steps.map((step) => describeHistoryStep(step, entry.job).length + 2)));
@@ -328,7 +392,7 @@ function RunDetail(props: {
     });
     if (isOpen) {
       const lines = logs.get(at);
-      const say = (text: string) => rows.push({ key: `l${at}`, node: <Text dimColor wrap="wrap">{`        ${text}`}</Text> });
+      const say = (text: string) => rows.push({ key: `l${at}`, lines: wrappedLines(`        ${text}`, columns - 4), node: <Text dimColor wrap="wrap">{`        ${text}`}</Text> });
       // Every step opens: one without output says why there is none, rather than nothing.
       if (!step.log) say(noOutput(step, entry.job ?? false));
       else if (!lines) say("reading…");
@@ -363,6 +427,46 @@ function RunDetail(props: {
     : Math.min(most, Math.max(0, selectedRow < top ? selectedRow : selectedRow >= top + room ? selectedRow - room + 1 : top));
   const visible = rows.slice(first, first + room);
 
+  // Show or hide a step's log.
+  const toggle = (at: number) =>
+    setExpanded((prior) => {
+      const next = new Set(prior);
+      if (next.has(at)) next.delete(at);
+      else next.add(at);
+      return next;
+    });
+
+  // How tall the title, summary and pipeline are, measured once drawn: the pipeline wraps
+  // to the width, so counting its boxes would only be a guess. The guess is the fallback.
+  const head = useRef<DOMElement>(null);
+  const headLines = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (head.current) headLines.current = measureElement(head.current).height;
+  });
+
+  // A click on a step shows or hides its log, as ⏎ does; the wheel scrolls.
+  useMouse((event) => {
+    if (event.kind === "wheel") {
+      setScrolled(true);
+      setTop(Math.min(most, Math.max(0, first + event.by * 3)));
+      return true;
+    }
+    let line = event.y - 1 - (headLines.current ?? 5 + (graph.length > 1 ? graphRows * 3 : 0));
+    if (line < 0) return true;
+    for (const row of visible) {
+      const lines = row.lines ?? 1;
+      if (line < lines) {
+        if (row.step === undefined) return true;
+        setSelected(row.step);
+        setTop(first);
+        toggle(row.step);
+        return true;
+      }
+      line -= lines;
+    }
+    return true;
+  });
+
   useInput((input, key) => {
     if (key.escape || key.leftArrow || input === "q") return onBack();
     if (input === "r" && !entry.ok) return onRetry();
@@ -388,19 +492,14 @@ function RunDetail(props: {
     if (key.pageDown || input === "d") return scrollTo(first + room);
     if (key.pageUp || input === "u") return scrollTo(first - room);
     if (key.return || input === " ") {
-      const at = selectedRef.current;
       setTop(first);
-      setExpanded((prior) => {
-        const next = new Set(prior);
-        if (next.has(at)) next.delete(at);
-        else next.add(at);
-        return next;
-      });
+      toggle(selectedRef.current);
     }
   });
 
   return (
     <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor={entry.ok ? "gray" : "red"} paddingX={1} overflow="hidden">
+      <Box ref={head} flexDirection="column" flexShrink={0}>
       <Text wrap="truncate-end">
         <Mark ok={entry.ok} glyphs={glyphs} /> <Text bold>{entry.bolt}</Text>
         <Text dimColor>{` #${entry.number ?? ""}`}</Text>
@@ -424,6 +523,7 @@ function RunDetail(props: {
       ) : (
         <Text> </Text>
       )}
+      </Box>
       {visible.map((row) => (
         <Box key={row.key}>{row.node}</Box>
       ))}
@@ -557,6 +657,28 @@ function ago(iso: string): string {
   if (seconds < 3600) return `${Math.round(seconds / 60)}m ago`;
   if (seconds < 86400) return `${Math.round(seconds / 3600)}h ago`;
   return `${Math.round(seconds / 86400)}d ago`;
+}
+
+/** How many lines text takes, wrapped at spaces to a width as the terminal will show it. */
+export function wrappedLines(text: string, width: number): number {
+  if (width <= 0) return 1;
+  let lines = 1;
+  let used = 0;
+  text.split(" ").forEach((word, at) => {
+    const length = word.length;
+    if (at === 0) used = length;
+    else if (used + 1 + length <= width) used += 1 + length;
+    else {
+      lines += 1;
+      used = length;
+    }
+    // A word longer than the line is cut across lines.
+    while (used > width) {
+      lines += 1;
+      used -= width;
+    }
+  });
+  return lines;
 }
 
 /** Cut to a column's width, saying so when it is cut. */

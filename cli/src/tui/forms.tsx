@@ -1,7 +1,8 @@
-import { Box, Text, useInput, type Key } from "ink";
+import { Box, type DOMElement, Text, useInput, type Key } from "ink";
 import { useRef, useState } from "react";
 
 import type { Glyphs } from "./glyphs.js";
+import { useMouse, useRefs } from "./mouse.js";
 import { TONE } from "./tones.js";
 
 /** One field of a form: text by default, or a choice between a few options. */
@@ -126,6 +127,36 @@ export function Form({ title, intro, fields, initial = {}, submitLabel = "Save",
     }
   });
 
+  // Clicks: on a field, to type in it (on its text, the cursor goes where you clicked); on
+  // an option, to choose it; on the button, to save. The wheel moves between fields, as ↑↓.
+  const fieldNodes = useRefs<string>();
+  const button = useRef<DOMElement>(null);
+  useMouse((event, at) => {
+    if (event.kind !== "click" || saving) return false;
+    if (at(button.current)) {
+      setIndex(fields.length);
+      void submit();
+      return true;
+    }
+    for (const [position, field] of fields.entries()) {
+      const spot = at(fieldNodes.get(field.key));
+      if (!spot) continue;
+      setIndex(position);
+      const values = valuesRef.current;
+      const value = values[field.key] ?? "";
+      // Line 0 is the label, line 1 the value, after the bar beside the field (two columns).
+      if (spot.y === 1 && field.choices) {
+        const chosen = choiceAt(field.choices, spot.x - 2);
+        if (chosen) setValues({ ...values, [field.key]: chosen.value });
+      } else if (!field.choices) {
+        // On the value: where you clicked, after its "› ". Anywhere else: the end.
+        setCursor(field.key, spot.y === 1 ? Math.max(0, Math.min(value.length, spot.x - 4)) : value.length);
+      }
+      return true;
+    }
+    return false;
+  });
+
   const bar = glyphs.border === "round" ? "┃" : "|";
   const said = preview?.(values);
   const onButton = index === fields.length;
@@ -138,7 +169,7 @@ export function Form({ title, intro, fields, initial = {}, submitLabel = "Save",
         const value = values[entry.key] ?? "";
         const edge = <Text color={TONE.accent}>{active ? `${bar} ` : "  "}</Text>;
         return (
-          <Box key={entry.key} flexDirection="column" marginTop={1}>
+          <Box key={entry.key} ref={fieldNodes.set(entry.key)} flexDirection="column" marginTop={1}>
             <Text>
               {edge}
               <Text bold={active} color={active ? TONE.accent : undefined}>{entry.label}</Text>
@@ -186,13 +217,27 @@ export function Form({ title, intro, fields, initial = {}, submitLabel = "Save",
         </Text>
       ) : null}
       <Box marginTop={1}>
-        <Text color={onButton ? "black" : TONE.accent} backgroundColor={onButton ? TONE.accent : undefined} bold>
-          {saving ? " saving… " : onButton ? ` ▸ ${submitLabel} ` : ` [ ${submitLabel} ] `}
-        </Text>
+        <Box ref={button}>
+          <Text color={onButton ? "black" : TONE.accent} backgroundColor={onButton ? TONE.accent : undefined} bold>
+            {saving ? " saving… " : onButton ? ` ▸ ${submitLabel} ` : ` [ ${submitLabel} ] `}
+          </Text>
+        </Box>
         <Text dimColor>{"   ↑↓ fields · ⏎ next · ctrl+s or ⏎ on the button to save · esc cancel"}</Text>
       </Box>
     </Box>
   );
+}
+
+/** The option of a choice field at a column of its line: "● label", three spaces apart. */
+export function choiceAt<T extends { label: string }>(choices: T[], column: number): T | undefined {
+  let at = 0;
+  for (const [number, choice] of choices.entries()) {
+    if (number > 0) at += 3;
+    const width = 2 + choice.label.length;
+    if (column >= at && column < at + width) return choice;
+    at += width;
+  }
+  return undefined;
 }
 
 /** A text value with the cursor drawn where it is. */
@@ -300,6 +345,15 @@ export function Picker(props: {
     if (input && !key.ctrl && !key.meta && /^[\w\s.-]+$/.test(input)) setQuery(queryRef.current + input);
   });
 
+  // A click on an option picks it, as ⏎ does.
+  const optionNodes = useRefs<string>();
+  useMouse((event, at) => {
+    if (event.kind !== "click") return false;
+    const hit = optionNodes.entries().find(([, node]) => at(node));
+    if (hit) onPick(hit[0]);
+    return Boolean(hit);
+  });
+
   let group: string | undefined;
   // Titles padded to one width, so the examples beside them line up in a column.
   const widest = Math.max(0, ...shown.map((option) => option.title.length));
@@ -319,12 +373,14 @@ export function Picker(props: {
         return (
           <Box key={option.key} flexDirection="column">
             {heading ? <Text bold dimColor>{`\n${heading.toUpperCase()}`}</Text> : null}
+            <Box ref={optionNodes.set(option.key)}>
             <Text wrap="truncate-end">
               <Text color={TONE.accent}>{active ? `${glyphs.pointer} ` : "  "}</Text>
               {option.icon && glyphs.border === "round" ? `${option.icon} ` : ""}
               <Text bold={active} color={active ? TONE.accent : undefined}>{option.title.padEnd(widest)}</Text>
               {option.detail ? <Text dimColor>{`   ${option.detail}`}</Text> : null}
             </Text>
+            </Box>
           </Box>
         );
       })}

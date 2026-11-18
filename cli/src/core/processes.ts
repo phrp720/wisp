@@ -94,7 +94,7 @@ function waitingOn(run: Run): string | undefined {
 }
 
 /** How many finished runs to keep, logs included. Running ones are always kept. */
-const KEEP_FINISHED = 30;
+export const KEEP_FINISHED = 30;
 
 /** A window run with no PID yet is "starting" this long, then presumed never to have. */
 const STARTING_MS = 20_000;

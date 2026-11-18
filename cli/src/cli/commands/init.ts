@@ -1,12 +1,13 @@
 import { relative } from "node:path";
 
 import { tildify } from "../../core/paths.js";
+import { WispError } from "../../core/errors.js";
 import { PROJECT_FILE, findProjectFile } from "../../core/project.js";
 import { bolts as draftBolts, draftProject, writeProjectDraft } from "../../core/scaffold.js";
 
-import { bold, cyan, dim, green, yellow } from "../format.js";
+import { cyan, dim, green, yellow } from "../format.js";
 import type { CommandDef } from "../lib/define.js";
-import { Prompter } from "../prompt.js";
+import { Prompter, checklist } from "../prompt.js";
 
 export const init: CommandDef<{ force?: boolean; yes?: boolean; print?: boolean; only?: string }> = {
   name: "init",
@@ -20,31 +21,65 @@ export const init: CommandDef<{ force?: boolean; yes?: boolean; print?: boolean;
   examples: ["wisp init", "wisp init --print", 'wisp init --only "Check,Work on api"', "wisp init --force"],
 
   async run(_args, options) {
-    let only = options.only?.split(",").map((name) => name.trim()).filter(Boolean);
+    const only = options.only?.split(",").map((name) => name.trim()).filter(Boolean);
     let draft = await draftProject(process.cwd(), only ? { only } : {});
 
-    // At a terminal, choose which of the suggested bolts to keep before seeing the file.
-    if (!only && !options.yes && !options.print && process.stdin.isTTY) {
-      const suggested = draftBolts(draft.detected);
-      if (suggested.length > 1) {
-        console.log(bold("Wisp suggests these bolts:"));
-        suggested.forEach((bolt, at) => console.log(`  ${dim(String(at + 1).padStart(2))}  ${bolt.label}${bolt.job ? dim(" (a job)") : ""}`));
-        console.log();
-        const prompt = new Prompter();
-        try {
-          const answer = (await prompt.ask("Which to keep? ⏎ for all, or their numbers, like 1 3", "")).trim();
-          if (answer) {
-            const picked = [...answer.matchAll(/\d+/g)].map((match) => suggested[Number(match[0]) - 1]?.label).filter((label): label is string => Boolean(label));
-            if (picked.length > 0) {
-              only = picked;
-              draft = await draftProject(process.cwd(), { only });
-            }
-          }
-        } finally {
-          prompt.close();
-        }
-        console.log();
+    // Said before anything is chosen, not after: choosing bolts for a file that then isn't
+    // written would be time wasted.
+    if (!options.print) {
+      const existing = await findProjectFile();
+      // Already set up: nothing to suggest. `--force` starts over.
+      if (existing && existing === draft.file && !options.force) {
+        throw new WispError(`This project is already initialized: ${PROJECT_FILE} exists. Edit it in \`wisp\`, or start over with \`wisp init --force\``, "PROJECT_EXISTS");
       }
+      if (existing && existing !== draft.file && !options.force) {
+        console.log(yellow(`! a project file already governs this directory: ${dim(existing)}`));
+        console.log(dim("  Writing one here would shadow it. Pass --force if that is what you want."));
+        return;
+      }
+    }
+
+    // At a terminal: a checklist, right here in it. Each suggested bolt with what it does,
+    // untick what you don't want, ⏎ writes it; esc writes nothing. That is the look before
+    // it goes in the repository.
+    const atTerminal = !only && !options.yes && !options.print && process.stdin.isTTY && process.stdout.isTTY;
+    if (atTerminal && draftBolts(draft.detected).length > 0) {
+      const { setupSuggestion } = await import("../../tui/services.js");
+      const suggestion = setupSuggestion(process.cwd(), draft);
+      if (suggestion.found.length > 0) console.log(dim(`Found: ${suggestion.found.join(" · ")}`));
+
+      // Suggestions are optional: say no, or tick none, and the file starts with no bolts.
+      const prompt = new Prompter();
+      let wanted = true;
+      try {
+        wanted = await prompt.confirm("Suggest bolts from what Wisp found?", true);
+      } catch {
+        console.log(dim("Nothing written."));
+        return;
+      } finally {
+        prompt.close();
+      }
+      const chosen = wanted
+        ? await checklist(
+            "Which bolts should Wisp set up?",
+            suggestion.bolts.map((bolt) => ({ label: bolt.label, ...(bolt.job ? { tag: "job" } : {}), hint: bolt.steps.join(", then ") })),
+          )
+        : [];
+      if (!chosen) {
+        console.log(dim("Nothing written."));
+        return;
+      }
+      draft = await draftProject(process.cwd(), { only: chosen });
+      await writeProjectDraft(draft, options.force ?? false);
+      const where = cyan(relative(process.cwd(), draft.file) || draft.file);
+      if (chosen.length > 0) {
+        console.log(`${green("✓")} wrote ${where} ${dim(`· ${chosen.join(", ")}`)}`);
+        console.log(dim("Next: `wisp trust` to allow its commands, then `wisp` or `wisp <bolt>`. Commit it: your team gets it too."));
+      } else {
+        console.log(`${green("✓")} wrote ${where} ${dim("· no bolts yet")}`);
+        console.log(dim("Next: open `wisp` and press a to add your first bolt."));
+      }
+      return;
     }
 
     if (options.print) {
@@ -74,20 +109,11 @@ export const init: CommandDef<{ force?: boolean; yes?: boolean; print?: boolean;
       }
     }
 
-    const existing = await findProjectFile();
-    if (existing && existing !== draft.file && !options.force) {
-      console.log(
-        yellow(`! a project file already governs this directory: ${dim(existing)}`),
-      );
-      console.log(dim("  Writing one here would shadow it. Pass --force if that is what you want."));
-      return;
-    }
-
     await writeProjectDraft(draft, options.force ?? false);
 
     console.log(`${green("✓")} wrote ${cyan(relative(process.cwd(), draft.file) || draft.file)}`);
     console.log(dim("Run it with `wisp`. Check it any time with `wisp check`."));
-    console.log(dim("Commit it — that is the point: the repository carries its own context."));
+    console.log(dim("Commit it: the repository carries its own context."));
   },
 };
 

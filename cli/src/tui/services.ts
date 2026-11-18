@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, resolve } from "node:path";
 
-import { declineSetup, forgetProject, getOpenWithDefaults, recordProject, setOpenWithDefaults, setupDeclined } from "../core/config.js";
+import { declineSetup, forgetProject, getMouse, getOpenWithDefaults, recordProject, setMouse, setOpenWithDefaults, setupDeclined } from "../core/config.js";
 import { installedEditors } from "../core/editors.js";
 import { detectEnvironment } from "../core/environment.js";
 import { listRuns, restartRun, stopRun, tail } from "../core/processes.js";
@@ -18,7 +18,7 @@ import { trustProject } from "../core/trust.js";
 import { which } from "../core/which.js";
 import { discoverWorkspaces, resolveWorkspace } from "../core/workspaces.js";
 import { everything } from "../cli/lib/context.js";
-import { describeStep, type Services } from "./model.js";
+import { describeStep, type Services, type SetupSuggestion } from "./model.js";
 import { composeTarget } from "../core/switch.js";
 import * as edit from "../core/edit.js";
 import { getPlatform } from "../platform/index.js";
@@ -124,23 +124,7 @@ export function realServices(hooks: { suspend: () => void; resume: () => void })
       // Only where there is something real to set up: a folder with nothing to run gets no
       // offer, rather than a file of folders nobody asked for.
       if (detected.apps.length === 0 && !detected.compose && detected.checks.length === 0 && !detected.everything) return undefined;
-      return {
-        dir: process.cwd(),
-        name: detected.name,
-        found: detected.sources,
-        bolts: draftBolts(detected).map((bolt) => ({
-          label: bolt.label,
-          job: bolt.job ?? false,
-          steps: bolt.targets.map((step) =>
-            typeof step === "string"
-              ? `open ${step}`
-              : typeof step["compose"] === "string" && detected.compose
-                ? `start Docker services: ${detected.compose.services.map((service) => service.name).join(", ")} — and wait until they're healthy`
-                : describeDraftStep(step),
-          ),
-        })),
-        contents: draft.contents,
-      };
+      return setupSuggestion(process.cwd(), draft);
     },
     async setUp(suggestion, chosen) {
       const draft = await draftProject(suggestion.dir, chosen ? { only: chosen } : {});
@@ -176,6 +160,8 @@ export function realServices(hooks: { suspend: () => void; resume: () => void })
     settings: {
       get: () => getOpenWithDefaults(),
       set: (change) => setOpenWithDefaults(change),
+      mouse: () => getMouse(),
+      setMouse: (on) => setMouse(on),
       choices: () => {
         const environment = detectEnvironment();
         const platform = getPlatform(environment.os);
@@ -215,6 +201,28 @@ export function realServices(hooks: { suspend: () => void; resume: () => void })
         hooks.resume();
       }
     },
+  };
+}
+
+/** What the setup checklist shows for a draft: what was found, and each bolt step by step. */
+export function setupSuggestion(dir: string, draft: Awaited<ReturnType<typeof draftProject>>): SetupSuggestion {
+  const detected = draft.detected;
+  return {
+    dir,
+    name: detected.name,
+    found: detected.sources,
+    bolts: draftBolts(detected).map((bolt) => ({
+      label: bolt.label,
+      job: bolt.job ?? false,
+      steps: bolt.targets.map((step) =>
+        typeof step === "string"
+          ? `open ${step}`
+          : typeof step["compose"] === "string" && detected.compose
+            ? `start Docker services: ${detected.compose.services.map((service) => service.name).join(", ")} — and wait until they're healthy`
+            : describeDraftStep(step),
+      ),
+    })),
+    contents: draft.contents,
   };
 }
 

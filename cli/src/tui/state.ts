@@ -39,6 +39,8 @@ export type View =
       /** Narrows the list to what matches; `typing` while it is being written. */
       query?: string;
       typing?: boolean;
+      /** The tab of the panel beside the list. Kept while moving between rows, as lazydocker does. */
+      tab?: PaneTab;
     }
   | { kind: "help" }
   | { kind: "history" }
@@ -118,6 +120,12 @@ export interface Notice {
   text: string;
   tone: "good" | "bad" | "info";
 }
+
+/**
+ * What the panel beside the Running list shows for the selected row: its output, what it
+ * is (command, folder, env, ports), or the times it ran before.
+ */
+export type PaneTab = "logs" | "info" | "runs";
 
 /** One row of the panes: a command Wisp runs, or a container Docker runs for it. */
 export type PaneItem =

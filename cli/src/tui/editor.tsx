@@ -5,6 +5,7 @@ import { STEP_FIELDS, STEP_KINDS, buildStep, describeRawStep, stepKindOf, stepVa
 import { tildify } from "../core/paths.js";
 import { Confirm, Form, Picker } from "./forms.js";
 import type { Glyphs } from "./glyphs.js";
+import { useMouse, useRefs } from "./mouse.js";
 import { TONE } from "./tones.js";
 import { windowed, type Editing } from "./model.js";
 
@@ -89,16 +90,35 @@ export function BoltEditor({ file, bolt, others, elsewhere = [], adding = false,
 
       const step = steps[index];
       if (step === undefined) return;
-      if (key.return) {
-        const kind = stepKindOf(step);
-        if (kind === "shared") return onMessage(`"${step}" is shared by name — change it in the file itself (E)`);
-        return setMode({ kind: "form", step: kind, at: index, replace: true, initial: stepValues(step) });
-      }
+      if (key.return) return open(index);
       if (input === "d" || key.delete) return setMode({ kind: "delete", at: index });
       if (input === "K" || (key.shift && key.upArrow)) return void change(() => editing.moveStep(file, label, index, -1), Math.max(0, index - 1));
       if (input === "J" || (key.shift && key.downArrow)) return void change(() => editing.moveStep(file, label, index, 1), Math.min(steps.length - 1, index + 1));
     },
     { isActive: mode.kind === "list" },
+  );
+
+  // ⏎ on a step changes it; on the last row, adds one.
+  function open(at: number) {
+    const step = steps[at];
+    if (step === undefined) return setMode({ kind: "pick", at: Math.min(at, steps.length) });
+    const kind = stepKindOf(step);
+    if (kind === "shared") return onMessage(`"${step}" is shared by name — change it in the file itself (E)`);
+    setMode({ kind: "form", step: kind, at, replace: true, initial: stepValues(step) });
+  }
+
+  // A click chooses a step; a click on the chosen one opens it, as ⏎ does.
+  const rowNodes = useRefs<number>();
+  useMouse(
+    (event, at) => {
+      if (event.kind !== "click") return false;
+      const hit = rowNodes.entries().find(([, node]) => at(node));
+      if (!hit) return false;
+      if (hit[0] === index) open(hit[0]);
+      else setIndex(hit[0]);
+      return true;
+    },
+    mode.kind === "list",
   );
 
   if (mode.kind === "pick") {
@@ -231,7 +251,8 @@ export function BoltEditor({ file, bolt, others, elsewhere = [], adding = false,
         const active = row.at === index;
         const adding = row.kind === "add";
         return (
-          <Text key={row.at} wrap="truncate-end">
+          <Box key={row.at} ref={rowNodes.set(row.at)}>
+          <Text wrap="truncate-end">
             <Text color={TONE.accent}>{active ? `${glyphs.pointer} ` : "  "}</Text>
             {adding ? (
               <Text color={TONE.accent} bold={active}>{`${steps.length > 0 ? "  " : ""}+  ${row.text}`}</Text>
@@ -243,6 +264,7 @@ export function BoltEditor({ file, bolt, others, elsewhere = [], adding = false,
               </Text>
             )}
           </Text>
+          </Box>
         );
       })}
       {steps.length === 0 ? <Text dimColor>{"\n  No steps yet. A bolt does its steps in order: start a server, wait for it, open it."}</Text> : null}
