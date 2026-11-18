@@ -65,12 +65,12 @@ function svgAttrs(attrs: Record<string, unknown>): Record<string, unknown> {
 }
 
 const more = [
-  { icon: "needs", title: "Bolts that need bolts", text: "Start the database before the API, even from another project. Each runs once per run." },
-  { icon: "docker", title: "Docker services", text: "Point at a compose file. Wisp waits until they're healthy, and shows their logs." },
-  { icon: "restart", title: "Restart on crash", text: "\"restart\": \"on-failure\" brings a server back, with a growing pause, like Kubernetes." },
-  { icon: "git", title: "Git hooks and cron", text: "Run your Check before every push, or a Release every night." },
-  { icon: "laptop", title: "macOS, Linux, Windows", text: "One file for every machine. Per-OS commands when they differ." },
-  { icon: "tmux", title: "Over SSH, inside tmux", text: "Works the same on a server. Links are shown instead of opened." },
+  { icon: "needs", title: "Bolts that need bolts", text: "Start the database first, even from another project." },
+  { icon: "docker", title: "Docker services", text: "Waits until containers are healthy, and shows their logs." },
+  { icon: "restart", title: "Restart on crash", text: "A crashed server comes back on its own." },
+  { icon: "git", title: "Git hooks and cron", text: "Run your checks before every push, or every night." },
+  { icon: "laptop", title: "macOS, Linux, Windows", text: "One file for every machine on the team." },
+  { icon: "tmux", title: "Over SSH, inside tmux", text: "Works the same on a server." },
 ];
 
 </script>
@@ -80,20 +80,41 @@ const more = [
     <!-- The demo -->
     <section class="wrap demo-wrap">
       <div class="terminal" aria-label="A terminal running wisp api">
-        <div class="bar"><span /><span /><span /><em>~/dev/acme</em></div>
+        <div class="bar"><span /><span /><span /><em>~</em></div>
         <pre><span class="dim">$ </span>{{ typed }}<span v-if="shown === 0" class="caret">▍</span>
 <template v-if="shown > 0"><span class="dim">running</span> 🏢 Acme · <b>Work on api</b>
 </template><template v-for="(step, at) in steps.slice(0, shown)" :key="at"><span class="ok">  {{ step.mark }}</span> <span class="dim">{{ step.kind.padEnd(6) }}</span> {{ step.what }} <span class="dim">· {{ step.note }}</span>
-</template><template v-if="shown === steps.length"><span class="accent">everything is up</span><span class="dim"> · wisp ps shows it, wisp down api stops it</span></template></pre>
+</template><template v-if="shown === steps.length"><span class="accent">everything is up</span><span class="dim"> · from any folder</span></template></pre>
       </div>
     </section>
 
-    <!-- Describe it once -->
+    <!-- The difference -->
+    <section class="wrap">
+      <h2 class="center">One word instead of five commands.</h2>
+      <div class="compare">
+        <div>
+          <p class="eyebrow">Before</p>
+          <pre class="code"><span class="dim">$</span> cd ~/dev/acme
+<span class="dim">$</span> docker compose up -d db
+<span class="dim"># wait for it…</span>
+<span class="dim">$</span> cd apps/api &amp;&amp; pnpm dev
+<span class="dim">$</span> open http://localhost:3000
+<span class="dim"># …and remember it all next month</span></pre>
+        </div>
+        <div>
+          <p class="eyebrow">With Wisp</p>
+          <pre class="code"><span class="dim">$</span> wisp api</pre>
+          <p class="note">From any folder. Every time. For the whole team.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Write it once -->
     <section class="wrap split">
       <div>
         <p class="eyebrow">One file</p>
-        <h2>Describe the job once.<br />Start it with one word.</h2>
-        <p class="lead">A <b>bolt</b> lists what to start, in order, in a <code>.wisp.json</code> the whole team shares. <code>wisp init</code> writes it from what your project already has.</p>
+        <h2>Write it once.<br />Or let Wisp write it.</h2>
+        <p class="lead">A <b>bolt</b> lists what to start, in order, in a <code>.wisp.json</code> next to your code. <code>wisp init</code> drafts it from what your project already has.</p>
         <a class="more" href="/docs/file">The file, step by step →</a>
       </div>
       <pre class="code"><span class="dim">{</span>
@@ -114,8 +135,8 @@ const more = [
     <section class="wrap showcase">
       <div class="showcase-text">
         <p class="eyebrow">The dashboard</p>
-        <h2>Everything you run, on one screen.</h2>
-        <p class="lead">Type <code>wisp</code>: every bolt, every server and container with its live output, and a word when something crashes. No JSON to touch.</p>
+        <h2>Everything you started, on one screen.</h2>
+        <p class="lead">Type <code>wisp</code>: live output, health, and a heads-up when something crashes. Edit bolts without touching JSON.</p>
         <a class="more" href="/docs/dashboard">Tour the dashboard →</a>
       </div>
       <img class="recording" src="/demo/dashboard.gif" width="1400" height="760" loading="lazy" alt="Wisp's dashboard: running the Work on api bolt, its server's live output on the Running tab, then the History tab" />
@@ -126,7 +147,7 @@ const more = [
       <div class="showcase-text">
         <p class="eyebrow">Jobs and history</p>
         <h2>A small CI, on your laptop.</h2>
-        <p class="lead">A <b>job</b> stops at the first failure, and every run is kept like a CI run, with its commit and each step's output. Retry only what failed.</p>
+        <p class="lead">Tests and builds stop at the first failure. Every run is kept with its output. Retry only what failed.</p>
         <a class="more" href="/docs/jobs">Jobs and history →</a>
       </div>
       <img class="recording" src="/demo/jobs.gif" width="1400" height="760" loading="lazy" alt="A Check job fails at its test; History shows the run like CI, with the test's output; after the fix, --retry runs only the test, and it passes" />
@@ -140,7 +161,7 @@ const more = [
           <h2>Nothing runs<br />until you say so.</h2>
         </div>
         <div>
-          <p class="lead">A cloned repository's commands wait until you've read them and allowed that exact file. Any change asks again, and AI agents can't approve their own.</p>
+          <p class="lead">A cloned project's commands wait until you've read and allowed them. Any change asks again.</p>
           <a class="more" href="/docs/trust">How trust works →</a>
         </div>
       </div>
@@ -167,7 +188,7 @@ const more = [
     <!-- Install -->
     <section class="wrap narrow cta">
       <h2>Free, open source, yours.</h2>
-      <p class="lead">No account, no telemetry. One command to install, one word to start.</p>
+      <p class="lead">No account, no telemetry.</p>
       <div class="installer">
         <div class="tabs" role="tablist" aria-label="Install Wisp">
           <button
@@ -264,6 +285,10 @@ pre { margin: 0; font-family: var(--vp-font-family-mono); font-size: 13px; line-
 .small { font-size: 14px; color: var(--vp-c-text-2); }
 .small a { color: var(--vp-c-brand-1); }
 
+.compare { display: grid; gap: 24px; align-items: start; max-width: 880px; margin: 0 auto; }
+@media (min-width: 760px) { .compare { grid-template-columns: 1.4fr 1fr; } }
+.compare .eyebrow { margin-bottom: 8px; }
+.compare .note { margin: 12px 0 0; color: var(--vp-c-text-2); font-size: 15px; }
 .showcase { display: grid; gap: 32px; }
 .showcase-text { max-width: 640px; }
 .recording { display: block; width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--wisp-line); box-shadow: var(--wisp-shadow); background: #1e1e2e; }

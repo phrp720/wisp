@@ -46,8 +46,8 @@ Anywhere else, it's a workspace: `wisp payments-service` lists its bolts, and
 :::
 
 ::: details Can I run a bolt from any folder?
-Yes, by naming the project too: `wisp acme api`. Wisp knows every project you've run a bolt
-in; `wisp scan ~/dev` finds the rest.
+Yes: `wisp api` finds the bolt in any project you've used. If two projects have one, Wisp
+lists them; name the project to pick: `wisp acme api`. `wisp scan ~/dev` finds the rest.
 :::
 
 ::: details Wisp asked "which?" and I changed my mind.

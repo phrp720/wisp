@@ -1,12 +1,12 @@
 ---
 layout: home
 title: Wisp
-titleTemplate: Start your working context with one word
+titleTemplate: Start any project from anywhere, with one word
 
 hero:
   name: Wisp
-  text: Start your working context with one word.
-  tagline: Describe how your project starts, once. From then on, one word brings it all up, and Wisp keeps watch while you work.
+  text: Start any project from anywhere, with one word.
+  tagline: No more hunting for the folder or remembering the commands. One word starts the database, the server and the page, from any terminal.
   actions:
     - theme: brand
       text: Get started

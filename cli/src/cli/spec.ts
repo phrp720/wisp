@@ -134,7 +134,7 @@ under "Runs code" and ask them to approve it.**
 |---|---|
 | \`wisp\` | at a terminal, the TUI; without one (pipes, scripts, agents), what this project can run |
 | \`wisp status\` | what this project can run, as text, even at a terminal |
-| \`wisp <bolt>\` | run a bolt of this project by any distinctive word of its label |
+| \`wisp <bolt>\` | run a bolt by any distinctive word of its label: this project's first, then any known project's (ambiguous: exit 1, \`AMBIGUOUS\`) |
 | \`wisp use <file> <bolt>\` | run a bolt of a workspace file by path, for cron and scripts |
 | \`wisp use <workspace> <bolt>\` | run a bolt of any known workspace |
 | \`wisp init [--print] [--yes] [--only <bolts>]\` | write a \`.wisp.json\` from what the project has, at its root and one folder down: package.json and Deno; Python (Django, FastAPI, Flask, pytest, ruff, uv, poetry); Gradle and Maven (Spring Boot); Go; Rust; Rails; PHP and Laravel; .NET; Elixir and Phoenix; docker compose, Makefile, justfile, mise, Taskfile, Procfile. \`--only "Check,Work on api"\` keeps just those of the suggested bolts |
