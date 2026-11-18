@@ -915,7 +915,12 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
           onEdit={() => setView({ kind: "editor", file: view.file, bolt: view.bolt })}
         />
       ) : view.kind === "settings" ? (
-        <SettingsScreen services={services} glyphs={glyphs} height={bodyHeight} onClose={() => setView({ kind: "browse" })} onSaved={(text) => say(text)} />
+        <SettingsScreen services={services} glyphs={glyphs} height={bodyHeight} onClose={() => setView({ kind: "browse" })} onSaved={(text) => {
+          say(text);
+          // Each workspace fixes which app opens its folders and files when it is read, so
+          // read them again: the next run uses the new choice, without restarting Wisp.
+          void reload(current?.workspace.file);
+        }} />
       ) : view.kind === "stop-bolt" ? (
         <Box flexDirection="column" height={bodyHeight} borderStyle={glyphs.border} borderColor={TONE.busy} paddingX={1}>
           <Text bold>{`Stop ${view.bolt}?`}</Text>
