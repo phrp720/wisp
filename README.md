@@ -16,7 +16,8 @@
 <p align="center">
   <b>Start any project from anywhere, with one word.</b><br />
   The database, the server, your editor in the right folder, the page in your browser:<br />
-  described once in a <code>.wisp.json</code>, brought up with <code>wisp api</code>.
+  described once, brought up with <code>wisp api</code> from any terminal.<br />
+  Your workflows too: checks, builds and releases, kept like CI runs.
 </p>
 
 <p align="center">
@@ -47,7 +48,7 @@ Windows without Node: [Releases](https://github.com/phrp720/wisp/releases) has a
 cd ~/dev/acme
 wisp init     # suggests bolts from what the project has; keep the ones you want
 wisp trust    # allow its commands, after reading them
-wisp api      # run the "api" bolt: any distinctive word of its name
+wisp api      # run the "api" bolt, from any folder: any distinctive word of its name
 wisp          # the dashboard
 ```
 
@@ -95,11 +96,12 @@ Steps can run commands, start Docker services, wait for a port or a website, run
 bolt first, and open links, folders, files and apps. Every field is in the
 [File reference](https://willowisp.dev/docs/reference).
 
-## Jobs and history
+## Workflows
 
-Mark a bolt `"job": true` (Check, Build, Release) and it stops at the first failure. Every
-run is kept like a CI run, with its commit and each step's output; `--retry` runs only what
-failed. `wisp hook pre-push check` runs one before every push.
+Checks, builds and releases run as workflows: mark a bolt `"job": true` and it runs step by
+step, stopping at the first failure. Every run is kept like a CI run, with its commit and each
+step's output; `--retry` runs only what failed. `wisp hook pre-push check` runs one before
+every push.
 
 <p align="center">
   <img src="website/public/demo/jobs.gif" alt="A Check job fails at its test; History shows the run like CI, with the test's output; after the fix, --retry runs only the test, and it passes" width="900" />
@@ -134,7 +136,7 @@ pnpm website:dev       # the website, at http://localhost:5173
 
 `cli/` is Wisp (`src/core`: the format, trust and running; `src/cli` and `src/tui`: the
 command and its dashboard). `website/` is the site and docs (VitePress, on Cloudflare).
-See [AGENTS.md](AGENTS.md) for conventions and [RELEASING.md](RELEASING.md) to cut a release.
+Want to help? Start with [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
