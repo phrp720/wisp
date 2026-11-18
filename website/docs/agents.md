@@ -7,7 +7,7 @@ outline: [2, 2]
 Wisp is built to be driven by coding agents. Point yours at it:
 
 ```bash
-wisp spec
+wisp help agents     # or: wisp spec
 ```
 
 It prints the complete reference below: the file format, every command, JSON output and

@@ -1,6 +1,6 @@
 import { tildify } from "../../core/paths.js";
-import { discoverWorkspaces } from "../../core/workspaces.js";
-import { counts, dim, green, red, title, yellow } from "../format.js";
+import { discoverWorkspaces, slugify } from "../../core/workspaces.js";
+import { counts, cyan, dim, green, red, title, yellow } from "../format.js";
 import { emitJson, maybeProject } from "../lib/context.js";
 import type { CommandDef } from "../lib/define.js";
 
@@ -43,9 +43,11 @@ export const list: CommandDef<{ json?: boolean }> = {
             ? green(" ✓")
             : yellow(read.trust === "stale" ? " ! changed" : " ! untrusted")
           : "";
-      console.log(`${current} ${title(workspace)}  ${counts(workspace)}  ${where}${trust}`);
+      // What to type for it from any folder: `wisp flower-testbed`, or `wisp flower-testbed <bolt>`.
+      console.log(`${current} ${title(workspace)} ${cyan(slugify(workspace.name))}  ${counts(workspace)}  ${where}${trust}`);
     }
 
     for (const failure of unreadable) console.log(`${red("✗")} ${dim(tildify(failure.file))} ${failure.error}`);
+    console.log(dim("\n`wisp <name>` lists a workspace's bolts · `wisp <name> <bolt>` runs one, from any folder"));
   },
 };

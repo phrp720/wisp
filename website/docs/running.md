@@ -21,6 +21,11 @@ wisp stop api        # stop one
 Prefer a window per command, or a tmux session? Choose it in [Settings](./settings) (`s`), or
 ask for it once with `--window`.
 
+## Docker containers
+
+A bolt's `compose` services show up in the Running tab beside its commands: each container
+with its health, its ports, and its logs on the right. `wisp down` stops them.
+
 ## Up and down
 
 ```bash

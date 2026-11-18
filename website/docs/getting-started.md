@@ -11,7 +11,8 @@ curl -fsSL https://willowisp.dev/install.sh | sh     # macOS and Linux
 npm install -g @squaredasher/wisp                     # anywhere, with Node 22.12+
 ```
 
-Windows without Node: download it from [Releases](https://github.com/phrp720/wisp/releases).
+Windows without Node: download `wisp-windows-x64.zip` from
+[Releases](https://github.com/phrp720/wisp/releases) and put `wisp.exe` in a folder on your PATH.
 
 ## 2. Write the file
 

@@ -1,6 +1,7 @@
 # The .wisp.json file
 
-A **bolt** is a named list of things to start, in order. That is the whole idea:
+A **bolt** is a named list of things to start, in order. That is the whole idea (every field
+is in the [File reference](./reference)):
 
 ```json
 {

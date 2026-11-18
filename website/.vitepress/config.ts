@@ -26,8 +26,9 @@ The complete reference for agents, the file format, every command, JSON output a
 - [What's running](${site}/docs/running): background commands, logs, stopping, restart on crash
 - [Settings](${site}/docs/settings): which editor opens folders and files, where commands run
 - [Trust](${site}/docs/trust): why a cloned repository's commands wait for approval
+- [Commands](${site}/docs/commands): every command, option and environment variable
+- [File reference](${site}/docs/reference): every field of a .wisp.json
 - [Questions](${site}/docs/questions): short answers to common questions
-- [Commands](${site}/docs/commands): every command and its options
 
 ## Optional
 
@@ -88,6 +89,7 @@ export default defineConfig({
           text: "Reference",
           items: [
             { text: "Commands", link: "/docs/commands" },
+            { text: "File reference", link: "/docs/reference" },
             { text: "Questions", link: "/docs/questions" },
             { text: "For AI agents", link: "/docs/agents" },
           ],

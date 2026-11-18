@@ -27,10 +27,13 @@ filled in through short forms. `E` opens the file itself if you'd rather.
 | `v` | view a bolt whole: its steps, what it needs, what's up |
 | `x` · `R` | stop what it started (asks about the bolts it needed) · restart it |
 | `e` · `a` · `D` | edit · add · delete a bolt |
-| `1` `2` `3` | bolts · running · history |
+| `K` · `J` | move a bolt up · down |
+| `N` · `E` | a workspace of your own · open the file itself in your editor |
+| `1` `2` `3` | bolts · running · history (`p` and `h` work too) |
+| `↑↓` `j k` · `←→` `tab` | move · between workspaces and bolts |
 | `/` | search, on any tab |
 | `o` | on Running: show the ones that stopped too |
 | `u` · `d` · `G` | scroll output up · down · back to the newest |
 | `t` · `c` | allow a file's commands · check it for problems |
 | `s` | settings: your editor, and where commands run |
-| `?` · `q` | every key · quit |
+| `r` · `?` · `q` | reload the files · every key · quit |
