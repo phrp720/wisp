@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { filterLog, pieces, plain } from "./logfilter.js";
+import { cleanLines } from "./running.js";
 
 describe("filtering a log", () => {
   const log = ["\u001B[32mready\u001B[0m on :3000", "GET /cart 200", "ERROR cart total is NaN", "GET /cart 500", "error: retrying the cart"];
@@ -32,5 +33,15 @@ describe("filtering a log", () => {
       { text: " ", hit: false },
       { text: "500", hit: true },
     ]);
+  });
+});
+
+describe("redrawing a log", () => {
+  it("cleans and filters it once per change, not once per frame", () => {
+    const log = "ready\nGET /cart 500\n";
+    const lines = cleanLines(log);
+    expect(cleanLines(`${log}`)).toBe(lines);
+    expect(filterLog(lines, "500")).toBe(filterLog(lines, "500"));
+    expect(cleanLines(`${log}GET /cart 200\n`)).not.toBe(lines);
   });
 });

@@ -13,7 +13,7 @@ import { detectEnvironment, type Environment } from "./environment.js";
 import { WispError, describe } from "./errors.js";
 import { gitState, newHistoryId, recordHistory, stepLogPath, type HistoryEntry, type HistoryStep } from "./history.js";
 import { currentOS, expandHome, stateDir, withLock } from "./paths.js";
-import { listRuns, newRunId, pidFileFor, recordWindowRun, runningFor, startRun, stopRun, type RunStatus } from "./processes.js";
+import { listRuns, newRunId, pidFileFor, recordWindowRun, runningFor, startRun, stopRun, tidyState, trimLog, type RunStatus } from "./processes.js";
 import { restartLoop, shellInvocation, windowInvocation } from "./shell.js";
 import { normalizeUrl, sameUrl } from "./url.js";
 import { describeWait, waitFor } from "./wait.js";
@@ -199,6 +199,8 @@ export async function runPlan(
         return { ...toHistoryStep(result), ...(owner && owner !== options.label.replace(/ \((retry|down)\)$/, "") ? { bolt: owner } : {}) };
       }),
     }).catch(() => undefined);
+    // The run that dropped out of History takes its output with it.
+    await tidyState().catch(() => undefined);
   }
 
   return { workspace, targets: results, dryRun, ok, plan: steps, ...(historyId ? { historyId } : {}) };
@@ -573,6 +575,7 @@ async function runCommand(step: PlannedStep, index: number, context: Context): P
     }
     const log = context.historyId ? await stepLogPath(context.historyId, index) : undefined;
     const code = await runAttached(invocation, target, context, log);
+    if (log) await trimLog(log).catch(() => false);
     const kept = log ? { log } : {};
     return code === 0 ? { ...target, ok: true, ...kept } : { ...target, ok: false, error: `exited with code ${code}`, ...kept };
   }
@@ -631,6 +634,7 @@ async function runCompose(step: PlannedStep, index: number, context: Context): P
   let code: number;
   try {
     code = await runAttached({ file: "docker", args }, launch, context, log);
+    if (log) await trimLog(log).catch(() => false);
   } catch (error) {
     const failure = error as NodeJS.ErrnoException;
     return { ...target, ok: false, error: failure.code === "ENOENT" ? "Docker isn't installed" : describe(error) };

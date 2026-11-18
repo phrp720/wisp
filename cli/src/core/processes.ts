@@ -1,11 +1,12 @@
 import { spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { closeSync, openSync, readFileSync, readSync, statSync } from "node:fs";
-import { mkdir, open, rm, stat } from "node:fs/promises";
+import { mkdir, open, readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 
 import { currentOS, readJson, stateDir, withLock, writeJson } from "./paths.js";
 import { cleanOutput, stripAnsi } from "./ansi.js";
+import { listHistory } from "./history.js";
 import { exitFileFor, recordExit, underTerminal } from "./shell.js";
 import type { Invocation } from "./types.js";
 
@@ -93,8 +94,21 @@ function waitingOn(run: Run): string | undefined {
   }
 }
 
-/** How many finished runs to keep, logs included. Running ones are always kept. */
+/**
+ * How many finished runs Running lists (`o`). Running ones are always listed. Their output
+ * is kept longer: for as long as a run in History points to it (see `tidyState`).
+ */
 export const KEEP_FINISHED = 30;
+
+/** The most one log grows to before its oldest part goes, and how much of its end stays then. */
+export const LOG_CAP = 10 * 1024 * 1024;
+export const LOG_KEEP = 5 * 1024 * 1024;
+
+/** The most everything Wisp keeps of what it ran (command logs, History's output) takes together. */
+export const STATE_CEILING = 500 * 1024 * 1024;
+
+/** A log this new may be one another Wisp is just starting a command with: left alone. */
+const NEW_FILE_MS = 10 * 60_000;
 
 /** A window run with no PID yet is "starting" this long, then presumed never to have. */
 const STARTING_MS = 20_000;
@@ -123,9 +137,118 @@ export async function listRuns(): Promise<RunStatus[]> {
   // One look for zombies across every run, rather than one per run.
   const pids = runs.map(pidOf).filter((pid) => signalable(pid));
   const dead = zombies(pids);
-  return runs
-    .map((run) => withStatus(run, dead))
-    .sort((left, right) => right.startedAt.localeCompare(left.startedAt));
+  const listed = runs.map((run) => withStatus(run, dead)).sort((left, right) => right.startedAt.localeCompare(left.startedAt));
+  // A running command's log is only ever appended to: held to its cap here, since Wisp is
+  // asked about runs often (the dashboard every second or two, any `wisp` command).
+  await Promise.all(listed.map((run) => (run.alive && run.log ? trimLog(run.log).catch(() => false) : false)));
+  return listed;
+}
+
+/**
+ * Keep a log to `cap`: past it, only its last `keep` bytes stay, from a whole line on, under
+ * a line saying so. Done in place, as `logrotate`'s copytruncate does: the command writing
+ * to it keeps its file, and appends after what stayed. A few lines written at that very
+ * moment can be lost, which is the price of never stopping the command.
+ */
+export async function trimLog(file: string, cap = LOG_CAP, keep = LOG_KEEP): Promise<boolean> {
+  const size = (await stat(file).catch(() => undefined))?.size ?? 0;
+  if (size <= cap) return false;
+  const handle = await open(file, "r+");
+  try {
+    const buffer = Buffer.alloc(Math.min(keep, size));
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, size - buffer.length);
+    const kept = buffer.subarray(0, bytesRead);
+    const from = kept.indexOf(0x0a) + 1;
+    const note = Buffer.from(`[wisp] earlier output trimmed: a log is kept to its last ${Math.round(keep / 1024 / 1024)} MB\n`);
+    const body = Buffer.concat([note, from > 0 && from < kept.length ? kept.subarray(from) : kept]);
+    await handle.write(body, 0, body.length, 0);
+    await handle.truncate(body.length);
+    return true;
+  } finally {
+    await handle.close();
+  }
+}
+
+/**
+ * Delete what Wisp no longer needs of what it ran, so nothing piles up:
+ *
+ * - a command's log once nothing points to it: neither Running's list (`runs.json`, the
+ *   ones running and the last finished ones) nor any run History keeps (the last 200). A
+ *   run in History shows its output for as long as it is listed there.
+ * - then, past `ceiling` (500 MB) for all of it together, the oldest output first: a
+ *   run's step logs in History, or a finished command's log. Never a running command's.
+ *
+ * A file newer than ten minutes that nothing points to yet is left alone: another Wisp may
+ * be starting a command with it. Returns the files it deleted.
+ */
+export async function tidyState(options: { ceiling?: number; newFileMs?: number; now?: number } = {}): Promise<string[]> {
+  const ceiling = options.ceiling ?? STATE_CEILING;
+  const fresh = options.newFileMs ?? NEW_FILE_MS;
+  const now = options.now ?? Date.now();
+  const runs = await listRuns();
+  const history = await listHistory().catch(() => []);
+  const listed = new Set(runs.map((run) => run.id));
+  const running = new Set(runs.filter((run) => run.alive).map((run) => run.id));
+  const pointedTo = new Set(history.flatMap((entry) => entry.steps.flatMap((step) => (step.log ? [step.log] : []))));
+  const removed: string[] = [];
+  const remove = async (files: string[]) => {
+    await Promise.all(files.map((file) => rm(file, { recursive: true, force: true })));
+    removed.push(...files);
+  };
+  const newest = async (files: string[]) => Math.max(0, ...(await Promise.all(files.map(async (file) => (await stat(file).catch(() => undefined))?.mtimeMs ?? 0))));
+
+  // Command logs come as <id>.log, with <id>.exit and <id>.pid beside them.
+  const byRun = new Map<string, string[]>();
+  for (const name of await readdir(logsDir()).catch(() => [] as string[])) {
+    const id = name.split(".")[0] as string;
+    byRun.set(id, [...(byRun.get(id) ?? []), join(logsDir(), name)]);
+  }
+  for (const [id, files] of byRun) {
+    if (listed.has(id) || pointedTo.has(join(logsDir(), `${id}.log`))) continue;
+    if (now - (await newest(files)) < fresh) continue;
+    byRun.delete(id);
+    await remove(files);
+  }
+  // History's own output, a folder a run: one that History no longer lists is left over.
+  const historyDir = join(stateDir(), "history");
+  const kept = new Set(history.map((entry) => entry.id));
+  const folders = await readdir(historyDir).catch(() => [] as string[]);
+  for (const id of folders.filter((name) => !kept.has(name))) {
+    const folder = join(historyDir, id);
+    // Its files' age, not the folder's: writing a file inside makes the folder look new.
+    const inside = (await readdir(folder).catch(() => [] as string[])).map((name) => join(folder, name));
+    if (now - (await newest(inside)) >= fresh) await remove([folder]);
+  }
+
+  // Past the ceiling: the oldest output goes first, until it is back under it.
+  const files: { file: string; size: number; at: number }[] = [];
+  const add = async (file: string) => {
+    const info = await stat(file).catch(() => undefined);
+    if (info?.isFile()) files.push({ file, size: info.size, at: info.mtimeMs });
+  };
+  let total = 0;
+  for (const [id, group] of byRun) {
+    for (const file of group) {
+      const info = await stat(file).catch(() => undefined);
+      total += info?.size ?? 0;
+      if (!running.has(id) && file.endsWith(".log")) await add(file);
+    }
+  }
+  for (const id of folders.filter((name) => kept.has(name))) {
+    for (const name of await readdir(join(historyDir, id)).catch(() => [] as string[])) {
+      const file = join(historyDir, id, name);
+      const before = files.length;
+      await add(file);
+      total += files.length > before ? (files[files.length - 1] as { size: number }).size : 0;
+    }
+  }
+  if (total <= ceiling) return removed;
+  for (const entry of files.sort((left, right) => left.at - right.at)) {
+    if (total <= ceiling) break;
+    await remove([entry.file]);
+    total -= entry.size;
+  }
+  return removed;
 }
 
 /** The run of this asset that is still going, if Wisp started one. */
@@ -518,9 +641,10 @@ async function saveRun(run: Run): Promise<void> {
     const runs = (await loadRuns()).map((run) => withStatus(run));
     const alive = runs.filter((entry) => entry.alive);
     const finished = runs.filter((entry) => !entry.alive);
-    await Promise.all(finished.slice(KEEP_FINISHED).map(removeFiles));
     await writeJson(runsFile(), { version: 2, runs: [run, ...alive.map(strip), ...finished.slice(0, KEEP_FINISHED).map(strip)] });
   });
+  // The runs that dropped off the list keep their logs while History points to them.
+  await tidyState().catch(() => undefined);
 }
 
 async function loadRuns(): Promise<Run[]> {
