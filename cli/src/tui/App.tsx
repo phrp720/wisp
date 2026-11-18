@@ -950,7 +950,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
       ) : !library ? (
         <Box height={bodyHeight} paddingX={1}>
           <Text>
-            <Text color={TONE.accent}>{`${spell()}… `}</Text>
+            <Text color={TONE.accent}>{`${glyphs.spark} ${spell()}… `}</Text>
             <Text dimColor>reading your workspaces</Text>
           </Text>
         </Box>

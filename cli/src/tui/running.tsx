@@ -126,7 +126,7 @@ export function PanesPanel(props: {
       ) : (
         <Text color={TONE.up}>{glyphs.ok}</Text>
       );
-      return line(selected, 0, mark, `${glyphs.bolt}${active.bolt}`, active.stopped ? "stopped" : now ? describeStep(now.target, true, active.job) : active.done ? (failed ? "failed" : "done") : `${spell(7)}…`, failed || active.stopped ? TONE.failed : undefined);
+      return line(selected, 0, mark, `${glyphs.bolt}${active.bolt}`, active.stopped ? "stopped" : now ? describeStep(now.target, true, active.job) : active.done ? (failed ? "failed" : "done") : waitingWords(glyphs, Math.floor(width * 0.45)), failed || active.stopped ? TONE.failed : undefined);
     }
     if (entry.type === "step") {
       const step = entry.step;
@@ -653,6 +653,15 @@ export function lastLine(lines: string[]): string | undefined {
     if (line) return line;
   }
   return undefined;
+}
+
+/**
+ * Beside a run that has not reached its first step: the words while it starts, with their star,
+ * when some fit in `room` whole. A narrow list gets the plain "starting…", never a cut spell.
+ */
+export function waitingWords(glyphs: Glyphs, room: number, now = Date.now()): string {
+  const words = spell(7, now, room - 3);
+  return words.length + 3 <= room ? `${glyphs.spark} ${words}…` : "starting…";
 }
 
 /** At most `max` characters, with an ellipsis when cut — the right side of a row never wraps. */
