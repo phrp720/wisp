@@ -1,7 +1,7 @@
 import { recordProject } from "../../core/config.js";
 import { listHistory } from "../../core/history.js";
 import { WispError } from "../../core/errors.js";
-import { planRetry, runPlan, switchToWorkspace, type RunDeps } from "../../core/switch.js";
+import { matchBolt, planRetry, runPlan, switchToWorkspace, type RunDeps } from "../../core/switch.js";
 import type { Bolt, RunMode, SwitchOptions, SwitchResult, SwitchTarget, TargetResult, Workspace } from "../../core/types.js";
 import { bold, cyan, dim, green, kindLabel, plural, red, title, yellow } from "../format.js";
 import { emitJson, findWorkspaceForDependency, resolveRun } from "../lib/context.js";
@@ -208,7 +208,10 @@ export const use: CommandDef<Options> = {
 };
 
 function boltLabel(workspace: Workspace, ref: string): string {
-  return workspace.bolts.find((bolt) => bolt.id === ref || bolt.label === ref)?.label ?? ref;
+  // The bolt's own name, not the word typed for it: `wisp api` runs "Work on api".
+  const exact = workspace.bolts.find((bolt) => bolt.id === ref || bolt.label === ref);
+  if (exact) return exact.label;
+  return matchBolt(workspace, ref).bolt?.label ?? ref;
 }
 
 /**

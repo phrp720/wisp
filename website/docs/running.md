@@ -18,12 +18,8 @@ wisp logs api -f     # follow one
 wisp stop api        # stop one
 ```
 
-Prefer a window per command? Ask for one with `--window`, or make it the default:
-
-```bash
-wisp open-with terminal ghostty
-wisp open-with terminal tmux     # on a server you SSH into: a wisp session to attach to
-```
+Prefer a window per command, or a tmux session? Choose it in [Settings](./settings) (`s`), or
+ask for it once with `--window`.
 
 ## Up and down
 

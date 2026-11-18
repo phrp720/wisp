@@ -20,3 +20,6 @@ website/.wrangler/
 
 # Your own additions to .wisp.json, never shared
 .wisp.local.json
+
+# The demo workspaces
+/demo/

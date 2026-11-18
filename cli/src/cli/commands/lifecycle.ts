@@ -136,7 +136,7 @@ async function showEntry(entry: HistoryEntry, options: { log?: string; json?: bo
   });
 }
 
-const TRIGGERS: Record<string, string> = { tui: "the TUI", cli: "the command line", hook: "a git hook", retry: "a retry" };
+const TRIGGERS: Record<string, string> = { tui: "the dashboard", cli: "the command line", hook: "a git hook", retry: "a retry" };
 
 function duration(entry: HistoryEntry): string {
   const ms = Math.max(0, Date.parse(entry.finishedAt) - Date.parse(entry.startedAt));

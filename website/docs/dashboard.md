@@ -3,20 +3,7 @@
 `wisp` opens a dashboard of all your projects, right in your terminal, like htop. It works the same at your
 desk, over SSH and inside tmux.
 
-```
- 🔮 wisp   1 Bolts   2 Running ● 2   3 History                     ~/dev/acme
-╭──────────────────────────╮╭─────────────────────────────────────────────────────╮
-│ Workspaces               ││ 🏢 Acme  3 bolts                                    │
-│ THIS FOLDER              ││ ~/dev/acme/.wisp.json                               │
-│ ❯ 🏢 Acme                ││ ✓ Allowed to run its commands                       │
-│ PROJECTS                 ││                                                     │
-│   🧱 infra               ││ ⚡ Bolts                                            │
-│ YOURS                    ││ ❯ Work on api ● running  5 steps                    │
-│   ☀️ Morning             ││   Work on web  ✓ 3m ago  2 steps                    │
-│                          ││   Check job  ✗ failed 1h ago  3 steps               │
-╰──────────────────────────╯╰─────────────────────────────────────────────────────╯
- ⏎ run · v view · e edit · a add · x stop · / search · 1 2 3 tabs · s settings · ? keys
-```
+![Wisp's dashboard: running a bolt, its server's live output on the Running tab, then the History tab](/demo/dashboard.gif)
 
 ## Three tabs
 
@@ -29,6 +16,8 @@ desk, over SSH and inside tmux.
 
 `a` adds a bolt and `e` edits one: steps are picked from a list (Start, Wait, Open) and
 filled in through short forms. `E` opens the file itself if you'd rather.
+
+![Making a bolt in the dashboard: name it, then add a command, a wait and a website through short forms, then run it](/demo/editor.gif)
 
 ## Keys
 

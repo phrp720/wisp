@@ -24,7 +24,9 @@ The complete reference for agents, the file format, every command, JSON output a
 - [The .wisp.json file](${site}/docs/file): every kind of step, dependencies, several operating systems
 - [Jobs and history](${site}/docs/jobs): runs that stop at the first failure, kept like CI runs
 - [What's running](${site}/docs/running): background commands, logs, stopping, restart on crash
+- [Settings](${site}/docs/settings): which editor opens folders and files, where commands run
 - [Trust](${site}/docs/trust): why a cloned repository's commands wait for approval
+- [Questions](${site}/docs/questions): short answers to common questions
 - [Commands](${site}/docs/commands): every command and its options
 
 ## Optional
@@ -78,6 +80,7 @@ export default defineConfig({
             { text: "The .wisp.json file", link: "/docs/file" },
             { text: "Jobs and history", link: "/docs/jobs" },
             { text: "What's running", link: "/docs/running" },
+            { text: "Settings", link: "/docs/settings" },
             { text: "Trust", link: "/docs/trust" },
           ],
         },
@@ -85,6 +88,7 @@ export default defineConfig({
           text: "Reference",
           items: [
             { text: "Commands", link: "/docs/commands" },
+            { text: "Questions", link: "/docs/questions" },
             { text: "For AI agents", link: "/docs/agents" },
           ],
         },

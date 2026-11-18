@@ -533,7 +533,7 @@ export function formatDuration(ms: number): string {
 }
 
 function triggerWords(trigger: string | undefined): string {
-  return { tui: "the TUI", cli: "the command line", hook: "a git hook", retry: "a retry" }[trigger ?? ""] ?? "";
+  return { tui: "the dashboard", cli: "the command line", hook: "a git hook", retry: "a retry" }[trigger ?? ""] ?? "";
 }
 
 function ago(iso: string): string {

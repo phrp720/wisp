@@ -79,3 +79,6 @@
   font-style: italic;
   color: var(--vp-c-text-2);
 }
+
+/* The recordings in the docs: rounded like the terminal they show. */
+.vp-doc img[src*="/demo/"] { border-radius: 10px; border: 1px solid var(--vp-c-divider); }

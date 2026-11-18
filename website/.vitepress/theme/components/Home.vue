@@ -110,54 +110,26 @@ const more = [
 <span class="dim">}</span></pre>
     </section>
 
-    <!-- The dashboard -->
-    <section class="wrap split reverse">
-      <div>
+    <!-- The dashboard: a recording of real Wisp -->
+    <section class="wrap showcase">
+      <div class="showcase-text">
         <p class="eyebrow">The dashboard</p>
-        <h2>Everything you run,<br />on one screen.</h2>
+        <h2>Everything you run, on one screen.</h2>
         <p class="lead">Type <code>wisp</code>: every bolt, every server and container with its live output, and a word when something crashes. No JSON to touch.</p>
         <a class="more" href="/docs/dashboard">Tour the dashboard →</a>
       </div>
-      <div class="screen tui" aria-label="Wisp's Running tab">
-        <div class="tabs"><span class="accent">🔮 wisp</span><span class="dim">1 Bolts</span><u class="accent">2 Running</u><span class="ok">● 3</span><span class="dim">3 History</span></div>
-        <div class="panes">
-          <div class="pane list">
-            <p class="dim small-caps">ACME</p>
-            <p><b>⚡ Work on api</b> <span class="dim">#4</span><span class="right ok">● up</span></p>
-            <p class="step"><span class="ok">✓</span> ⚡ Database<span class="right dim">1.4s</span></p>
-            <p class="step selected"><span class="ok">●</span> api<span class="right dim">up 2h</span></p>
-            <p class="step"><span class="ok">✓</span> wait for :3000</p>
-            <p class="step"><span class="ok">✓</span> open localhost:3000</p>
-          </div>
-          <div class="pane output">
-            <p><b>api</b> <span class="dim">pnpm dev</span> <span class="ok">● running</span></p>
-            <p>▲ Next.js 16.1</p>
-            <p>- Local: http://localhost:3000</p>
-            <p><span class="ok">✓</span> Ready in 1.2s</p>
-            <p>GET / 200 in 84ms</p>
-            <p>GET /api/me 200 in 12ms</p>
-          </div>
-        </div>
-      </div>
+      <img class="recording" src="/demo/dashboard.gif" width="1400" height="760" loading="lazy" alt="Wisp's dashboard: running the Work on api bolt, its server's live output on the Running tab, then the History tab" />
     </section>
 
-    <!-- History -->
-    <section class="wrap split">
-      <div>
+    <!-- History: a recording of real Wisp -->
+    <section class="wrap showcase">
+      <div class="showcase-text">
         <p class="eyebrow">Jobs and history</p>
-        <h2>A small CI,<br />on your laptop.</h2>
+        <h2>A small CI, on your laptop.</h2>
         <p class="lead">A <b>job</b> stops at the first failure, and every run is kept like a CI run, with its commit and each step's output. Retry only what failed.</p>
         <a class="more" href="/docs/jobs">Jobs and history →</a>
       </div>
-      <pre class="screen"><span class="bad">✗</span> <b>Check #7</b>   <span class="dim">main @ a1b2c3d  “fix cart total”  Failed  9.8s</span>
-
-  <span class="dim">▸</span> <span class="ok">✓</span> run lint            3.1s  <span class="accent">▇▇▇▇</span>
-  <span class="dim">▾</span> <span class="bad">✗</span> run test            6.7s  <span class="accent">▇▇▇▇▇▇▇▇</span>  <span class="bad">exited with code 1</span>
-        <span class="dim">1</span> ✓ adds items
-        <span class="dim">2</span> <span class="bad">✗ cart total: expected 42, got 41</span>
-    <span class="dim">–</span> run build                 <span class="dim">not reached</span>
-
-<span class="dim">r retry from test · R run it all again</span></pre>
+      <img class="recording" src="/demo/jobs.gif" width="1400" height="760" loading="lazy" alt="A Check job fails at its test; History shows the run like CI, with the test's output; after the fix, --retry runs only the test, and it passes" />
     </section>
 
     <!-- Safe by default -->
@@ -246,8 +218,8 @@ h2.center { text-align: center; margin-bottom: 40px; }
 .more:hover { text-decoration: underline; }
 
 pre { margin: 0; font-family: var(--vp-font-family-mono); font-size: 13px; line-height: 1.6; white-space: pre; overflow-x: auto; }
-.terminal, .code, .screen { background: var(--wisp-terminal-bg); color: var(--wisp-terminal-fg); border-radius: 14px; border: 1px solid var(--wisp-line); box-shadow: var(--wisp-shadow); }
-.code, .screen { padding: 22px 24px; }
+.terminal, .code { background: var(--wisp-terminal-bg); color: var(--wisp-terminal-fg); border-radius: 14px; border: 1px solid var(--wisp-line); box-shadow: var(--wisp-shadow); }
+.code { padding: 22px 24px; }
 .demo-wrap { padding-top: 8px; padding-bottom: 72px; border-top: 0 !important; }
 .terminal { max-width: 760px; margin: 0 auto; overflow: hidden; }
 .terminal pre { padding: 20px 24px 24px; min-height: 270px; font-size: 14px; }
@@ -292,17 +264,7 @@ pre { margin: 0; font-family: var(--vp-font-family-mono); font-size: 13px; line-
 .small { font-size: 14px; color: var(--vp-c-text-2); }
 .small a { color: var(--vp-c-brand-1); }
 
-.tui { font-family: var(--vp-font-family-mono); font-size: 13px; padding: 16px 18px 18px; }
-.tui p { margin: 0; line-height: 1.75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tabs { display: flex; gap: 18px; align-items: center; margin-bottom: 12px; }
-.tabs .ok { margin-left: -12px; }
-.panes { display: grid; grid-template-columns: 1fr 1.15fr; gap: 10px; }
-.pane { border: 1px solid rgba(167, 139, 250, 0.22); border-radius: 8px; padding: 10px 12px; min-width: 0; }
-.pane.list { border-color: rgba(167, 139, 250, 0.45); }
-.small-caps { font-size: 11px; letter-spacing: 0.06em; }
-.step { padding-left: 14px; position: relative; }
-.step.selected { color: var(--wisp-accent); font-weight: 600; }
-.step.selected::before { content: "❯"; position: absolute; left: 0; color: var(--wisp-accent); }
-.right { float: right; padding-left: 8px; }
-.output { color: var(--wisp-output); }
+.showcase { display: grid; gap: 32px; }
+.showcase-text { max-width: 640px; }
+.recording { display: block; width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--wisp-line); box-shadow: var(--wisp-shadow); background: #1e1e2e; }
 </style>
