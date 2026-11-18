@@ -55,7 +55,12 @@ export const use: CommandDef<Options> = {
     let { workspace } = read;
     const mode: RunMode = options.inline ? "inline" : options.detach ? "background" : options.window ? "terminal" : "auto";
 
-    const bolt = named ?? (options.all ? undefined : await chooseBolt(workspace, options));
+    const chosen = named ?? (options.all ? undefined : await chooseBolt(workspace, options));
+    if (chosen === null) {
+      console.log(dim("Nothing ran."));
+      return;
+    }
+    const bolt = chosen;
     if (!options.all && !bolt) {
       if (options.json) return emitJson({ workspace: workspace.name, bolts: workspace.bolts });
       console.log(`${dim("in")} ${title(workspace)}`);
@@ -218,7 +223,8 @@ function boltLabel(workspace: Workspace, ref: string): string {
  * Which bolt, when nothing said. Only on a terminal: a script that pipes `wisp use`
  * somewhere must not stop on a question nobody is there to answer.
  */
-async function chooseBolt(workspace: Workspace, options: Options): Promise<string | undefined> {
+/** The bolt picked, undefined when there was nothing to ask, null when you cancelled. */
+async function chooseBolt(workspace: Workspace, options: Options): Promise<string | undefined | null> {
   const bolts = workspace.bolts;
   if (bolts.length === 0 || options.json) return undefined;
   if (!process.stdin.isTTY || !process.stdout.isTTY) return undefined;
@@ -229,12 +235,17 @@ async function chooseBolt(workspace: Workspace, options: Options): Promise<strin
     console.log(`  ${dim(`${index + 1}.`)} ${bold(bolt.label)} ${dim(plural(bolt.steps.length, "step"))}`);
   });
 
+  // No default: ⏎ on its own, q or Ctrl+C means you changed your mind, and nothing runs.
   const prompt = new Prompter();
   try {
-    const answer = await prompt.ask(dim("  which"), "1");
+    const answer = (await prompt.ask(dim("  which? a number or name · ⏎ cancels"))).trim();
+    if (!answer || answer.toLowerCase() === "q") return null;
     const index = Number.parseInt(answer, 10) - 1;
     if (Number.isInteger(index) && index >= 0 && index < bolts.length) return (bolts[index] as Bolt).id;
-    return answer.trim() || undefined;
+    return answer;
+  } catch (error) {
+    if (error instanceof WispError && error.code === "CANCELLED") return null;
+    throw error;
   } finally {
     prompt.close();
   }
