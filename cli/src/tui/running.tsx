@@ -692,9 +692,7 @@ export function logWindow(options: { item: PaneItem | undefined; tab: PaneTab | 
 } {
   const { item, log, logQuery, logTyping, height } = options;
   const tab = shownTab(item, options.tab);
-  const lines = cleanOutput(log)
-    .split("\n")
-    .filter((line, at, every) => line !== "" || at < every.length - 1);
+  const lines = cleanLines(log);
   // The log filter applies to whatever log the panel shows: a command's, a container's, a step's.
   const filtering = tab === "logs" && item?.type !== "group" && (logTyping || logQuery !== "");
   const matched = filtering && logQuery ? filterLog(lines, logQuery) : undefined;
@@ -702,6 +700,20 @@ export function logWindow(options: { item: PaneItem | undefined; tab: PaneTab | 
   const room = Math.max(1, height - 3 - (tabsOf(item).length > 0 ? 1 : 0) - (filtering ? 1 : 0));
   const total = matched ? matched.length : lines.length;
   return { lines, filtering, matched, room, total, most: Math.max(0, total - room) };
+}
+
+// The last log cleaned, and its lines. The panel redraws many times a second while a run is
+// going (its spinner), and on every key; the log only changes when the command prints.
+let cleaned: { log: string; lines: string[] } | undefined;
+
+/** A log as lines to show: played out as a terminal would (`cleanOutput`), once per change. */
+export function cleanLines(log: string): string[] {
+  if (cleaned?.log === log) return cleaned.lines;
+  const lines = cleanOutput(log)
+    .split("\n")
+    .filter((line, at, every) => line !== "" || at < every.length - 1);
+  cleaned = { log, lines };
+  return lines;
 }
 
 /** The next row with a log of its own, going `by` from `at`: bolt rows have none, so they are passed over. */

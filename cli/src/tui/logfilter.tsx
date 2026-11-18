@@ -18,8 +18,20 @@ function wordsOf(query: string): string[] {
   return query.toLowerCase().split(/\s+/).filter(Boolean);
 }
 
+// What a filter found, kept with the lines it was run on: the screen redraws far more often
+// (a spinner, every second's look at what runs) than the log or the filter change.
+const found = new WeakMap<string[], { query: string; matched: { at: number; text: string }[] }>();
+
 /** The lines with every word of the filter on them, each with its place in the log (from 0). */
 export function filterLog(lines: string[], query: string): { at: number; text: string }[] {
+  const known = found.get(lines);
+  if (known?.query === query) return known.matched;
+  const matched = matchLines(lines, query);
+  found.set(lines, { query, matched });
+  return matched;
+}
+
+function matchLines(lines: string[], query: string): { at: number; text: string }[] {
   const words = wordsOf(query);
   const found: { at: number; text: string }[] = [];
   lines.forEach((line, at) => {

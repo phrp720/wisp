@@ -115,6 +115,8 @@ export const logs: CommandDef<{ follow?: boolean; lines?: string }> = {
     for (;;) {
       await new Promise((resolve) => setTimeout(resolve, 500));
       const size = await logSize(log);
+      // Trimmed under us (a log is kept to its cap): carry on from its new end.
+      if (size < offset) offset = size;
       if (size > offset) {
         await new Promise<void>((resolve, reject) => {
           createReadStream(log, { start: offset, end: size - 1 })
