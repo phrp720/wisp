@@ -25,6 +25,20 @@ Paths are relative to the file, so it works on everyone's machine. Commit it. Th
 `$schema` line (which `wisp init` adds) makes your editor autocomplete and check the file as
 you type; `wisp check` catches the rest.
 
+## wisp init
+
+You rarely write it by hand. `wisp init` reads the project, at its root and one folder down
+(a `backend/`, a `frontend/`), suggests bolts, and asks which to keep
+(`--only "Check,Work on api"` from a script):
+
+- **JavaScript:** `package.json` scripts (monorepos too), Deno tasks
+- **Python:** Django, FastAPI, Flask; pytest, ruff, mypy, tox, nox; poe and pdm tasks; run
+  through `uv`, `poetry` or `pipenv` when the project uses one
+- **Java and Kotlin:** Gradle and Maven, Spring Boot, through `./gradlew` or `./mvnw`
+- **Go, Rust, Ruby on Rails, PHP and Laravel, .NET, Elixir and Phoenix**
+- **Anything:** `docker compose` services, a `Makefile`, `justfile`, `mise`, `Taskfile`, a
+  `Procfile`
+
 ## Steps
 
 | Step | Example | |

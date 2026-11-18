@@ -17,3 +17,6 @@ cli/LICENSE
 website/.vitepress/cache/
 website/.vitepress/dist/
 website/.wrangler/
+
+# Your own additions to .wisp.json, never shared
+.wisp.local.json

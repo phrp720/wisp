@@ -93,11 +93,7 @@ const more = [
       <div>
         <p class="eyebrow">One file</p>
         <h2>Describe the job once.<br />Start it with one word.</h2>
-        <p class="lead">
-          A <b>bolt</b> is a named list of things to start, in order: a database, a server, a folder,
-          a page. It lives in a <code>.wisp.json</code> next to your code, so the whole team gets it.
-        </p>
-        <p class="lead">Never written one? <code>wisp init</code> reads your <code>package.json</code>, compose files, Makefile or Procfile and writes it for you.</p>
+        <p class="lead">A <b>bolt</b> lists what to start, in order, in a <code>.wisp.json</code> the whole team shares. <code>wisp init</code> writes it from what your project already has.</p>
         <a class="more" href="/docs/file">The file, step by step →</a>
       </div>
       <pre class="code"><span class="dim">{</span>
@@ -119,11 +115,7 @@ const more = [
       <div>
         <p class="eyebrow">The TUI</p>
         <h2>Everything you run,<br />on one screen.</h2>
-        <p class="lead">
-          Type <code>wisp</code> for a full-screen view, like htop for your projects. Every bolt as a
-          pipeline, every server and container with its live output, and a word when something
-          crashes. Edit bolts through forms; you never have to touch JSON.
-        </p>
+        <p class="lead">Type <code>wisp</code>: every bolt, every server and container with its live output, and a word when something crashes. No JSON to touch.</p>
         <a class="more" href="/docs/tui">Tour the TUI →</a>
       </div>
       <div class="screen tui" aria-label="Wisp's Running tab">
@@ -154,11 +146,7 @@ const more = [
       <div>
         <p class="eyebrow">Jobs and history</p>
         <h2>A small CI,<br />on your laptop.</h2>
-        <p class="lead">
-          Mark a bolt as a <b>job</b> (Check, Build, Release) and it runs to the end, stopping at
-          the first failure. Every run is kept like a CI run: numbered, with its branch, commit,
-          each step's time and output. Retry only what failed.
-        </p>
+        <p class="lead">A <b>job</b> stops at the first failure, and every run is kept like a CI run, with its commit and each step's output. Retry only what failed.</p>
         <a class="more" href="/docs/jobs">Jobs and history →</a>
       </div>
       <pre class="screen"><span class="bad">✗</span> <b>Check #7</b>   <span class="dim">main @ a1b2c3d  “fix cart total”  Failed  9.8s</span>
@@ -180,13 +168,7 @@ const more = [
           <h2>Nothing runs<br />until you say so.</h2>
         </div>
         <div>
-          <p class="lead">
-            A cloned repository could put anything in its <code>.wisp.json</code>. So its commands,
-            and any file or app that would execute when opened, wait until you've read exactly what
-            they are and allowed that file. Change one character, a <code>git pull</code> included,
-            and it asks again.
-          </p>
-          <p class="lead">Coding agents can write and run bolts with Wisp, but they can't approve their own commands. That stays yours.</p>
+          <p class="lead">A cloned repository's commands wait until you've read them and allowed that exact file. Any change asks again, and AI agents can't approve their own.</p>
           <a class="more" href="/docs/trust">How trust works →</a>
         </div>
       </div>

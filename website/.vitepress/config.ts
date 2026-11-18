@@ -69,7 +69,6 @@ export default defineConfig({
           text: "Start here",
           items: [
             { text: "Getting started", link: "/docs/getting-started" },
-            { text: "Why Wisp", link: "/docs/why" },
           ],
         },
         {
