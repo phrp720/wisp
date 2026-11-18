@@ -5,7 +5,8 @@ import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { interpret } from "./project.js";
-import { draftProject, parseCompose, portFrom, writeProjectDraft } from "./scaffold.js";
+import { detectEcosystems, section } from "./ecosystems.js";
+import { chooseBolts, draftProject, parseCompose, portFrom, writeProjectDraft } from "./scaffold.js";
 
 let dir: string;
 
@@ -196,5 +197,59 @@ describe("colours", () => {
     const all = pickColors(PALETTE.length + 6);
     expect(new Set(all).size).toBe(all.length);
     expect(pickColor(PALETTE.slice(1), () => 0)).toBe(PALETTE[0]);
+  });
+});
+
+describe("more than package.json", () => {
+  let root: string;
+  beforeEach(async () => {
+    root = await realpath(await mkdtemp(join(tmpdir(), "wisp-eco-")));
+  });
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+  const file = async (path: string, text = "") => {
+    await mkdir(dirname(join(root, path)), { recursive: true });
+    await writeFile(join(root, path), text);
+  };
+
+  it("finds a Django backend one folder down, run through its own uv", async () => {
+    await file("backend/manage.py");
+    await file("backend/uv.lock");
+    await file("backend/pyproject.toml", '[project]\ndependencies = ["django", "pytest", "ruff"]\n');
+    const found = await detectEcosystems(root);
+    expect(found.apps).toEqual([{ name: "backend", dir: "backend", command: "uv run python manage.py runserver", port: 8000 }]);
+    expect(found.checks.map((check) => [check.run, check.cwd])).toEqual([
+      ["uv run ruff check .", "backend"],
+      ["uv run pytest", "backend"],
+    ]);
+  });
+
+  it("finds Spring Boot through the Gradle wrapper, and Go, Rails and Phoenix by their files", async () => {
+    await file("api/build.gradle", 'plugins { id "org.springframework.boot" }');
+    await file("api/gradlew");
+    await file("worker/go.mod", "module x");
+    await file("worker/main.go");
+    await file("web/bin/rails");
+    await file("live/mix.exs", "{:phoenix, \"~> 1.7\"}");
+    const commands = (await detectEcosystems(root)).apps.map((app) => `${app.dir}: ${app.command}`);
+    expect(commands).toEqual(["api: ./gradlew bootRun", "live: mix phx.server", "web: bin/rails server", "worker: go run ."]);
+  });
+
+  it("reads a TOML table's keys, for poe and pdm tasks", () => {
+    expect(section('[tool.poe.tasks]\ndev = "uvicorn app:app"\ntest = "pytest"\n\n[tool.other]\nx = 1\n', "tool.poe.tasks")).toEqual(["dev", "test"]);
+  });
+
+  it("keeps only the bolts chosen, and a kept one stops asking for one left out", () => {
+    const all = [
+      { label: "Services", targets: [{ compose: "compose.yaml" }] },
+      { label: "Work on api", targets: [{ bolt: "Services" }, { run: "pnpm dev" }] },
+      { label: "Check", job: true, targets: [{ run: "pnpm test" }] },
+    ];
+    expect(chooseBolts(all, ["work on api", "Check"])).toEqual([
+      { label: "Work on api", targets: [{ run: "pnpm dev" }] },
+      { label: "Check", job: true, targets: [{ run: "pnpm test" }] },
+    ]);
+    expect(chooseBolts(all)).toBe(all);
   });
 });

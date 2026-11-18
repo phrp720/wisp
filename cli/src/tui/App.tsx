@@ -18,6 +18,7 @@ import { HistoryScreen } from "./history.js";
 import { Empty, SearchPanel, WorkspaceList, WorkspacePanel } from "./home.js";
 import { type Library, ordered, search, type Services } from "./model.js";
 import { CheckPanel, HelpPanel, RunPanel } from "./panels.js";
+import { SettingsScreen } from "./settings.js";
 import { filterPanes, groupPanes, paneKey, PanesPanel } from "./running.js";
 import { type Activity, clamp, type Focus, markFirst, needsTrust, type Notice, type PaneItem, type RunState, SELF_DRIVEN, useLatest, useTerminalSize, type View, visibleRuns } from "./state.js";
 import { spell } from "./spells.js";
@@ -643,7 +644,8 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
       if (key.pageDown || input === "d") return setView({ ...view, scroll: Math.max(0, view.scroll - page) });
       if (input === "G" || input === "g") return setView({ ...view, scroll: 0 });
       if (input === "f") return setView({ ...view, full: !view.full });
-      if (input === "a") return setView({ ...rest, all: !view.all, index: 0 });
+      // o: the old ones too, the runs that stopped.
+      if (input === "o") return setView({ ...rest, all: !view.all, index: 0 });
       if (input === "r") {
         const run = item?.type === "run" ? item.run : undefined;
         if (!run) return;
@@ -719,6 +721,7 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
     if (input === "a") return setView({ kind: "new-bolt", file: current.workspace.file, workspace: current.workspace.name });
     if (input === "D" && bolt) return setView({ kind: "delete-bolt", file: current.workspace.file, bolt: bolt.label });
     if (input === "v" && bolt) return setView({ kind: "view", file: current.workspace.file, bolt: bolt.label });
+    if (input === "s") return setView({ kind: "settings" });
     if ((input === "K" || input === "J") && bolt && focus === "bolts") {
       const by = input === "K" ? -1 : 1;
       savedAt.current = Date.now();
@@ -789,15 +792,15 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
           suggestion={view.suggestion}
           glyphs={glyphs}
           height={bodyHeight}
-          onAnswer={async (yes) => {
-            if (!yes) {
+          onAnswer={async (chosen) => {
+            if (!chosen) {
               setView({ kind: "browse" });
               setMessage("Not now — press a in a workspace to add bolts by hand, or run `wisp init` later");
               return;
             }
             try {
               savedAt.current = Date.now();
-              const file = await services.setUp(view.suggestion);
+              const file = await services.setUp(view.suggestion, chosen);
               const next = await reload(file);
               const read = next ? ordered(next).find((entry) => entry.workspace.file === file) : undefined;
               setFocus("bolts");
@@ -911,6 +914,8 @@ export function App({ services, glyphs = defaultGlyphs(), size }: AppProps) {
           }}
           onEdit={() => setView({ kind: "editor", file: view.file, bolt: view.bolt })}
         />
+      ) : view.kind === "settings" ? (
+        <SettingsScreen services={services} glyphs={glyphs} height={bodyHeight} onClose={() => setView({ kind: "browse" })} onSaved={(text) => say(text)} />
       ) : view.kind === "stop-bolt" ? (
         <Box flexDirection="column" height={bodyHeight} borderStyle={glyphs.border} borderColor={TONE.busy} paddingX={1}>
           <Text bold>{`Stop ${view.bolt}?`}</Text>

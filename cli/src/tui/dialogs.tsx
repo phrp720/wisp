@@ -1,6 +1,7 @@
 /** Questions that need an answer before going on: trusting a file, setting a folder up. */
 
-import { Box, Text } from "ink";
+import { Box, Text, useInput } from "ink";
+import { useRef, useState } from "react";
 
 import { tildify } from "../core/paths.js";
 import type { WorkspaceRead } from "../core/types.js";
@@ -35,30 +36,90 @@ export function TrustPanel({ read, glyphs, height, onAnswer }: { read: Workspace
 }
 
 /** "I looked at this folder, and here's what I'd set up" — the first thing a new project sees. */
-export function SetupPanel({ suggestion, glyphs, height, onAnswer }: { suggestion: SetupSuggestion; glyphs: Glyphs; height: number; onAnswer: (yes: boolean) => void }) {
+/**
+ * "I looked at this folder, and here's what I'd set up" — the first thing a new project sees.
+ * Every suggested bolt is a box to tick, all ticked to start: keep what you want, untick the
+ * rest. A kept bolt that needed an unticked one simply stops asking for it.
+ */
+export function SetupPanel({ suggestion, glyphs, height, onAnswer }: { suggestion: SetupSuggestion; glyphs: Glyphs; height: number; onAnswer: (chosen: string[] | undefined) => void }) {
+  const [index, setIndexState] = useState(0);
+  const indexRef = useRef(0);
+  const [ticked, setTickedState] = useState<Set<string>>(() => new Set(suggestion.bolts.map((bolt) => bolt.label)));
+  const tickedRef = useRef(ticked);
+  const answered = useRef(false);
+  const setIndex = (next: number) => {
+    indexRef.current = next;
+    setIndexState(next);
+  };
+  const toggle = (label: string) => {
+    const next = new Set(tickedRef.current);
+    if (next.has(label)) next.delete(label);
+    else next.add(label);
+    tickedRef.current = next;
+    setTickedState(next);
+  };
+  // The answer lands after the key is done, so the screen behind never hears the same ⏎.
+  const answer = (chosen: string[] | undefined) => {
+    if (answered.current) return;
+    answered.current = true;
+    setTimeout(() => onAnswer(chosen), 0);
+  };
+
+  useInput((input, key) => {
+    if (answered.current) return;
+    if (key.escape || input === "q" || input === "n") return answer(undefined);
+    if (key.upArrow || input === "k") return setIndex(Math.max(0, indexRef.current - 1));
+    if (key.downArrow || input === "j") return setIndex(Math.min(suggestion.bolts.length - 1, indexRef.current + 1));
+    if (input === " ") {
+      const bolt = suggestion.bolts[indexRef.current];
+      if (bolt) toggle(bolt.label);
+      return;
+    }
+    if (input === "a") {
+      const all = tickedRef.current.size === suggestion.bolts.length;
+      const next = new Set(all ? [] : suggestion.bolts.map((bolt) => bolt.label));
+      tickedRef.current = next;
+      return setTickedState(next);
+    }
+    if (key.return) {
+      const chosen = suggestion.bolts.map((bolt) => bolt.label).filter((label) => tickedRef.current.has(label));
+      if (chosen.length > 0) answer(chosen);
+    }
+  });
+
+  const count = ticked.size;
   return (
     <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor={TONE.accent} paddingX={1} overflow="hidden">
-      <Text bold>{`Set up ${suggestion.name}?`}</Text>
+      <Text bold color={TONE.accent}>{`Set up ${suggestion.name}?`}</Text>
       <Text dimColor wrap="truncate-start">{tildify(suggestion.dir)}</Text>
       <Text> </Text>
       <Text>I looked at this folder and found:</Text>
       {suggestion.found.map((line) => (
-        <Text key={line} wrap="truncate-end">{`  ${glyphs.dot} ${line}`}</Text>
+        <Text key={line} wrap="truncate-end" dimColor>{`  ${glyphs.dot} ${line}`}</Text>
       ))}
       <Text> </Text>
-      <Text>So you could run:</Text>
-      {suggestion.bolts.map((bolt) => (
-        <Box key={bolt.label} flexDirection="column">
-          <Text wrap="truncate-end">
-            <Text bold color={TONE.accent}>{`  ${glyphs.bolt}${bolt.label}`}</Text>
-            {bolt.job ? <Text color="cyan"> — a job: stops at the first failure</Text> : null}
-          </Text>
-          <Text wrap="truncate-end" dimColor>{`     ${(bolt.job ? bolt.steps.map((step) => step.replace(/^start /, "run ")) : bolt.steps).join(", then ")}`}</Text>
-        </Box>
-      ))}
+      <Text>So you could run these. Keep the ones you want:</Text>
+      {suggestion.bolts.map((bolt, at) => {
+        const on = ticked.has(bolt.label);
+        const selected = at === index;
+        return (
+          <Box key={bolt.label} flexDirection="column">
+            <Text wrap="truncate-end">
+              <Text color={TONE.accent}>{selected ? `${glyphs.pointer} ` : "  "}</Text>
+              <Text color={on ? TONE.accent : undefined} dimColor={!on}>{on ? "[✓] " : "[ ] "}</Text>
+              <Text bold={selected} color={on ? (selected ? TONE.accent : undefined) : undefined} dimColor={!on}>{`${glyphs.bolt}${bolt.label}`}</Text>
+              {bolt.job ? <Text color={TONE.job} dimColor={!on}> · a job: stops at the first failure</Text> : null}
+            </Text>
+            <Text wrap="truncate-end" dimColor>{`        ${(bolt.job ? bolt.steps.map((step) => step.replace(/^start /, "run ")) : bolt.steps).join(", then ")}`}</Text>
+          </Box>
+        );
+      })}
       <Box flexGrow={1} />
-      <Text dimColor>It's saved as .wisp.json in this folder — you can change all of it afterwards with e.</Text>
-      <Choice yes="Set it up" no="Not now" onAnswer={onAnswer} />
+      <Text dimColor>It's saved as .wisp.json in this folder, and you can change all of it afterwards with e.</Text>
+      <Text>
+        <Text color={count > 0 ? "black" : undefined} backgroundColor={count > 0 ? TONE.accent : undefined} bold dimColor={count === 0}>{count > 0 ? ` ▸ Set up ${count === suggestion.bolts.length ? "all" : count} ${count === 1 ? "bolt" : "bolts"} ` : " Tick at least one "}</Text>
+        <Text dimColor>{"   space tick or untick · a all or none · ⏎ set up · esc not now"}</Text>
+      </Text>
     </Box>
   );
 }

@@ -58,13 +58,30 @@ export interface Services {
   /** What Wisp would set up in the folder it was opened in, if that folder has none. */
   suggestSetup(): Promise<SetupSuggestion | undefined>;
   /** Write the suggested file. Returns its path. */
-  setUp(suggestion: SetupSuggestion): Promise<string>;
+  setUp(suggestion: SetupSuggestion, chosen?: string[]): Promise<string>;
 
   /** Call `onChange` when one of these workspace files changes on disk. */
   watch(files: string[], onChange: (file: string) => void): () => void;
 
   /** Changing workspace files through forms. */
   editing: Editing;
+
+  /** Your own choices on this machine: what opens folders and files, where commands run. */
+  settings: SettingsService;
+}
+
+export interface OpenWith {
+  folder?: string;
+  file?: string;
+  terminal?: string;
+}
+
+export interface SettingsService {
+  get(): Promise<OpenWith>;
+  /** A blank value goes back to the default. */
+  set(change: OpenWith): Promise<OpenWith>;
+  /** What can be chosen here: installed editors, and the terminals Wisp can drive. */
+  choices(): { editors: { label: string; value: string }[]; terminals: string[] };
 }
 
 /** The edits the TUI's forms make — the core's, passed in so a test can watch them. */

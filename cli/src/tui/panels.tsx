@@ -165,6 +165,7 @@ export function HelpPanel({ glyphs, height }: { glyphs: Glyphs; height: number }
         ["K  J", "move the selected bolt up · down"],
         ["N", "a new workspace of your own"],
         ["E", "open the file itself in your text editor"],
+        ["s", "settings: your editor, and where commands run"],
       ],
     ],
     [

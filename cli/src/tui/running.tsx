@@ -205,7 +205,7 @@ export function PanesPanel(props: {
             {all ? "Running and stopped" : "Running"}
           </Text>
           {typing || query ? <SearchLine query={query} typing={typing} /> : null}
-          {items.length === 0 ? <Text dimColor>{query ? `Nothing matches “${query}”. esc clears it.` : all ? "Nothing has run yet." : "Nothing is running. Run a bolt with ⏎, or a shows stopped ones."}</Text> : null}
+          {items.length === 0 ? <Text dimColor>{query ? `Nothing matches “${query}”. esc clears it.` : all ? "Nothing has run yet." : "Nothing is running right now. Run a bolt from the Bolts tab (1), or press \"o\" to show the ones that stopped."}</Text> : null}
           {dockerError ? <Text color="yellow" wrap="wrap">{`Docker: ${dockerError}`}</Text> : null}
           {windowed(rows, Math.max(0, rows.findIndex((row) => row.key === (item ? paneKey(item) : ""))), height - (typing || query ? 4 : 3) - logRoom).items.map((row) => (
             <Box key={row.key}>{row.node}</Box>

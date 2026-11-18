@@ -3,7 +3,8 @@ import { watch as watchPath, type FSWatcher } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { basename, dirname } from "node:path";
 
-import { recordProject } from "../core/config.js";
+import { getOpenWithDefaults, recordProject, setOpenWithDefaults } from "../core/config.js";
+import { installedEditors } from "../core/editors.js";
 import { detectEnvironment } from "../core/environment.js";
 import { listRuns, restartRun, stopRun, tail } from "../core/processes.js";
 import { containerAction, containerLogs, containerStats, composeContainers, DockerUnavailable } from "../core/docker.js";
@@ -19,6 +20,8 @@ import { everything } from "../cli/lib/context.js";
 import { describeStep, type Services } from "./model.js";
 import { composeTarget } from "../core/switch.js";
 import * as edit from "../core/edit.js";
+import { getPlatform } from "../platform/index.js";
+import { MULTIPLEXERS } from "../platform/terminals.js";
 
 /** Leave and re-enter the alternate screen, as htop does around a shell-out. */
 export const ENTER_SCREEN = "\u001B[?1049h\u001B[H";
@@ -132,8 +135,8 @@ export function realServices(hooks: { suspend: () => void; resume: () => void })
         contents: draft.contents,
       };
     },
-    async setUp(suggestion) {
-      const draft = await draftProject(suggestion.dir);
+    async setUp(suggestion, chosen) {
+      const draft = await draftProject(suggestion.dir, chosen ? { only: chosen } : {});
       return writeProjectDraft(draft);
     },
 
@@ -161,6 +164,16 @@ export function realServices(hooks: { suspend: () => void; resume: () => void })
         for (const watcher of watchers) watcher.close();
         for (const timer of timers.values()) clearTimeout(timer);
       };
+    },
+
+    settings: {
+      get: () => getOpenWithDefaults(),
+      set: (change) => setOpenWithDefaults(change),
+      choices: () => {
+        const environment = detectEnvironment();
+        const platform = getPlatform(environment.os);
+        return { editors: installedEditors(environment.os), terminals: [...platform.knownTerminals(), ...MULTIPLEXERS] };
+      },
     },
 
     editing: {

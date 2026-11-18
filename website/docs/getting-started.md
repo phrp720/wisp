@@ -30,11 +30,20 @@ cd ~/dev/acme
 wisp init
 ```
 
-`wisp init` doesn't start you from a blank file. It reads what the project already says
-about running itself: `package.json` scripts (monorepos too), `docker compose` services and
-their ports, a `Makefile`, `justfile`, `mise` or `Taskfile`, a `Procfile`. Then it writes the
-bolts you would have written: start the services, wait for the database, start each app,
-wait for it to answer, open it. Plus a **Check** job from your lint and test scripts.
+`wisp init` doesn't make you start from a blank file. It reads what the project already
+says about running itself, at its root and one folder down (a `backend/`, a `frontend/`):
+
+- **JavaScript:** `package.json` scripts (monorepos too), Deno tasks
+- **Python:** Django, FastAPI and Flask servers; pytest, ruff, mypy, tox, nox; poe and pdm
+  tasks, run through `uv`, `poetry` or `pipenv` when the project uses one
+- **Java and Kotlin:** Gradle and Maven, Spring Boot, through `./gradlew` or `./mvnw`
+- **Go, Rust, Ruby on Rails, PHP and Laravel, .NET, Elixir and Phoenix**
+- **Anything:** `docker compose` services and their ports, a `Makefile`, `justfile`,
+  `mise` or `Taskfile`, a `Procfile`
+
+Then it suggests the bolts you'd have written: start the services, wait for the database,
+start each app, wait for it to answer, open it, plus a **Check** job from your lint and test
+commands. You keep the ones you want: it asks, or pass `--only "Check,Work on api"`.
 
 Then allow it to run commands (Wisp asks once per file, see [Trust](./trust)):
 

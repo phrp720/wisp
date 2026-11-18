@@ -129,7 +129,7 @@ under "Runs code" and ask them to approve it.**
 | \`wisp <bolt>\` | run a bolt of this project by any distinctive word of its label |
 | \`wisp use <file> <bolt>\` | run a bolt of a workspace file by path, for cron and scripts |
 | \`wisp use <workspace> <bolt>\` | run a bolt of any known workspace |
-| \`wisp init [--print] [--yes]\` | write a \`.wisp.json\` from what the project has: package.json scripts, docker compose, Makefile, justfile, mise, Taskfile, Procfile |
+| \`wisp init [--print] [--yes] [--only <bolts>]\` | write a \`.wisp.json\` from what the project has, at its root and one folder down: package.json and Deno; Python (Django, FastAPI, Flask, pytest, ruff, uv, poetry); Gradle and Maven (Spring Boot); Go; Rust; Rails; PHP and Laravel; .NET; Elixir and Phoenix; docker compose, Makefile, justfile, mise, Taskfile, Procfile. \`--only "Check,Work on api"\` keeps just those of the suggested bolts |
 | \`wisp check [path] [--json]\` | validate a file, or the one in a folder: errors, warnings, what would run |
 | \`wisp show [workspace] [--json]\` | everything a workspace holds |
 | \`wisp list [--json]\` | every known workspace |
