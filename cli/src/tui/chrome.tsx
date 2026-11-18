@@ -58,19 +58,20 @@ function TabLabel({ number, title, on }: { number: string; title: string; on: bo
 
 export function Footer({ view, message, notice }: { view: View; message?: string | undefined; notice?: Notice | undefined }) {
   const keys: Record<View["kind"], string> = {
-    browse: "⏎ run · v view · e edit · a add · x stop · / search · 1 2 3 tabs · ? keys · q quit",
+    browse: "⏎ run · v view · e edit · a add · x stop · / search · 1 2 3 tabs · s settings · ? keys · q quit",
     editor: "",
     "new-bolt": "",
     "new-workspace": "",
     "delete-bolt": "",
     view: "",
     "stop-bolt": "",
+    settings: "",
     setup: "",
     search: "type to search · ↑↓ choose · ⏎ run · esc back",
     run: "",
     check: "↑↓ scroll · t trust · esc back",
     trust: "",
-    processes: "↑↓ choose · u d scroll · G newest · x stop · r restart · f full · / search · a stopped too · esc",
+    processes: "↑↓ choose · u d scroll · G newest · x stop · r restart · f full · / search · o show stopped · esc",
     history: "",
     help: "any key to go back",
   };

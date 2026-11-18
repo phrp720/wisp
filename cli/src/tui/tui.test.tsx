@@ -45,6 +45,11 @@ function services(overrides: Partial<Services> = {}, library: Library = { reads:
     suggestSetup: async () => undefined,
     setUp: async () => "",
     watch: () => () => undefined,
+    settings: {
+      get: async () => ({}),
+      set: async (change) => change,
+      choices: () => ({ editors: [{ label: "Visual Studio Code", value: "Visual Studio Code" }], terminals: ["Terminal", "Ghostty", "tmux"] }),
+    },
     editing: {
       bolt: async (_file, bolt) => ({ label: bolt, targets: [] }),
       addBolt: async () => undefined,
@@ -276,6 +281,49 @@ describe("the TUI", () => {
     expect(app.lastFrame()).toMatch(/ACTIVITY[\s\S]*\d\d:\d\d Work on api is up/);
   });
 
+  it("changes your own settings from a screen of their own, with s", async () => {
+    const set = vi.fn(async (change: Record<string, string>) => change);
+    const app = await open(services({ settings: { get: async () => ({}), set, choices: () => ({ editors: [{ label: "Visual Studio Code", value: "Visual Studio Code" }], terminals: ["Ghostty", "tmux"] }) } }));
+    await tick();
+    app.stdin.write("s");
+    await tick();
+    await tick();
+    expect(app.lastFrame()).toMatch(/Folders open in +the system default/);
+    expect(app.lastFrame()).toContain("in the background, watched in Wisp");
+    app.stdin.write("\r"); // Folders
+    await tick();
+    expect(app.lastFrame()).toContain("Visual Studio Code");
+    app.stdin.write("2"); // the first editor, after "the system default"
+    await tick();
+    await tick();
+    expect(set).toHaveBeenCalledWith({ folder: "Visual Studio Code" });
+  });
+
+  it("sets up only the suggested bolts left ticked", async () => {
+    const suggestion = {
+      dir: "/dev/shop",
+      name: "Shop",
+      found: ["package.json pnpm dev"],
+      bolts: [
+        { label: "Services", job: false, steps: ["start Docker services: postgres"] },
+        { label: "Work on Shop", job: false, steps: ["start Shop dev"] },
+        { label: "Check", job: true, steps: ["run test"] },
+      ],
+      contents: "{}",
+    };
+    const setUp = vi.fn(async () => infra.workspace.file);
+    const app = await open(services({ suggestSetup: async () => suggestion, setUp }, { reads: [infra], unreadable: [] }));
+    await tick();
+    expect(app.lastFrame()).toMatch(/\[✓\] ⚡ Services[\s\S]*\[✓\] ⚡ Work on Shop[\s\S]*\[✓\] ⚡ Check/);
+    app.stdin.write(" "); // untick Services
+    await tick();
+    expect(app.lastFrame()).toContain("Set up 2 bolts");
+    app.stdin.write("\r");
+    await tick();
+    await tick();
+    expect(setUp).toHaveBeenCalledWith(suggestion, ["Work on Shop", "Check"]);
+  });
+
   it("says so when there are no workspaces at all", async () => {
     const frame = (await open(services({}, { reads: [], unreadable: [] }))).lastFrame() ?? "";
     expect(frame).toContain("No workspaces yet");
@@ -501,7 +549,7 @@ describe("doing everything without JSON", () => {
     app.stdin.write("\r");
     await tick();
     await tick();
-    expect(setUp).toHaveBeenCalledWith(suggestion);
+    expect(setUp).toHaveBeenCalledWith(suggestion, ["Work on Shop"]);
     expect(app.lastFrame()).toContain("Trust infra?");
   });
 

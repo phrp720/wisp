@@ -131,12 +131,24 @@ export function underTerminal(inner: Invocation, os: OS = currentOS(), env: Node
   const script = which("script", env);
   if (!script) return inner;
 
-  const sized: Invocation = { file: "/bin/sh", args: ["-c", 'stty cols 160 rows 50 2>/dev/null; exec "$@"', "sh", inner.file, ...inner.args] };
+  // Inside the terminal: its size first, then the command's input swapped for a quiet one
+  // (below), so its output still goes through the terminal and keeps its colours.
+  const sized: Invocation = { file: "/bin/sh", args: ["-c", `stty cols 160 rows 50 2>/dev/null; ${QUIET_INPUT} exec "$@"`, "sh", inner.file, ...inner.args] };
   // BSD's `script` takes the command as arguments; util-linux's as one string, with -e to
   // pass its exit code on and -f to write as it goes.
   if (os === "darwin") return { file: script, args: ["-q", "/dev/null", sized.file, ...sized.args] };
   return { file: script, args: ["-qfec", posixCommandLine(sized), "/dev/null"] };
 }
+
+/**
+ * A background run has no input. Inside `script`, the command would read end-of-input at
+ * once, and a dev server that listens for keys (Vite's "press h to show help") takes that
+ * as the terminal closing and quits. So the command reads from a FIFO it holds open itself,
+ * read and write: nothing ever arrives, it never ends, and it closes with the command,
+ * leaving nothing behind. A command that checks sees no terminal to read keys from, and
+ * does not listen for them at all. Without a FIFO, the input stays as it was.
+ */
+const QUIET_INPUT = 'if f=$(mktemp -u "${TMPDIR:-/tmp}/wisp-in.XXXXXX") && mkfifo "$f" 2>/dev/null; then exec 0<>"$f"; rm -f "$f"; fi;';
 
 /** How many times in a row a command is brought back before Wisp gives up on it. */
 export const MAX_RESTARTS = 10;

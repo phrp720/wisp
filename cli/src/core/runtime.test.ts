@@ -138,6 +138,17 @@ describe("background runs", () => {
     expect(matchRun("cccc", runs).match?.label).toBe("db");
     expect(matchRun("d", runs).candidates).toHaveLength(2);
   });
+
+  it("have long ids, like Docker's, named by any unique start of one", () => {
+    const runs = [
+      { id: "3f2a1b9c0d4e", label: "web", alive: true },
+      { id: "3f9e77aa0123", label: "api", alive: true },
+    ] as RunStatus[];
+    expect(matchRun("3f2a", runs).match?.label).toBe("web");
+    expect(matchRun("3f9", runs).match?.label).toBe("api");
+    // Too short to tell apart: not a guess.
+    expect(matchRun("3f", runs).match).toBeUndefined();
+  });
 });
 
 describe("matchWorkspace", () => {

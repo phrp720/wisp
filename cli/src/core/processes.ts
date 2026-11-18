@@ -64,8 +64,9 @@ function logsDir(): string {
   return join(stateDir(), "logs");
 }
 
+/** Twelve hex characters, like Docker's short container ids; any unique start of one names it. */
 export function newRunId(): string {
-  return randomBytes(2).toString("hex");
+  return randomBytes(6).toString("hex");
 }
 
 /** Where a window run's shell writes its PID. */
@@ -97,6 +98,11 @@ export function matchRun(query: string, runs: RunStatus[]): { match?: RunStatus;
   const needle = query.trim().toLowerCase();
   const byId = runs.find((run) => run.id === needle);
   if (byId) return { match: byId, candidates: [byId] };
+  // The start of an id, as Docker takes one: enough of it to be the only one.
+  if (/^[0-9a-f]{3,}$/.test(needle)) {
+    const started = runs.filter((run) => run.id.startsWith(needle));
+    if (started.length === 1) return { match: started[0] as RunStatus, candidates: started };
+  }
 
   for (const pool of [runs.filter((run) => run.alive), runs]) {
     const exact = pool.filter((run) => run.label.toLowerCase() === needle);

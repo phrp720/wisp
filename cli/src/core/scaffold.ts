@@ -7,6 +7,7 @@ import { pickColors } from "./colors.js";
 import { WispError } from "./errors.js";
 import { expandHome } from "./paths.js";
 import { PROJECT_FILE, PROJECT_SCHEMA_URL } from "./project.js";
+import { detectEcosystems } from "./ecosystems.js";
 
 const run = promisify(execFile);
 
@@ -42,6 +43,8 @@ export interface Service {
 export interface Check {
   label: string;
   run: string;
+  /** Where it runs, relative to the project, when not at its root. */
+  cwd?: string;
 }
 
 export interface Detected {
@@ -68,10 +71,22 @@ export interface Detected {
  * without anyone writing a line. The guesses are the ones a person would make from the
  * same files.
  */
-export async function draftProject(from: string = process.cwd()): Promise<ProjectDraft> {
+export async function draftProject(from: string = process.cwd(), options: { only?: string[] } = {}): Promise<ProjectDraft> {
   const root = resolve(expandHome(from));
   const detected = await detect(root);
-  return { file: join(root, PROJECT_FILE), contents: format(detected), detected };
+  return { file: join(root, PROJECT_FILE), contents: format(detected, options.only), detected };
+}
+
+/**
+ * Only the bolts chosen, by name. A kept bolt that needed one left out no longer asks for
+ * it: "Work on api" without "Services" just starts the api.
+ */
+export function chooseBolts(all: DraftBolt[], only?: string[]): DraftBolt[] {
+  if (!only) return all;
+  const wanted = new Set(only.map((name) => name.trim().toLowerCase()));
+  const kept = all.filter((bolt) => wanted.has(bolt.label.toLowerCase()));
+  const names = new Set(kept.map((bolt) => bolt.label));
+  return kept.map((bolt) => ({ ...bolt, targets: bolt.targets.filter((step) => typeof step === "string" || typeof step["bolt"] !== "string" || names.has(step["bolt"])) }));
 }
 
 /**
@@ -88,7 +103,7 @@ export async function writeProjectDraft(draft: ProjectDraft, overwrite = false):
 }
 
 export async function detect(root: string): Promise<Detected> {
-  const [pkg, remote, manager, compose, tasks, procfile, folders] = await Promise.all([
+  const [pkg, remote, manager, compose, tasks, procfile, folders, eco] = await Promise.all([
     readJsonFile(join(root, "package.json")),
     gitRemote(root),
     packageManager(root),
@@ -96,6 +111,7 @@ export async function detect(root: string): Promise<Detected> {
     readTasks(root),
     readProcfile(root),
     codeFolders(root),
+    detectEcosystems(root),
   ]);
 
   const sources: string[] = [];
@@ -112,11 +128,15 @@ export async function detect(root: string): Promise<Detected> {
   const apps: App[] = [];
   const rootScripts = scriptsOf(pkg);
 
-  // A monorepo's members, each with its own dev script, are the things you work on.
+  // A monorepo's members, each with its own dev script, are the things you work on; their
+  // own lint and test scripts belong in the Check job, run in their folder.
+  const memberChecks: Check[] = [];
   for (const member of await members(root)) {
     const memberPkg = await readJsonFile(join(root, member, "package.json"));
     const app = appFrom(memberPkg, member, pm);
     if (app) apps.push(app);
+    const scripts = scriptsOf(memberPkg);
+    for (const name of CHECK_NAMES) if (scripts[name] !== undefined) memberChecks.push({ label: name, run: runScript(pm, name), cwd: member });
   }
   if (apps.length > 0) sources.push(`${apps.length} package${apps.length === 1 ? "" : "s"} with a dev script`);
 
@@ -131,8 +151,8 @@ export async function detect(root: string): Promise<Detected> {
   }
 
   // No package to start, but a task runner that knows how.
-  if (apps.length === 0 && !everything) {
-    const dev = tasks.find((task) => DEV_NAMES.includes(task.name));
+  if (apps.length === 0 && !everything && eco.apps.length === 0) {
+    const dev = [...tasks, ...eco.tasks].find((task) => DEV_NAMES.includes(task.name));
     if (dev) {
       apps.push({ name: projectName(pkg, root), dir: "", command: dev.run });
       sources.push(`${dev.source} ${dev.name}`);
@@ -148,12 +168,19 @@ export async function detect(root: string): Promise<Detected> {
     sources.push(`${compose.file ?? "docker compose"} (${compose.services.map((service) => service.name).join(", ")})`);
   }
 
-  const checks = checksFrom(rootScripts, pm, tasks);
-  const cargo = await isFile(join(root, "Cargo.toml"));
-  const go = await isFile(join(root, "go.mod"));
-  if (checks.length === 0 && cargo) checks.push({ label: "test", run: "cargo test" });
-  if (checks.length === 0 && go) checks.push({ label: "test", run: "go test ./..." });
-  if (checks.length > 0) sources.push(`checks: ${checks.map((check) => check.label).join(", ")}`);
+  // Python, Java, Go, Rust, Ruby, PHP, .NET, Deno, Elixir: their servers and their checks.
+  for (const app of eco.apps) {
+    if (!apps.some((known) => known.dir === app.dir && known.command === app.command)) apps.push(app);
+  }
+  sources.push(...eco.sources);
+
+  const checks = checksFrom(rootScripts, pm, [...tasks, ...eco.tasks]);
+  // The root's own scripts usually run the members' already; theirs count only without it.
+  if (checks.length === 0) checks.push(...memberChecks);
+  for (const check of eco.checks) {
+    if (!checks.some((known) => known.run === check.run && (known.cwd ?? "") === (check.cwd ?? ""))) checks.push(check);
+  }
+  if (checks.length > 0) sources.push(`checks: ${checks.map((check) => (check.cwd ? `${check.label} (${check.cwd})` : check.label)).join(", ")}`);
 
   return {
     name: projectName(pkg, root),
@@ -239,6 +266,11 @@ async function members(root: string): Promise<string[]> {
     for (const child of await children(join(root, parent))) {
       if (await isFile(join(root, parent, child, "package.json"))) found.push(`${parent}/${child}`);
     }
+  }
+  // And any folder right under the root with its own package.json: `frontend/`, `web/`.
+  for (const child of await children(root)) {
+    if (["apps", "packages", "services", "node_modules"].includes(child)) continue;
+    if (await isFile(join(root, child, "package.json"))) found.push(child);
   }
   return found;
 }
@@ -475,7 +507,7 @@ function titleCase(value: string): string {
 }
 
 type Step = Record<string, unknown>;
-interface DraftBolt {
+export interface DraftBolt {
   label: string;
   color?: string;
   job?: boolean;
@@ -516,7 +548,7 @@ export function bolts(detected: Detected, random: () => number = Math.random): D
   }
 
   if (detected.checks.length > 0) {
-    out.push({ label: "Check", job: true, targets: detected.checks.map((check) => ({ run: check.run, label: check.label })) });
+    out.push({ label: "Check", job: true, targets: detected.checks.map((check) => ({ run: check.run, ...(check.cwd ? { cwd: check.cwd } : {}), label: check.cwd ? `${check.label} (${check.cwd})` : check.label })) });
   }
 
   // Nothing to run at all: the old, plain draft — a bolt per area, opening it with the repo.
@@ -543,14 +575,14 @@ function composeFileName(detected: Detected): string {
   return detected.compose?.file ?? "compose.yaml";
 }
 
-function format(detected: Detected): string {
+function format(detected: Detected, only?: string[]): string {
   return formatProjectFile([
     // First line of every generated file: it turns on autocomplete and inline validation
     // in any editor that reads JSON Schema.
     ["$schema", PROJECT_SCHEMA_URL],
     ["name", detected.name],
     ["links", detected.links],
-    ["bolts", bolts(detected)],
+    ["bolts", chooseBolts(bolts(detected), only)],
   ]);
 }
 

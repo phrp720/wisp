@@ -34,7 +34,8 @@ Along the top, one key each:
 - **`2` Running** (or `p`). What your bolts started, each bolt as a pipeline: what it waited
   for, what it opened, and what is running, with its live output on the right. Commands and
   Docker containers sit side by side, with health and ports. An activity log underneath keeps
-  what happened: what you ran and stopped, what crashed, what came back.
+  what happened: what you ran and stopped, what crashed, what came back. `o` shows the
+  ones that stopped too.
 - **`3` History** (or `h`). Every run, like a CI: numbered per bolt, with the branch and
   commit it ran on. Open one for its summary and each step's time and output.
 
@@ -76,4 +77,5 @@ or allows something starts on "no".
 | `t` | review and allow what a file would run |
 | `e` · `a` · `D` | edit · add · delete a bolt |
 | `u` · `d` · `G` | on Running and History: scroll output up · down · back to the newest |
+| `s` | settings: what opens folders and files, and where commands run |
 | `?` · `q` | every key · quit |

@@ -52,8 +52,9 @@ function historyFile(): string {
   return join(stateDir(), "history.json");
 }
 
+/** Twelve hex characters, like a run's; any unique start of one names it. */
 export function newHistoryId(): string {
-  return randomBytes(3).toString("hex");
+  return randomBytes(6).toString("hex");
 }
 
 /** Where step `index` of run `id` writes its output. */
@@ -88,7 +89,13 @@ export async function listHistory(filter: { workspace?: string; bolt?: string } 
 }
 
 export async function getHistory(id: string): Promise<HistoryEntry | undefined> {
-  return (await loadHistory()).find((entry) => entry.id === id.trim().toLowerCase());
+  const needle = id.trim().toLowerCase();
+  const entries = await loadHistory();
+  const exact = entries.find((entry) => entry.id === needle);
+  if (exact) return exact;
+  // The start of an id, enough of it to be the only one.
+  const started = needle.length >= 3 ? entries.filter((entry) => entry.id.startsWith(needle)) : [];
+  return started.length === 1 ? started[0] : undefined;
 }
 
 async function loadHistory(): Promise<HistoryEntry[]> {

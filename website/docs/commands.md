@@ -4,7 +4,7 @@
 |---|---|
 | `wisp` | the TUI (`wisp status` for plain text) |
 | `wisp <bolt>` | run a bolt by any distinctive word of its name; `--dry-run` shows what would happen first |
-| `wisp init` | write a `.wisp.json` for this project, from what it already has |
+| `wisp init` | write a `.wisp.json` for this project, from what it already has; you choose which suggested bolts to keep |
 | `wisp check` | what's wrong with the file, and what would run |
 | `wisp trust` | allow this project's commands |
 | `wisp list` | every workspace you have, from anywhere |

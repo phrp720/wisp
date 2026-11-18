@@ -47,12 +47,14 @@ export type View =
   | { kind: "new-workspace" }
   | { kind: "delete-bolt"; file: string; bolt: string }
   | { kind: "view"; file: string; bolt: string }
+  /** Your own settings: the app for folders and files, where commands run. */
+  | { kind: "settings" }
   /** Stopping a bolt that needed others: those too, or only it? */
   | { kind: "stop-bolt"; file: string; bolt: string; needs: string[]; sharedWith: string[] }
   | { kind: "setup"; suggestion: SetupSuggestion };
 
 /** Views that read the keyboard themselves: forms, the editor, confirmations. */
-export const SELF_DRIVEN = new Set(["editor", "new-bolt", "new-workspace", "delete-bolt", "setup", "history", "view", "stop-bolt"]);
+export const SELF_DRIVEN = new Set(["editor", "new-bolt", "new-workspace", "delete-bolt", "setup", "history", "view", "stop-bolt", "settings"]);
 
 /**
  * The run in progress, or the last one. Kept apart from the screen showing it, so that
