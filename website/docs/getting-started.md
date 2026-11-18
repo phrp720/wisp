@@ -36,7 +36,7 @@ A file's commands run only once you've allowed them. [Why](./trust).
 
 ```bash
 wisp api      # the "api" bolt: any distinctive word of its name
-wisp          # the TUI: every bolt, what's running, history
+wisp          # the dashboard: every bolt, what's running, history
 ```
 
 ```console
@@ -52,4 +52,4 @@ running 🏢 Acme · Work on api
 Servers keep running in the background: `wisp ps` lists them, `wisp down api` stops them.
 It works from any folder too: `wisp website` finds the bolt in any project you've used.
 
-Next: [the TUI](./tui), [the file](./file), [jobs and history](./jobs).
+Next: [the dashboard](./dashboard), [the file](./file), [jobs and history](./jobs).

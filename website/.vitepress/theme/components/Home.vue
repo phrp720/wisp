@@ -110,13 +110,13 @@ const more = [
 <span class="dim">}</span></pre>
     </section>
 
-    <!-- The TUI -->
+    <!-- The dashboard -->
     <section class="wrap split reverse">
       <div>
-        <p class="eyebrow">The TUI</p>
+        <p class="eyebrow">The dashboard</p>
         <h2>Everything you run,<br />on one screen.</h2>
         <p class="lead">Type <code>wisp</code>: every bolt, every server and container with its live output, and a word when something crashes. No JSON to touch.</p>
-        <a class="more" href="/docs/tui">Tour the TUI →</a>
+        <a class="more" href="/docs/dashboard">Tour the dashboard →</a>
       </div>
       <div class="screen tui" aria-label="Wisp's Running tab">
         <div class="tabs"><span class="accent">🔮 wisp</span><span class="dim">1 Bolts</span><u class="accent">2 Running</u><span class="ok">● 3</span><span class="dim">3 History</span></div>

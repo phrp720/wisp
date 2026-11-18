@@ -6,7 +6,7 @@ child processes included. Nothing is left behind running without you knowing.
 
 ## Where commands run
 
-In the background, on your machine as if you'd typed them. Each shows up in the TUI's
+In the background, on your machine as if you'd typed them. Each shows up in the dashboard's
 Running tab with its live, coloured output. No extra windows. They keep running when you
 close Wisp, and they're there again when you reopen it.
 
@@ -33,7 +33,7 @@ wisp down api --deps   # and the database it needed
 wisp restart api
 ```
 
-In the TUI, `x` on a bolt asks whether to stop the bolts it needed too, and warns you if
+In the dashboard, `x` on a bolt asks whether to stop the bolts it needed too, and warns you if
 another running bolt still uses them.
 
 ## When something crashes

@@ -29,7 +29,7 @@ The complete reference for agents, the file format, every command, JSON output a
 
 ## Optional
 
-- [The TUI](${site}/docs/tui): the full-screen view, for people at a terminal
+- [The dashboard](${site}/docs/dashboard): the screen \`wisp\` opens in your terminal
 `;
 
 const description = "Start your working context with one word: the folders, links, apps and commands a task needs, opened and running in order. Free and open source.";
@@ -74,7 +74,7 @@ export default defineConfig({
         {
           text: "Using it",
           items: [
-            { text: "The TUI", link: "/docs/tui" },
+            { text: "The dashboard", link: "/docs/dashboard" },
             { text: "The .wisp.json file", link: "/docs/file" },
             { text: "Jobs and history", link: "/docs/jobs" },
             { text: "What's running", link: "/docs/running" },

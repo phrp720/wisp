@@ -1,6 +1,6 @@
-# The TUI
+# The dashboard
 
-`wisp` opens a full-screen view of all your projects, like htop. It works the same at your
+`wisp` opens a dashboard of all your projects, right in your terminal, like htop. It works the same at your
 desk, over SSH and inside tmux.
 
 ```

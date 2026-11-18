@@ -128,5 +128,5 @@ scripts, without touching the shared file.
 ## Personal workspaces
 
 Things that belong to no repository, like *Morning* or *On call*, are the same format, kept
-in Wisp's own `workspaces` folder (`wisp doctor` shows where). Make one with `N` in the TUI.
+in Wisp's own `workspaces` folder (`wisp doctor` shows where). Make one with `N` in the dashboard.
 Their commands run without asking: they're yours.

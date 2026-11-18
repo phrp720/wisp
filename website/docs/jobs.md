@@ -36,13 +36,13 @@ failed Release · Acme · 41.2s
 $ wisp history 3f2a1b --log 3      # what the tests printed
 ```
 
-In the TUI, the History tab (`3`) shows the same: bolts on the left to filter by, the runs on
+In the dashboard, the History tab (`3`) shows the same: bolts on the left to filter by, the runs on
 the right, and each run's page with a summary, the bolts it went through, and every step's
 output.
 
 ## Retry only what failed
 
-`wisp Check --retry` (or `r` in the TUI) runs the failed step and everything after it, not
+`wisp Check --retry` (or `r` in the dashboard) runs the failed step and everything after it, not
 the steps that already passed.
 
 ## From git hooks and cron
