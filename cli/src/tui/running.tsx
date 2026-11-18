@@ -12,6 +12,7 @@ import { RESTART_MARK } from "../core/shell.js";
 import type { WorkspaceRead } from "../core/types.js";
 import type { Glyphs } from "./glyphs.js";
 import { describeHistoryStep, SearchLine } from "./history.js";
+import { FilterLine, filterLog, MatchLine } from "./logfilter.js";
 import { describeStep, matchesAll, windowed } from "./model.js";
 import { type Activity, clock, type PaneGroup, type PaneItem, type PaneTab, type RunState, since } from "./state.js";
 import { spell } from "./spells.js";
@@ -47,24 +48,25 @@ export function PanesPanel(props: {
   tab?: PaneTab | undefined;
   /** The workspaces, to find a command's env and restart policy for its Info tab. */
   reads?: WorkspaceRead[];
+  /** The log filter: only lines with every word of it show. `logTyping` while it is written. */
+  logQuery?: string | undefined;
+  logTyping?: boolean | undefined;
   glyphs: Glyphs;
   height: number;
   columns: number;
 }) {
-  const { items, activity, history, query, typing, runs, active, tick, stats, dockerError, all, index, log, scroll, full, reads = [], glyphs, height, columns } = props;
+  const { items, activity, history, query, typing, runs, active, tick, stats, dockerError, all, index, log, scroll, full, reads = [], logQuery = "", logTyping = false, glyphs, height, columns } = props;
   const listWidth = paneListWidth(columns);
   const item = items[index];
   const tabs = tabsOf(item);
   const tab = shownTab(item, props.tab);
-  const lines = cleanOutput(log)
-    .split("\n")
-    .filter((line, at, every) => line !== "" || at < every.length - 1);
-  // Borders, the header, and the tab bar when the row has tabs.
-  const room = Math.max(1, height - 3 - (tabs.length > 0 ? 1 : 0));
-  const end = Math.max(room, lines.length - scroll);
+  const { lines, filtering, matched, room, total } = logWindow({ item, tab: props.tab, log, logQuery, logTyping, height });
+  const end = Math.max(room, total - scroll);
   // Scrolled back: said where it can't be cut off. The tab bar has room; a long command in the header may not.
   const back = scroll > 0 && tab === "logs" ? <Text color="yellow">{`↑ ${scroll} lines back — G to follow`}</Text> : null;
   const shown = lines.slice(Math.max(0, end - room), end);
+  const shownMatches = matched?.slice(Math.max(0, end - room), end);
+  const numberWidth = String(lines.length).length;
 
   // Rows for the list: workspace headings, each bolt, then its pipeline — one line a step,
   // in the order its run went, with how each one is doing on the right.
@@ -100,8 +102,7 @@ export function PanesPanel(props: {
                 ? { text: `${glyphs.dot} ${tally.up} of ${tally.total} up`, color: TONE.busy }
                 : { text: `${glyphs.dot} stopped`, color: TONE.stopped };
       // The run the pipeline below comes from, as History numbers it.
-      const from = allMembers(items, entry.group.key).find((member) => member.type === "step");
-      const number = from?.type === "step" && baseLabel(from.entry.bolt) === entry.group.bolt ? from.entry.number : undefined;
+      const number = entry.group.number;
       return line(
         selected,
         0,
@@ -239,7 +240,16 @@ export function PanesPanel(props: {
           {header}
           {back && tabs.length === 0 ? <Text>{"  "}{back}</Text> : null}
         </Text>
-        {tab === "info" && item?.type === "run" ? (
+        {filtering ? (
+          <FilterLine
+            query={logQuery}
+            typing={logTyping}
+            found={matched ? <Text color={matched.length === 0 ? TONE.failed : undefined} dimColor={matched.length > 0}>{matched.length === 0 ? `no line matches, of ${lines.length}` : `${matched.length} of ${lines.length} line${lines.length === 1 ? "" : "s"}`}</Text> : <Text dimColor>type to keep only the lines with it</Text>}
+          />
+        ) : null}
+        {shownMatches ? (
+          shownMatches.map((match) => <MatchLine key={match.at} at={match.at} text={match.text} query={logQuery} width={numberWidth} />)
+        ) : tab === "info" && item?.type === "run" ? (
           <Details rows={runDetails(item.run, reads, history, lines)} room={room} />
         ) : tab === "info" && item?.type === "container" ? (
           <Details rows={containerDetails(item.container, stats.get(item.container.name))} room={room} />
@@ -303,7 +313,11 @@ export function groupPanes(head: PaneItem[], runs: RunStatus[], containers: Cont
     );
   }
 
-  for (const found of groups.values()) found.members = pipeline(found.group, found.members, history);
+  for (const found of groups.values()) {
+    found.members = pipeline(found.group, found.members, history);
+    const from = found.members.find((member) => member.type === "step");
+    if (from?.type === "step" && baseLabel(from.entry.bolt) === found.group.bolt && from.entry.number) found.group.number = from.entry.number;
+  }
   nestNeededBolts(groups, history);
 
   // Within a workspace, its bolts by name, and what no bolt started last.
@@ -404,9 +418,11 @@ function pipeline(group: PaneGroup, members: PaneItem[], history: HistoryEntry[]
 
 /**
  * The Running list narrowed to a search. A bolt that matches keeps all of its tasks; a task
- * that matches keeps its bolt, so you still see where it belongs.
+ * that matches keeps its bolt, so you still see where it belongs, and so does a task inside
+ * a bolt this one needed keep that bolt's line ("⚡ Services" over postgres). The run in
+ * progress stays when its bolt matches.
  */
-export function filterPanes(items: PaneItem[], query: string): PaneItem[] {
+export function filterPanes(items: PaneItem[], query: string, running?: string): PaneItem[] {
   if (!query.trim()) return items;
   const textOf = (item: PaneItem): string[] =>
     item.type === "group"
@@ -430,9 +446,22 @@ export function filterPanes(items: PaneItem[], query: string): PaneItem[] {
     const hits = members.filter((member) => matchesAll(query, ...textOf(member), group.group.title, group.group.workspaceName));
     if (hits.length > 0) {
       keep.add(group);
-      for (const hit of hits) keep.add(hit);
+      for (const hit of hits) {
+        keep.add(hit);
+        if ((hit.type === "run" || hit.type === "container") && (hit.depth ?? 1) > 1) {
+          // Nested: the line it sits under is the nearest shallower one above it.
+          for (let at = members.indexOf(hit) - 1; at >= 0; at -= 1) {
+            const above = members[at] as PaneItem & { depth?: number };
+            if ((above.depth ?? 1) < (hit.depth ?? 1)) {
+              keep.add(above);
+              break;
+            }
+          }
+        }
+      }
     }
   }
+  for (const item of items) if (item.type === "current" && running && matchesAll(query, running)) keep.add(item);
   return items.filter((item) => keep.has(item));
 }
 
@@ -645,6 +674,42 @@ function endedAs(run: { exitCode?: number }): string {
   if (run.exitCode === 0) return "finished";
   if (run.exitCode !== undefined) return `failed (exit ${run.exitCode})`;
   return "stopped";
+}
+
+/**
+ * The log the panel beside the list shows, and how much of it fits: its lines, the ones the
+ * filter keeps, and the room for them. The panel is drawn from this, and scrolling stops at
+ * the top of it, rather than counting on past it.
+ */
+export function logWindow(options: { item: PaneItem | undefined; tab: PaneTab | undefined; log: string; logQuery: string; logTyping: boolean; height: number }): {
+  lines: string[];
+  filtering: boolean;
+  matched: { at: number; text: string }[] | undefined;
+  room: number;
+  total: number;
+  /** As far back as scrolling can go: the first lines filling the panel. */
+  most: number;
+} {
+  const { item, log, logQuery, logTyping, height } = options;
+  const tab = shownTab(item, options.tab);
+  const lines = cleanOutput(log)
+    .split("\n")
+    .filter((line, at, every) => line !== "" || at < every.length - 1);
+  // The log filter applies to whatever log the panel shows: a command's, a container's, a step's.
+  const filtering = tab === "logs" && item?.type !== "group" && (logTyping || logQuery !== "");
+  const matched = filtering && logQuery ? filterLog(lines, logQuery) : undefined;
+  // Borders, the header, the tab bar when the row has tabs, and the filter line while there is one.
+  const room = Math.max(1, height - 3 - (tabsOf(item).length > 0 ? 1 : 0) - (filtering ? 1 : 0));
+  const total = matched ? matched.length : lines.length;
+  return { lines, filtering, matched, room, total, most: Math.max(0, total - room) };
+}
+
+/** The next row with a log of its own, going `by` from `at`: bolt rows have none, so they are passed over. */
+export function nextWithLog(items: PaneItem[], at: number, by: 1 | -1): number {
+  for (let next = at + by; next >= 0 && next < items.length; next += by) {
+    if ((items[next] as PaneItem).type !== "group") return next;
+  }
+  return at;
 }
 
 /** How wide the Running list is, the rest going to the panel beside it. */

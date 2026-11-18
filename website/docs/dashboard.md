@@ -51,10 +51,11 @@ filled in through short forms. `E` opens the file itself if you'd rather.
 | `N` · `E` | a workspace of your own · open the file itself in your editor |
 | `1` `2` `3` | bolts · running · history (`p` and `h` work too) |
 | `↑↓` `j k` · `←→` `tab` | move · between workspaces and bolts |
-| `/` | search, on any tab |
+| `/` | filter: the list you're on; in a log full screen (`f`) or an open run in History, the log's lines |
 | `o` | on Running: show the ones that stopped too |
 | `[` · `]` | on Running: the selected command's tabs: logs, info, past runs |
 | `u` · `d` · `G` | scroll output up · down · back to the newest |
+| `f` | on Running: the log full screen, where `↑↓` scroll it and `←→` go to the command before or after |
 | `t` · `c` | allow a file's commands · check it for problems |
 | `s` | settings: your editor, and where commands run |
 | `r` · `?` · `q` | reload the files · every key · quit |

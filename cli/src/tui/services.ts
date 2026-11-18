@@ -108,7 +108,7 @@ export function realServices(hooks: { suspend: () => void; resume: () => void })
       }
     },
     containerStats: (names) => containerStats(names).catch(() => new Map()),
-    containerLogs: (name) => containerLogs(name).catch((error: unknown) => describeError(error)),
+    containerLogs: (name, lines) => containerLogs(name, lines).catch((error: unknown) => describeError(error)),
     containerAction,
 
     declineSetup: (dir) => declineSetup(dir),

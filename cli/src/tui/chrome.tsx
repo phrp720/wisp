@@ -7,6 +7,14 @@ import { type Services } from "./model.js";
 import type { Notice, View } from "./state.js";
 import { TONE } from "./tones.js";
 
+/** While a filter is being typed, the keys do something else: say what. */
+function typingHint(view: View): string | undefined {
+  if (view.kind !== "processes") return undefined;
+  if (view.logTyping) return "type to filter the log · ⏎ keep it · esc clear";
+  if (view.typing) return "type to filter the list · ⏎ keep it · esc clear";
+  return view.full ? "↑↓ scroll · ←→ previous, next · [ ] tabs · u d page · G newest · / filter the log · f back to the list · esc" : undefined;
+}
+
 /** The three screens, as tabs along the top: the one you are on, and the key for each. */
 export type Tab = "bolts" | "running" | "history";
 
@@ -89,7 +97,7 @@ export function Footer({ view, message, notice }: { view: View; message?: string
     run: "",
     check: "↑↓ scroll · t trust · esc back",
     trust: "",
-    processes: "↑↓ choose · [ ] tabs · u d scroll · G newest · x stop · r restart · f full · / search · o show stopped · esc",
+    processes: "↑↓ choose · [ ] tabs · u d scroll · G newest · x stop · r restart · / filter · f full log · o show stopped · esc",
     history: "",
     help: "any key to go back",
   };
@@ -102,7 +110,7 @@ export function Footer({ view, message, notice }: { view: View; message?: string
       ) : message ? (
         <Text color="cyan" wrap="truncate-end">{message}</Text>
       ) : (
-        <Text dimColor wrap="truncate-end">{keys[view.kind]}</Text>
+        <Text dimColor wrap="truncate-end">{typingHint(view) ?? keys[view.kind]}</Text>
       )}
     </Box>
   );

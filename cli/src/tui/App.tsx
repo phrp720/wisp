@@ -20,7 +20,7 @@ import { type Library, ordered, search, type Services } from "./model.js";
 import { CheckPanel, HelpPanel, RunPanel } from "./panels.js";
 import { SettingsScreen } from "./settings.js";
 import { type MouseListener, MouseContext, type MouseSource } from "./mouse.js";
-import { filterPanes, groupPanes, nextTab, paneKey, PanesPanel, paneSpotAt, shownTab } from "./running.js";
+import { filterPanes, groupPanes, logWindow, nextTab, nextWithLog, paneKey, PanesPanel, paneSpotAt, shownTab } from "./running.js";
 import { type Activity, clamp, type Focus, markFirst, needsTrust, type Notice, type PaneItem, type RunState, SELF_DRIVEN, useLatest, useTerminalSize, type View, visibleRuns, waitingForTrust } from "./state.js";
 import { spell } from "./spells.js";
 import { TONE } from "./tones.js";
@@ -178,6 +178,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
           // it is done it is History's — kept here only while you are reading its output.
           groupPanes(active && (!active.done || watchingDone.current) ? [{ type: "current" }] : [], visibleRuns(runs, view.all), containers.filter((container) => view.all || container.state === "running" || container.state === "restarting" || container.exitCode !== 0), reads, recent),
           view.query ?? "",
+          active?.bolt,
         )
       : [];
   const processIndex =
@@ -196,8 +197,12 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
   const selectedItem = view.kind === "processes" ? paneItems[processIndex] : undefined;
   const selectedRun = selectedItem?.type === "run" ? selectedItem.run : undefined;
   const watchingActive = selectedItem?.type === "current";
+  // The log the panel beside the list shows: the run in progress's output, or the selected one's.
+  const shownLog = watchingActive ? (active?.output ?? []).join("\n") : log;
   watchingDone.current = view.kind === "processes" && watchingActive;
   const selectedContainer = selectedItem?.type === "container" ? selectedItem.container : undefined;
+  // Filtering a log reads more of it: the filter should find what scrolled out of the last screens.
+  const filteringLog = view.kind === "processes" && Boolean(view.logQuery);
   // A finished step of the pipeline: what it printed in that run, as History keeps it.
   const selectedStepLog = selectedItem?.type === "step" ? selectedItem.step.log : undefined;
   useEffect(() => {
@@ -217,7 +222,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
     if (!selectedContainer) return;
     let alive = true;
     const refresh = async () => {
-      const text = await services.containerLogs(selectedContainer.name);
+      const text = await services.containerLogs(selectedContainer.name, filteringLog ? 5000 : 1000);
       if (alive) setLog(text);
     };
     void refresh();
@@ -226,7 +231,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
       alive = false;
       clearInterval(timer);
     };
-  }, [selectedContainer?.name, services]);
+  }, [selectedContainer?.name, services, filteringLog]);
   const askedAbout = useRef(new Set<string>());
   useEffect(() => {
     if (!watching) return;
@@ -354,7 +359,9 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
     }
     let alive = true;
     const refresh = async () => {
-      const text = await services.tail(selectedRun.log, 600);
+      // Raw lines, not lines shown: a screen-clearing server (Vite) pads each message with a
+      // screenful of blank ones, which cleaning drops. The bytes keep it cheap.
+      const text = await (filteringLog ? services.tail(selectedRun.log, 20_000, 4 * 1024 * 1024) : services.tail(selectedRun.log, 5000));
       if (alive) setLog(text);
     };
     void refresh();
@@ -363,7 +370,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
       alive = false;
       clearInterval(timer);
     };
-  }, [selectedRun?.id, selectedRun?.log, services]);
+  }, [selectedRun?.id, selectedRun?.log, services, filteringLog]);
 
   /**
    * Run steps — a whole bolt, or a retry of part of one — showing each as it goes. The
@@ -611,6 +618,14 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
     }
 
     if (view.kind === "processes") {
+      // Typing the log filter: letters go into it; ⏎ or ↓ keeps it.
+      if (view.logTyping) {
+        if (key.escape) return setView({ ...view, logQuery: "", logTyping: false, scroll: 0 });
+        if (key.return || key.downArrow || key.tab) return setView({ ...view, logTyping: false });
+        if (key.backspace || key.delete) return setView({ ...view, logQuery: (view.logQuery ?? "").slice(0, -1), scroll: 0 });
+        if (input && !key.ctrl && !key.meta) return setView({ ...view, logQuery: `${view.logQuery ?? ""}${input}`, scroll: 0 });
+        return;
+      }
       // Two screens, one key each: p for what's running, h for what ran.
       // Typing a search: letters go into it; ⏎ or ↓ keeps it and goes back to the list.
       if (view.typing) {
@@ -620,12 +635,17 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
         if (input && !key.ctrl && !key.meta) return setView({ ...view, query: `${view.query ?? ""}${input}`, index: -1 });
         return;
       }
-      // Fast typing arrives as one chunk: "/md" is "/" and the start of the search.
+      // Fast typing arrives as one chunk: "/md" is "/" and the start of the search. With the
+      // log full screen, / filters the log; beside the list, it filters the list.
       if (input.startsWith("/")) {
+        if (view.full) return setView({ ...view, logTyping: true, logQuery: `${view.logQuery ?? ""}${input.slice(1)}`, scroll: 0 });
         const { focus: _drop, ...plain } = view;
         return setView({ ...plain, typing: true, query: `${view.query ?? ""}${input.slice(1)}`, index: -1 });
       }
+      // esc clears a filter before it goes back: the one you are looking at first.
+      if (key.escape && view.full && view.logQuery) return setView({ ...view, logQuery: "", scroll: 0 });
       if (key.escape && view.query) return setView({ ...view, query: "", index: -1 });
+      if (key.escape && view.logQuery) return setView({ ...view, logQuery: "", scroll: 0 });
       if (input === "h") return setView(history_());
       if (jump(input)) return;
       const list = paneItems;
@@ -682,9 +702,17 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
         return;
       }
       const page = Math.max(1, bodyHeight - 4);
+      // As far back as the log goes: past its first line, scrolling up would only count on.
+      const most = logWindow({ item, tab: view.tab, log: shownLog, logQuery: view.logQuery ?? "", logTyping: false, height: bodyHeight }).most;
+      if (view.full) {
+        // The log full screen: ↑↓ read it, as in a pager; ←→ go to the command before or after.
+        if (key.upArrow || input === "k") return setView({ ...view, scroll: Math.min(most, view.scroll + 1) });
+        if (key.downArrow || input === "j") return setView({ ...view, scroll: Math.max(0, view.scroll - 1) });
+        if (key.leftArrow || key.rightArrow) return setView({ ...rest, index: nextWithLog(list, at, key.rightArrow ? 1 : -1), scroll: 0 });
+      }
       if (key.upArrow || input === "k") return setView({ ...rest, index: Math.max(0, at - 1), scroll: 0 });
       if (key.downArrow || input === "j") return setView({ ...rest, index: Math.min(list.length - 1, at + 1), scroll: 0 });
-      if (key.pageUp || input === "u") return setView({ ...view, scroll: view.scroll + page });
+      if (key.pageUp || input === "u") return setView({ ...view, scroll: Math.min(most, view.scroll + page) });
       if (key.pageDown || input === "d") return setView({ ...view, scroll: Math.max(0, view.scroll - page) });
       if (input === "G" || input === "g") return setView({ ...view, scroll: 0 });
       if (input === "f") return setView({ ...view, full: !view.full });
@@ -845,12 +873,15 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
       if (event.kind === "wheel") {
         // Over the list, the wheel moves the selection (as an arrow key); over the logs, it scrolls them.
         if (spot.area !== "panel" && spot.area !== "tab") return false;
-        if (shownTab(paneItems[processIndex], view.tab) === "logs") setView({ ...view, scroll: Math.max(0, view.scroll - event.by * 3) });
+        if (shownTab(paneItems[processIndex], view.tab) === "logs") {
+          const most = logWindow({ item: paneItems[processIndex], tab: view.tab, log: shownLog, logQuery: view.logQuery ?? "", logTyping: false, height: bodyHeight }).most;
+          setView({ ...view, scroll: Math.max(0, Math.min(most, view.scroll - event.by * 3)) });
+        }
         return true;
       }
       if (spot.area === "row") {
         const { focus: _focus, ...rest } = view;
-        setView({ ...rest, index: spot.at, scroll: 0, typing: false });
+        setView({ ...rest, index: spot.at, scroll: 0, typing: false, logTyping: false });
         return true;
       }
       if (spot.area === "tab") {
@@ -1181,7 +1212,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
           }}
         />
       ) : view.kind === "processes" ? (
-        <PanesPanel items={paneItems} activity={events} history={recent} query={view.query ?? ""} typing={Boolean(view.typing)} runs={runs} containers={containers} active={active} tick={tick} stats={stats} dockerError={dockerError} all={view.all} index={processIndex} log={watchingActive ? (active?.output ?? []).join("\n") : log} scroll={view.scroll} full={view.full} tab={view.tab} reads={reads} glyphs={glyphs} height={bodyHeight} columns={columns} />
+        <PanesPanel items={paneItems} activity={events} history={recent} query={view.query ?? ""} typing={Boolean(view.typing)} runs={runs} containers={containers} active={active} tick={tick} stats={stats} dockerError={dockerError} all={view.all} index={processIndex} log={shownLog} scroll={view.scroll} full={view.full} tab={view.tab} reads={reads} logQuery={view.logQuery} logTyping={view.logTyping} glyphs={glyphs} height={bodyHeight} columns={columns} />
       ) : view.kind === "help" ? (
         <HelpPanel glyphs={glyphs} height={bodyHeight} />
       ) : view.kind === "search" ? (
