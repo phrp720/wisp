@@ -105,6 +105,12 @@ Yes: press `s` in the dashboard, or use `wisp open-with`.
 → [Settings](./settings)
 :::
 
+::: details Can I use it on a server?
+Yes, and it's handy there: SSH in and `wisp restart shop` (or `down`, `logs shop -f`) from
+wherever you land, without finding the app or remembering how it starts. Install Wisp on
+the server and run the bolt once, or `wisp scan /srv`, so it knows where things are.
+:::
+
 ::: details Does it work on Windows, over SSH, in tmux?
 Yes. Over SSH, choose tmux in Settings, so commands keep running after you disconnect.
 

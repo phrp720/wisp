@@ -1,8 +1,18 @@
 # Getting started
 
-Wisp starts everything a task needs with one word: the database, the server, your editor in
-the right folder, the page in your browser. You describe it once, as a **bolt** in a
-`.wisp.json` next to your code.
+Wisp starts any project from anywhere, with one word: the database, the server, your editor
+in the right folder, the page in your browser. You describe it once; after that, `wisp api`
+brings it all up from any terminal, and Wisp keeps watch while you work.
+
+It runs your workflows too: checks, builds and releases, step by step, stopping at the first
+failure, with every run kept like a CI.
+
+Three words you'll see:
+
+- **Bolt:** one thing you do, like *Work on api*: what to start, in order.
+- **Job:** a bolt that runs to the end, like *Check* or *Build*, and passes or fails.
+- **Workspace:** where bolts live: a project's `.wisp.json`, or a list of your own (your
+  morning links, say).
 
 ## 1. Install
 
@@ -17,7 +27,7 @@ Windows without Node: download `wisp-windows-x64.zip` from
 Then, for tab completion of your workspaces and bolts (zsh, bash or fish):
 
 ```bash
-wisp completion --install     # adds one line to your shell's config; open a new terminal
+wisp completion --install
 ```
 
 ## 2. Write the file

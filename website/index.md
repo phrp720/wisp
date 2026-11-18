@@ -6,7 +6,7 @@ titleTemplate: Start any project from anywhere, with one word
 hero:
   name: Wisp
   text: Start any project from anywhere, with one word.
-  tagline: No more hunting for the folder or remembering the commands. One word starts the database, the server and the page, from any terminal.
+  tagline: One word brings up the database, the server and the page, from any terminal. Your checks and builds run like a local CI.
   actions:
     - theme: brand
       text: Get started

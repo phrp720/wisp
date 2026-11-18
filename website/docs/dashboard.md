@@ -1,13 +1,14 @@
 # The dashboard
 
-`wisp` opens a dashboard of all your projects, right in your terminal, like htop. It works the same at your
-desk, over SSH and inside tmux.
+`wisp` opens a dashboard of all your projects, right in your terminal: run a bolt, watch what
+it started, look back at past runs. It works the same at your desk, over SSH and in tmux.
 
 ![Wisp's dashboard: running a bolt, its server's live output on the Running tab, then the History tab](/demo/dashboard.gif)
 
 ## Three tabs
 
-- **`1` Bolts:** your workspaces and their bolts. `⏎` runs one and shows each step.
+- **`1` Bolts:** your projects (and your own workspaces) on the left, their bolts on the
+  right. `⏎` runs one and shows each step.
 - **`2` Running:** what each bolt started, as a pipeline, with live output, health and
   ports, and a log of what crashed and came back.
 - **`3` History:** every run like a CI run, with its branch, commit, and each step's output.

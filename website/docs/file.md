@@ -1,7 +1,7 @@
 # The .wisp.json file
 
-A **bolt** is a named list of things to start, in order. That is the whole idea (every field
-is in the [File reference](./reference)):
+A project's bolts live in a `.wisp.json` next to its code. A **bolt** is a named list of things
+to start, in order; that is the whole idea. Every field is in the [File reference](./reference).
 
 ```json
 {
@@ -44,7 +44,7 @@ You rarely write it by hand. `wisp init` reads the project, at its root and one 
 
 | Step | Example | |
 |---|---|---|
-| Command | `{ "run": "pnpm dev", "cwd": "apps/api" }` | runs in the background; see [What's running](./running) |
+| Command | `{ "run": "pnpm dev", "cwd": "apps/api" }` | starts it and keeps it running ([in a job](./jobs), runs it to the end) |
 | Docker services | `{ "compose": "compose.yaml", "services": ["postgres"] }` | done when they're healthy |
 | Another bolt | `{ "bolt": "Database" }` | runs it first |
 | Wait | `{ "wait": "localhost:5432" }` · `{ "wait": "http://localhost:3000" }` · `{ "wait": 3 }` | a port, a website, or seconds |
@@ -75,10 +75,11 @@ Any step can have a `"label"`, the name Wisp shows for it.
 
 ## Bolts that need bolts
 
-`{ "bolt": "Database" }` runs another bolt first. It runs once per run however many bolts
-need it, a command Wisp already has running is left alone rather than started twice, and
-bolts that need each other are refused before anything starts. Point at another project's
-bolt with `"workspace": "infra"`.
+`{ "bolt": "Database" }` runs another bolt first, like the database before the API.
+
+- It runs once per run, however many bolts need it.
+- What's already running is left alone, not started twice.
+- Another project's bolt: `{ "bolt": "Database", "workspace": "infra" }`.
 
 ## Jobs
 

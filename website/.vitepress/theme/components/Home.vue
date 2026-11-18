@@ -65,12 +65,12 @@ function svgAttrs(attrs: Record<string, unknown>): Record<string, unknown> {
 }
 
 const more = [
-  { icon: "needs", title: "Bolts that need bolts", text: "Start the database first, even from another project." },
-  { icon: "docker", title: "Docker services", text: "Waits until containers are healthy, and shows their logs." },
-  { icon: "restart", title: "Restart on crash", text: "A crashed server comes back on its own." },
-  { icon: "git", title: "Git hooks and cron", text: "Run your checks before every push, or every night." },
-  { icon: "laptop", title: "macOS, Linux, Windows", text: "One file for every machine on the team." },
-  { icon: "tmux", title: "Over SSH, inside tmux", text: "Works the same on a server." },
+  { icon: "needs", title: "Projects that need each other", text: "Your API needs the shared database? Wisp starts the database first, then the API." },
+  { icon: "docker", title: "Docker, without the waiting", text: "Starts your compose services and waits until they're healthy before the next step." },
+  { icon: "restart", title: "Servers that come back", text: "Your dev server crashed? It restarts on its own, and you see that it did." },
+  { icon: "git", title: "Checks before you push", text: "Tests run on every <code>git push</code> and stop it if they fail. Or every night." },
+  { icon: "laptop", title: "Same file, every laptop", text: "Your teammate on Windows types the same <code>wisp api</code> you do." },
+  { icon: "tmux", title: "On your servers too", text: "SSH in, type <code>wisp restart shop</code>, done. No hunting for where the app lives." },
 ];
 
 </script>
@@ -80,26 +80,26 @@ const more = [
     <!-- The demo -->
     <section class="wrap demo-wrap">
       <div class="terminal" aria-label="A terminal running wisp api">
-        <div class="bar"><span /><span /><span /><em>~</em></div>
+        <div class="bar"><span /><span /><span /><em>from any folder</em></div>
         <pre><span class="dim">$ </span>{{ typed }}<span v-if="shown === 0" class="caret">▍</span>
 <template v-if="shown > 0"><span class="dim">running</span> 🏢 Acme · <b>Work on api</b>
 </template><template v-for="(step, at) in steps.slice(0, shown)" :key="at"><span class="ok">  {{ step.mark }}</span> <span class="dim">{{ step.kind.padEnd(6) }}</span> {{ step.what }} <span class="dim">· {{ step.note }}</span>
-</template><template v-if="shown === steps.length"><span class="accent">everything is up</span><span class="dim"> · from any folder</span></template></pre>
+</template><template v-if="shown === steps.length"><span class="accent">everything is up</span></template></pre>
       </div>
     </section>
 
     <!-- The difference -->
     <section class="wrap">
-      <h2 class="center">One word instead of five commands.</h2>
+      <h2 class="center">One word, from anywhere, instead of all this.</h2>
       <div class="compare">
         <div>
           <p class="eyebrow">Before</p>
-          <pre class="code"><span class="dim">$</span> cd ~/dev/acme
+          <pre class="code"><span class="dim">$</span> cd ~/dev/acme               <span class="dim"># where was it again?</span>
 <span class="dim">$</span> docker compose up -d db
-<span class="dim"># wait for it…</span>
-<span class="dim">$</span> cd apps/api &amp;&amp; pnpm dev
+<span class="dim">#   …wait until it's ready</span>
+<span class="dim">$</span> mise run dev                <span class="dim"># or pnpm dev? make up?</span>
 <span class="dim">$</span> open http://localhost:3000
-<span class="dim"># …and remember it all next month</span></pre>
+<span class="dim">#   …and keep this terminal open</span></pre>
         </div>
         <div>
           <p class="eyebrow">With Wisp</p>
@@ -114,7 +114,12 @@ const more = [
       <div>
         <p class="eyebrow">One file</p>
         <h2>Write it once.<br />Or let Wisp write it.</h2>
-        <p class="lead">A <b>bolt</b> lists what to start, in order, in a <code>.wisp.json</code> next to your code. <code>wisp init</code> drafts it from what your project already has.</p>
+        <p class="lead">A <b>bolt</b> lists what to start, in order. <code>wisp init</code> drafts it from what your project already has. Keep it wherever it's useful:</p>
+        <ul class="places">
+          <li><b>In the repo</b>, as <code>.wisp.json</code>: your whole team gets the same bolts.</li>
+          <li><b>On your machine</b>, just for you: your own workspaces, like your morning links or side scripts.</li>
+          <li><b>On a server</b>: start, stop and restart what runs there, from wherever you SSH in.</li>
+        </ul>
         <a class="more" href="/docs/file">The file, step by step →</a>
       </div>
       <pre class="code"><span class="dim">{</span>
@@ -145,9 +150,9 @@ const more = [
     <!-- History: a recording of real Wisp -->
     <section class="wrap showcase">
       <div class="showcase-text">
-        <p class="eyebrow">Jobs and history</p>
+        <p class="eyebrow">Workflows</p>
         <h2>A small CI, on your laptop.</h2>
-        <p class="lead">Tests and builds stop at the first failure. Every run is kept with its output. Retry only what failed.</p>
+        <p class="lead">Checks, builds and releases run step by step and stop at the first failure. Every run is kept with its output. Retry only what failed.</p>
         <a class="more" href="/docs/jobs">Jobs and history →</a>
       </div>
       <img class="recording" src="/demo/jobs.gif" width="1400" height="760" loading="lazy" alt="A Check job fails at its test; History shows the run like CI, with the test's output; after the fix, --retry runs only the test, and it passes" />
@@ -179,7 +184,8 @@ const more = [
           </span>
           <div>
             <p class="title">{{ item.title }}</p>
-            <p class="text">{{ item.text }}</p>
+            <!-- Our own text, with a <code> or two: never user input. -->
+            <p class="text" v-html="item.text" />
           </div>
         </li>
       </ul>
@@ -266,6 +272,7 @@ pre { margin: 0; font-family: var(--vp-font-family-mono); font-size: 13px; line-
 .icon { flex-shrink: 0; width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; color: var(--vp-c-brand-1); background: var(--vp-c-brand-soft); border: 1px solid rgba(167, 139, 250, 0.25); }
 .title { font-weight: 600; margin: 0 0 4px; color: var(--vp-c-text-1); }
 .text { margin: 0; color: var(--vp-c-text-2); line-height: 1.55; font-size: 15px; }
+.text :deep(code) { font-family: var(--vp-font-family-mono); font-size: 13px; padding: 1px 6px; border-radius: 4px; background: var(--vp-c-default-soft); color: var(--vp-c-text-1); white-space: nowrap; }
 
 .center-text { text-align: center; }
 .cta { text-align: center; }
@@ -285,6 +292,10 @@ pre { margin: 0; font-family: var(--vp-font-family-mono); font-size: 13px; line-
 .small { font-size: 14px; color: var(--vp-c-text-2); }
 .small a { color: var(--vp-c-brand-1); }
 
+.places { margin: 0 0 20px; padding: 0; list-style: none; display: grid; gap: 10px; }
+.places li { position: relative; padding-left: 18px; color: var(--vp-c-text-2); font-size: 16px; line-height: 1.55; }
+.places li::before { content: ""; position: absolute; left: 2px; top: 0.65em; width: 6px; height: 6px; border-radius: 50%; background: var(--vp-c-brand-1); }
+.places b { color: var(--vp-c-text-1); }
 .compare { display: grid; gap: 24px; align-items: start; max-width: 880px; margin: 0 auto; }
 @media (min-width: 760px) { .compare { grid-template-columns: 1.4fr 1fr; } }
 .compare .eyebrow { margin-bottom: 8px; }
