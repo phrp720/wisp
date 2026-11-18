@@ -5,7 +5,7 @@ import type { HistoryEntry } from "../core/history.js";
 import type { RunStatus } from "../core/processes.js";
 import { interpret } from "../core/project.js";
 import { RESTART_MARK } from "../core/shell.js";
-import { containerDetails, filterPanes, groupPanes, maskEnv, nextTab, pastRuns, runDetails, shownTab, tabsOf, when } from "./running.js";
+import { containerDetails, filterPanes, groupPanes, waitingWords, maskEnv, nextTab, pastRuns, runDetails, shownTab, tabsOf, when } from "./running.js";
 import type { PaneItem } from "./state.js";
 
 const file = "/dev/shop/.wisp.json";
@@ -168,5 +168,19 @@ describe("filtering the Running list", () => {
     const withCurrent: PaneItem[] = [{ type: "current" }, ...items];
     expect(filterPanes(withCurrent, "deploy", "Deploy").some((item) => item.type === "current")).toBe(true);
     expect(filterPanes(withCurrent, "postgres", "Deploy").some((item) => item.type === "current")).toBe(false);
+  });
+});
+
+describe("the words beside a run that is starting", () => {
+  const unicode = { spark: "✦" } as Parameters<typeof waitingWords>[0];
+
+  it("show whole, with their star, where some fit", () => {
+    const shown = waitingWords(unicode, 16, 0);
+    expect(shown).toMatch(/^✦ .+…$/);
+    expect(shown.length).toBeLessThanOrEqual(16);
+  });
+
+  it("give way to the plain status where none would fit whole", () => {
+    expect(waitingWords(unicode, 10, 0)).toBe("starting…");
   });
 });

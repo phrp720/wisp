@@ -1138,6 +1138,24 @@ describe("a run in progress", () => {
     { target: { kind: "command" as const, id: "command:test", label: "test", value: "pnpm test" }, workspace: acme.workspace, job: true, bolt: "Work on api" },
   ];
 
+  it("keeps its title in place, with the words that change after it, a star before them", async () => {
+    const app = await open(
+      services({
+        run: async (target, _bolt, callbacks) => {
+          callbacks.onPlan([plan[0]!.target]);
+          callbacks.onStep(plan[0]!.target, { attached: true });
+          await new Promise<void>((resolve) => callbacks.signal?.addEventListener("abort", () => resolve()));
+          return { workspace: target.workspace, targets: [], dryRun: false, ok: false } as SwitchResult;
+        },
+      }),
+    );
+    app.stdin.write("\r");
+    await tick();
+    expect(app.lastFrame()).toMatch(/│ Acme › Work on api +✦ [A-Z][^…]*…/);
+    app.stdin.write("x");
+    await tick();
+  });
+
   it("can be stopped with x, which reaches the run", async () => {
     let signal: AbortSignal | undefined;
     const app = await open(

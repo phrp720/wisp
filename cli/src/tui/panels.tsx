@@ -28,9 +28,13 @@ export function RunPanel({ view, glyphs, height, tick }: { view: RunState; glyph
 
   return (
     <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor={view.done ? (failed > 0 || view.error ? "red" : "green") : TONE.accent} paddingX={1}>
-      <Text bold>
-        {view.dryRun ? <Text color="yellow">dry run </Text> : view.done ? null : <Text color={TONE.accent}>{`${spell()}… `}</Text>}
-        {view.title}
+      {/* The title stays where it is; the words that change go after it, cut first when it is long. */}
+      <Text wrap="truncate-end">
+        <Text bold>
+          {view.dryRun ? <Text color="yellow">dry run </Text> : null}
+          {view.title}
+        </Text>
+        {view.dryRun || view.done ? null : <Text color={TONE.accent}>{`   ${glyphs.spark} ${spell()}…`}</Text>}
       </Text>
       <Text> </Text>
       {items.map((step, index) => {

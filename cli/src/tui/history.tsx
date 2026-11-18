@@ -175,7 +175,7 @@ export function HistoryScreen(props: HistoryScreenProps) {
     return (
       <Box height={height} borderStyle={glyphs.border} paddingX={1}>
         <Text>
-          <Text color={TONE.accent}>{`${spell(3)}… `}</Text>
+          <Text color={TONE.accent}>{`${glyphs.spark} ${spell(3)}… `}</Text>
           <Text dimColor>reading history</Text>
         </Text>
       </Box>
