@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { cleanOutput } from "../core/ansi.js";
 import { baseLabel, type HistoryEntry, type HistoryStep } from "../core/history.js";
+import { ASK_KEYS, AskHere } from "./forms.js";
 import type { Glyphs } from "./glyphs.js";
 import { spell } from "./spells.js";
 import { TONE } from "./tones.js";
@@ -50,6 +51,8 @@ export function HistoryScreen(props: HistoryScreenProps) {
   const [open, setOpen] = useState<string>();
   const [query, setQuery] = useState("");
   const [typing, setTyping] = useState(false);
+  const [forget, setForget] = useState<{ ids: string[]; title: string; detail: string; one: boolean }>();
+  const [reloads, setReloads] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -64,7 +67,7 @@ export function HistoryScreen(props: HistoryScreenProps) {
       alive = false;
       clearInterval(timer);
     };
-  }, [services]);
+  }, [services, reloads]);
 
   const filters = useMemo(() => boltFilters(entries ?? []), [entries]);
   const filter = filters[Math.min(filterIndex, filters.length - 1)];
@@ -111,7 +114,7 @@ export function HistoryScreen(props: HistoryScreenProps) {
       setRunIndex(at);
     }
     return true;
-  }, !opened);
+  }, !opened && !forget);
 
   useInput(
     (input, key) => {
@@ -147,7 +150,8 @@ export function HistoryScreen(props: HistoryScreenProps) {
       }
       if (input === "p") return onRunning();
       if (onJump && (input === "1" || input === "2")) return onJump(input);
-      if (run && input === "r" && !run.ok) return onRetry(run);
+      if (input === "D") return askToForget();
+      if (run && input === "r" && !run.ok && !run.running) return onRetry(run);
       if (run && input === "R") return onRerun(run);
       if (key.escape || input === "q" || input === "h") return onClose();
 
@@ -168,8 +172,35 @@ export function HistoryScreen(props: HistoryScreenProps) {
       if (key.downArrow || input === "j") return setRunIndex((at) => Math.min(shown.length - 1, at + 1));
       if (key.return && run) return setOpen(run.id);
     },
-    { isActive: !opened },
+    { isActive: !opened && !forget },
   );
+
+  function askToForget() {
+    const finished = (list: HistoryEntry[]) => list.filter((entry) => !entry.running);
+    if (focus === "runs") {
+      if (!run || run.running) return;
+      return setForget({ ids: [run.id], title: `Delete run #${run.number ?? ""} of ${run.bolt}?`, detail: "Its steps and what they printed go with it", one: true });
+    }
+    const runs = finished((entries ?? []).filter((entry) => !filter?.bolt || (entry.workspace === filter.workspace && baseLabel(entry.bolt) === filter.bolt)));
+    if (runs.length === 0) return;
+    const count = `${runs.length} run${runs.length === 1 ? "" : "s"}`;
+    setForget({
+      ids: runs.map((entry) => entry.id),
+      title: filter?.bolt ? `Clear the ${count} of ${filter.bolt}?` : `Clear all ${count}?`,
+      detail: "Their steps and what they printed go with them; runs still going are kept",
+      one: false,
+    });
+  }
+
+  function answerForget(yes: boolean) {
+    const ids = forget?.ids ?? [];
+    setForget(undefined);
+    if (!yes) return;
+    void services.forgetRuns(ids).then(() => {
+      setRunIndex(0);
+      setReloads((count) => count + 1);
+    });
+  }
 
   if (!entries) {
     return (
@@ -243,21 +274,29 @@ export function HistoryScreen(props: HistoryScreenProps) {
           <Text bold>{filter?.bolt ?? "All runs"}</Text>
           <Text dimColor>{`  ${shown.length} run${shown.length === 1 ? "" : "s"}`}</Text>
         </Text>
-        {typing || query ? <SearchLine query={query} typing={typing} /> : <Text> </Text>}
+        {forget && !forget.one ? (
+          <AskHere question={forget.title} yes="Delete" onAnswer={answerForget} />
+        ) : typing || query ? (
+          <SearchLine query={query} typing={typing} />
+        ) : (
+          <Text> </Text>
+        )}
         {shown.length === 0 ? <Text dimColor>{`No run matches “${query}”. esc clears it.`}</Text> : null}
         {runRows.map((entry, position) => {
           const at = runOffset + position;
           const selected = at === runIndex && focus === "runs";
           const failedAt = entry.steps.find((step) => !step.ok && !step.skipped);
+          const state = entry.running ? `running, step ${Math.min(entry.steps.length + 1, entry.total ?? entry.steps.length + 1)} of ${entry.total ?? "?"}` : entry.interrupted ? "interrupted" : "";
           // A fixed width, so the times line up down the list whatever their length.
-          const right = `${(formatDuration(totalMs(entry)) || "0ms").padStart(7)} · ${ago(entry.startedAt).padEnd(8)}`;
+          const right = `${(entry.interrupted ? "?" : formatDuration(totalMs(entry)) || "0ms").padStart(7)} · ${ago(entry.startedAt).padEnd(8)}`;
+          const doomed = forget?.ids.includes(entry.id) ?? false;
           const branch = entry.git ? ` ${entry.git.branch} ` : "";
           return (
             <Box key={entry.id} flexDirection="column">
               <Box>
                 <Box flexGrow={1} minWidth={0}>
-                  <Text wrap="truncate-end" bold={selected} color={selected ? TONE.accent : undefined}>
-                    {selected ? glyphs.pointer : " "} <Mark ok={entry.ok} glyphs={glyphs} /> {entry.bolt}
+                  <Text wrap="truncate-end" bold={selected} color={doomed ? "red" : selected ? TONE.accent : undefined}>
+                    {selected ? glyphs.pointer : " "} <Mark ok={entry.ok} running={entry.running} interrupted={entry.interrupted} glyphs={glyphs} /> {entry.bolt}
                     <Text dimColor>{` #${entry.number ?? ""}`}</Text>
                   </Text>
                 </Box>
@@ -266,28 +305,35 @@ export function HistoryScreen(props: HistoryScreenProps) {
                   <Text dimColor>{`  ${right}`}</Text>
                 </Box>
               </Box>
-              <Text wrap="truncate-end" dimColor>
-                {`    ${clip(
-                  [
-                    failedAt ? `failed at ${failedAt.label}` : "",
-                    entry.git?.subject ? `“${entry.git.subject}”` : "",
-                    entry.git ? entry.git.commit : "",
-                    triggerWords(entry.trigger),
-                    filter?.bolt ? "" : entry.workspaceName,
-                  ]
-                    .filter(Boolean)
-                    .join(" · "),
-                  runWidth - 4,
-                )}`}
-              </Text>
+              {doomed && forget?.one ? (
+                <AskHere question={forget.title} yes="Delete" onAnswer={answerForget} />
+              ) : (
+                <Text wrap="truncate-end" dimColor>
+                  {`    ${clip(
+                    [
+                      state,
+                      failedAt ? `failed at ${failedAt.label}` : "",
+                      entry.git?.subject ? `“${entry.git.subject}”` : "",
+                      entry.git ? entry.git.commit : "",
+                      triggerWords(entry.trigger),
+                      filter?.bolt ? "" : entry.workspaceName,
+                    ]
+                      .filter(Boolean)
+                      .join(" · "),
+                    runWidth - 4,
+                  )}`}
+                </Text>
+              )}
             </Box>
           );
         })}
         <Box flexGrow={1} />
         <Text dimColor wrap="truncate-end">
-          {[focus === "runs" ? "⏎ open the run" : "→ its runs", "← bolts", "/ search", run && !run.ok ? "r retry what failed" : "", "R run again", "p running", "esc back"]
-            .filter(Boolean)
-            .join(" · ")}
+          {forget
+            ? `${forget.detail} · ${ASK_KEYS}`
+            : [focus === "runs" ? "⏎ open the run" : "→ its runs", "← bolts", "/ search", run && !run.ok && !run.running ? "r retry what failed" : "", "R run again", focus === "runs" ? "D delete it" : "D clear these", "p running", "esc back"]
+                .filter(Boolean)
+                .join(" · ")}
         </Text>
       </Box>
     </Box>
@@ -528,7 +574,7 @@ function RunDetail(props: {
     }
     if (key.escape && queryRef.current) return setQuery(() => "");
     if (key.escape || key.leftArrow || input === "q") return onBack();
-    if (input === "r" && !entry.ok) return onRetry();
+    if (input === "r" && !entry.ok && !entry.running) return onRetry();
     if (input === "R") return onRerun();
     const scrollTo = (next: number) => {
       setScrolled(true);
@@ -557,10 +603,10 @@ function RunDetail(props: {
   });
 
   return (
-    <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor={entry.ok ? "gray" : "red"} paddingX={1} overflow="hidden">
+    <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor={entry.ok || entry.running ? "gray" : entry.interrupted ? "yellow" : "red"} paddingX={1} overflow="hidden">
       <Box ref={head} flexDirection="column" flexShrink={0}>
       <Text wrap="truncate-end">
-        <Mark ok={entry.ok} glyphs={glyphs} /> <Text bold>{entry.bolt}</Text>
+        <Mark ok={entry.ok} running={entry.running} interrupted={entry.interrupted} glyphs={glyphs} /> <Text bold>{entry.bolt}</Text>
         <Text dimColor>{` #${entry.number ?? ""}`}</Text>
         <Text dimColor>{`   ${entry.workspaceName}`}</Text>
       </Text>
@@ -605,7 +651,7 @@ function RunDetail(props: {
       <Text dimColor wrap="truncate-end">
         {(typing
           ? ["type to filter the logs", "⏎ keep it", "esc clear"]
-          : ["↑↓ steps", "⏎ show or hide its log", "/ filter the logs", "u d scroll", entry.ok ? "" : "r retry what failed", "R run again", filtering ? "esc clear the filter" : "esc back to the runs"]
+          : ["↑↓ steps", "⏎ show or hide its log", "/ filter the logs", "u d scroll", entry.ok || entry.running ? "" : "r retry what failed", "R run again", filtering ? "esc clear the filter" : "esc back to the runs"]
         )
           .filter(Boolean)
           .join(" · ")}
@@ -619,8 +665,12 @@ function Summary({ entry }: { entry: HistoryEntry }) {
   const cells: [string, string, string?][] = [
     ["Triggered", `${triggerWords(entry.trigger) ? `from ${triggerWords(entry.trigger)} ` : ""}${ago(entry.startedAt)}`],
     ...(entry.git ? ([["Commit", `${entry.git.branch} @ ${entry.git.commit}${entry.git.subject ? `  “${clip(entry.git.subject, 40)}”` : ""}`]] as [string, string][]) : []),
-    ["Status", entry.ok ? "Success" : "Failed", entry.ok ? "green" : "red"],
-    ["Total duration", formatDuration(totalMs(entry)) || "0ms"],
+    entry.running
+      ? ["Status", `Running, step ${Math.min(entry.steps.length + 1, entry.total ?? entry.steps.length + 1)} of ${entry.total ?? "?"}`, "cyan"]
+      : entry.interrupted
+        ? ["Status", "Interrupted", "yellow"]
+        : ["Status", entry.ok ? "Success" : "Failed", entry.ok ? "green" : "red"],
+    ["Total duration", entry.interrupted ? "unknown" : formatDuration(totalMs(entry)) || "0ms"],
   ];
   return (
     <Box marginTop={1}>
@@ -711,13 +761,15 @@ function boltFilters(entries: HistoryEntry[]): BoltFilter[] {
   return [{ key: "all", count: entries.length }, ...bolts];
 }
 
-function Mark({ ok, skipped, glyphs }: { ok: boolean; skipped?: boolean | undefined; glyphs: Glyphs }) {
+function Mark({ ok, skipped, running, interrupted, glyphs }: { ok: boolean; skipped?: boolean | undefined; running?: boolean | undefined; interrupted?: boolean | undefined; glyphs: Glyphs }) {
   if (skipped) return <Text dimColor>{glyphs.skip}</Text>;
+  if (running) return <Text color="cyan">{glyphs.dot}</Text>;
+  if (interrupted) return <Text color="yellow">!</Text>;
   return ok ? <Text color="green">{glyphs.ok}</Text> : <Text color="red">{glyphs.fail}</Text>;
 }
 
 function totalMs(entry: HistoryEntry): number {
-  return Math.max(0, Date.parse(entry.finishedAt) - Date.parse(entry.startedAt));
+  return Math.max(0, (entry.running ? Date.now() : Date.parse(entry.finishedAt)) - Date.parse(entry.startedAt));
 }
 
 export function formatDuration(ms: number): string {

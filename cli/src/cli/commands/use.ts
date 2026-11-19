@@ -241,7 +241,7 @@ async function retryLast(
   deps: RunDeps,
 ): Promise<SwitchResult> {
   const [last] = (await listHistory({ workspace: workspace.file, bolt: label })).filter((entry) =>
-    entry.bolt.replace(/ \(retry\)$/, "").toLowerCase() === label.toLowerCase(),
+    !entry.running && entry.bolt.replace(/ \(retry\)$/, "").toLowerCase() === label.toLowerCase(),
   );
   if (!last) throw new WispError(`"${label}" has not run yet — run it whole first`, "NOTHING_TO_RETRY");
   const again = await planRetry(workspace, last, deps);

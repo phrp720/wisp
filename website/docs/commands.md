@@ -77,8 +77,9 @@ a terminal, or with `--json`, it asks nothing and prints the list instead.
 | `wisp ps` | what's running: status, uptime, restarts; `--all` adds finished ones, `--clear` forgets them |
 | `wisp logs <name>` | what one printed; `-f` follows it, `-n 500` shows more lines |
 | `wisp stop <name>` | stop one, and everything it started; `--all` stops every one |
-| `wisp history` | past runs of this project; `--all` for every project |
+| `wisp history` | past runs of this project, the ones still going too; `--all` for every project |
 | `wisp history <id>` | one run, step by step; `--log 3` prints what step 3 printed |
+| `wisp history [id \| bolt] --clear` | delete a run, a bolt's runs, or this project's (`--all`: every project's); runs still going are kept |
 
 ## Finding things
 

@@ -39,6 +39,7 @@ export interface Services {
   /** Stop what a bolt started and run its teardown; with `deps`, the bolts it needed too. */
   down(read: WorkspaceRead, bolt: Bolt, options?: { deps?: boolean }): Promise<DownResult>;
   history(): Promise<HistoryEntry[]>;
+  forgetRuns(ids: string[]): Promise<void>;
   readLog(path: string): Promise<string>;
   check(file: string): Promise<WorkspaceRead>;
   trust(file: string, hash: string | undefined): Promise<void>;

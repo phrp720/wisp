@@ -84,7 +84,7 @@ export function BoltView(props: BoltViewProps) {
       {bolt.notes ? <Text wrap="truncate-end">{bolt.notes}</Text> : null}
       <Text wrap="truncate-end" dimColor>
         {[
-          last ? `last run ${last.ok ? glyphs.ok : glyphs.fail} #${last.number ?? ""} ${ago(last.startedAt)}` : "never run yet",
+          last ? (last.running ? `running now #${last.number ?? ""}` : `last run ${last.interrupted ? "!" : last.ok ? glyphs.ok : glyphs.fail} #${last.number ?? ""} ${ago(last.startedAt)}`) : "never run yet",
           usedBy.length > 0 ? `needed by ${usedBy.join(", ")}` : "",
           bolt.down && bolt.down.length > 0 ? `${bolt.down.length} step${bolt.down.length === 1 ? "" : "s"} when taken down` : "",
         ]

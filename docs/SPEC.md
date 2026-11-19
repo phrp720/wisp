@@ -61,7 +61,9 @@ Release:
   on stops it too.
 - Bolts it depends on that are not jobs (a database) start the way they always do, and
   stay up.
-- Every run is in `wisp history`, with each step's duration and output.
+- Every run is in `wisp history`, with each step's duration and output, from the moment
+  it starts (`"running": true` with `total` steps until it ends; `"interrupted": true`
+  if Wisp stopped before it did).
 - `wisp hook pre-push Check` runs it before every push and blocks the push if it fails.
 
 ## Up and down
@@ -146,6 +148,7 @@ under "Runs code" and ask them to approve it.**
 | `wisp trust` | approve a file's commands (for the user, not an agent) |
 | `wisp down <bolt> [--deps]` · `wisp restart <bolt>` | stop what a bolt started · stop it and run it again |
 | `wisp history [bolt \| id] [--log <n>] [--json]` | past runs, each step's result, duration and output |
+| `wisp history [bolt \| id] --clear [--all]` | delete a run, a bolt's runs, or this project's (every project's with `--all`); runs still going are kept |
 | `wisp hook <git-hook> <bolt>` · `--list` · `--remove` | run a bolt from a git hook |
 | `wisp ps [--all] [--json]` · `wisp logs <run> [-f]` · `wisp stop <run> \| --all` | what Wisp has running |
 | `wisp scan <dir>` | find project files under a directory |
@@ -181,7 +184,7 @@ a folder with no file is offered a setup; `e` edits the selected bolt through fo
 personal workspace; `v` shows a bolt whole and read-only, its dependencies opened up;
 `p` (or `2`) shows what is running, grouped by the bolt that started it, with live
 output (`[` and `]` switch to a command's details and past runs); `h` (or `3`) the
-history of every run; `/` filters, and in a log full screen (`f`) or an open run of
+history of every run, `D` there deleting runs; `/` filters, and in a log full screen (`f`) or an open run of
 History, it filters the log's lines. It takes the mouse too (clicks select, the wheel
 scrolls), unless turned off in Settings. `x` on a bolt that needed others asks whether
 to stop those too (`wisp down <bolt> --deps` on the command line). Agents should use the
