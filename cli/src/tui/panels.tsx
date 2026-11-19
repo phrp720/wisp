@@ -140,9 +140,48 @@ export function DiagnosticLine({ entry, glyphs }: { entry: Diagnostic; glyphs: G
   );
 }
 
-export function HelpPanel({ glyphs, height }: { glyphs: Glyphs; height: number }) {
+export function HelpPanel({ glyphs, height, tab = "bolts" }: { glyphs: Glyphs; height: number; tab?: "bolts" | "running" | "history" }) {
+  const anywhere: [string, [string, string][]] = [
+    "Anywhere",
+    [
+      ["1 2 3", "the tabs: bolts · running · history"],
+      ["mouse", "click to select · wheel to scroll · off in settings"],
+      ["?", "these keys"],
+    ],
+  ];
+  const running: [string, [string, string][]][] = [
+    [
+      "On Running",
+      [
+        ["↑↓  j k", "choose a bolt or one of its commands"],
+        ["[  ]", "its tabs: logs · info · past runs"],
+        ["f", "the log full screen: ↑↓ scroll, ←→ the next command"],
+        ["u d  G", "scroll the log · back to the newest"],
+        ["/", "filter the list, or the log in full screen"],
+        ["x  r", "stop · restart"],
+        ["o", "show the ones that stopped too"],
+        ["esc  p", "back to the bolts"],
+      ],
+    ],
+    anywhere,
+  ];
+  const history: [string, [string, string][]][] = [
+    [
+      "On History",
+      [
+        ["←  →", "the bolts to filter by · their runs"],
+        ["⏎", "open a run: its summary, pipeline and logs"],
+        ["/", "search the runs; in a run, filter its logs"],
+        ["u  d", "in a run: scroll"],
+        ["r  R", "retry what failed · run it all again"],
+        ["D", "delete the run, or the selected bolt's runs"],
+        ["esc  h", "back"],
+      ],
+    ],
+    anywhere,
+  ];
   // Grouped by what you are doing, so the key you need is where you would look for it.
-  const sections: [string, [string, string][]][] = [
+  const bolts: [string, [string, string][]][] = [
     [
       "Run",
       [
@@ -177,8 +216,6 @@ export function HelpPanel({ glyphs, height }: { glyphs: Glyphs; height: number }
       [
         ["↑↓  j k", "move"],
         ["1 2 3", "the tabs: bolts · running · history"],
-        ["[  ]", "on Running: logs · info · past runs"],
-        ["f", "on Running: the log full screen: ↑↓ scroll, ←→ next, / filters"],
         ["mouse", "click to select · wheel to scroll · off in settings"],
         ["←→  tab", "between workspaces and bolts"],
         ["t", "review and allow what a file would run"],
@@ -186,9 +223,10 @@ export function HelpPanel({ glyphs, height }: { glyphs: Glyphs; height: number }
       ],
     ],
   ];
+  const sections = tab === "running" ? running : tab === "history" ? history : bolts;
   return (
     <Box flexDirection="column" height={height} borderStyle={glyphs.border} paddingX={1}>
-      <Text bold>Keys</Text>
+      <Text bold>{tab === "running" ? "Keys on Running" : tab === "history" ? "Keys on History" : "Keys"}</Text>
       <Box flexWrap="wrap">
         {sections.map(([title, keys]) => (
           <Box key={title} flexDirection="column" width="50%" marginTop={1} paddingRight={2}>

@@ -8,6 +8,7 @@ import type { RunStatus } from "../core/processes.js";
 import { collectBoltTargets } from "../core/switch.js";
 import type { Bolt, SwitchTarget, WorkspaceRead } from "../core/types.js";
 import type { Glyphs } from "./glyphs.js";
+import { since } from "./state.js";
 import { TONE } from "./tones.js";
 import { describeStep, shortUrl } from "./model.js";
 
@@ -84,7 +85,7 @@ export function BoltView(props: BoltViewProps) {
       {bolt.notes ? <Text wrap="truncate-end">{bolt.notes}</Text> : null}
       <Text wrap="truncate-end" dimColor>
         {[
-          last ? (last.running ? `running now #${last.number ?? ""}` : `last run ${last.interrupted ? "!" : last.ok ? glyphs.ok : glyphs.fail} #${last.number ?? ""} ${ago(last.startedAt)}`) : "never run yet",
+          last ? (last.running ? `running now #${last.number ?? ""}` : `last run ${last.interrupted ? "!" : last.ok ? glyphs.ok : glyphs.fail} #${last.number ?? ""} ${since(last.startedAt)}`) : "never run yet",
           usedBy.length > 0 ? `needed by ${usedBy.join(", ")}` : "",
           bolt.down && bolt.down.length > 0 ? `${bolt.down.length} step${bolt.down.length === 1 ? "" : "s"} when taken down` : "",
         ]
@@ -274,10 +275,3 @@ function sameWorkspace(candidate: WorkspaceRead, ref: string, from: WorkspaceRea
   return file === resolved || file.replace(/\/[^/]+$/, "") === resolved.replace(/\/$/, "") || tildify(file) === ref;
 }
 
-function ago(iso: string): string {
-  const seconds = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 1000));
-  if (seconds < 60) return "just now";
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-  if (seconds < 86_400) return `${Math.floor(seconds / 3600)}h ago`;
-  return `${Math.floor(seconds / 86_400)}d ago`;
-}

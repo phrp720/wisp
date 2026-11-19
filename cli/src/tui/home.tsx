@@ -8,7 +8,9 @@ import { baseLabel, type HistoryEntry } from "../core/history.js";
 import { tildify } from "../core/paths.js";
 import type { RunStatus } from "../core/processes.js";
 import { boltStatus, collectBoltTargets } from "../core/switch.js";
-import type { WorkspaceRead } from "../core/types.js";
+import type { Bolt, WorkspaceRead } from "../core/types.js";
+import { slugify } from "../core/workspaces.js";
+import { shortest } from "../cli/lib/render.js";
 import { AskHere } from "./forms.js";
 import type { Glyphs } from "./glyphs.js";
 import { describeStep, type SearchHit, windowed } from "./model.js";
@@ -86,43 +88,58 @@ export function workspaceRows(reads: WorkspaceRead[], here: string | undefined, 
 }
 
 /** The line of the bolts panel its first bolt is on, counted from the panel's top border. */
-export const FIRST_BOLT_LINE = 6;
+export const FIRST_BOLT_LINE = 5;
 
-/** The bolts that fit in the panel, and the index of the first one shown. */
-export function boltWindow<T>(bolts: T[], boltIndex: number, height: number): { items: T[]; offset: number; stepRoom: number } {
-  // Lines above and between the lists, so the lists take what is left.
-  const fixed = 7;
-  const listRoom = Math.max(2, height - 2 - fixed);
-  const boltRoom = Math.max(1, Math.min(bolts.length, Math.ceil(listRoom / 2)));
-  return { ...windowed(bolts, boltIndex, boltRoom), stepRoom: Math.max(1, listRoom - boltRoom) };
+const HEAD = 6;
+
+export function boltWindow<T>(bolts: T[], boltIndex: number, height: number, asking = false): { items: T[]; offset: number; split: boolean; topHeight: number; stepRoom: number } {
+  if (height >= 18 && bolts.length > 0) {
+    const rows = Math.max(1, Math.min(bolts.length, Math.floor(height / 2) - HEAD));
+    return { ...windowed(bolts, boltIndex, rows), split: true, topHeight: HEAD + rows + (asking ? 1 : 0), stepRoom: 0 };
+  }
+  const listRoom = Math.max(2, height - HEAD - 2);
+  const rows = Math.max(1, Math.min(bolts.length, Math.ceil(listRoom / 2)));
+  return { ...windowed(bolts, boltIndex, rows), split: false, topHeight: height, stepRoom: Math.max(1, listRoom - rows - (asking ? 1 : 0)) };
 }
 
-export function WorkspacePanel(props: { read: WorkspaceRead; boltIndex: number; focused: boolean; glyphs: Glyphs; height: number; runs: RunStatus[]; containers: Container[]; history: HistoryEntry[]; confirming?: Asking | undefined }) {
-  const { read, boltIndex, focused, glyphs, height, runs, containers, history, confirming } = props;
+interface BoltState {
+  text: string;
+  color: string;
+  dim?: boolean;
+}
+
+export function WorkspacePanel(props: { read: WorkspaceRead; boltIndex: number; focused: boolean; glyphs: Glyphs; height: number; width?: number; here?: boolean; runs: RunStatus[]; containers: Container[]; history: HistoryEntry[]; confirming?: Asking | undefined }) {
+  const { read, boltIndex, focused, glyphs, height, width = 80, here = false, runs, containers, history, confirming } = props;
   const lastRun = (label: string) => history.find((entry) => baseLabel(entry.bolt) === label);
   const { workspace } = read;
-  const held = new Map(read.withheld.map((item) => [item.id, item]));
   const bolts = workspace.bolts;
   const selected = bolts[Math.min(boltIndex, Math.max(0, bolts.length - 1))];
   const errors = read.diagnostics.filter((entry) => entry.level === "error").length;
+  const { items: shownBolts, offset, split, topHeight, stepRoom } = boltWindow(bolts, boltIndex, height, Boolean(confirming));
 
-  const steps = selected ? collectBoltTargets(workspace, selected) : [];
-  const waiting = selected
-    ? selected.steps.flatMap((step) => {
-        const id = step.kind === "asset" ? step.id : step.kind === "compose" ? `compose:${step.file}` : undefined;
-        return id && held.has(id) ? [held.get(id)!] : [];
-      })
-    : [];
+  const stateOf = (entry: Bolt): BoltState | undefined => {
+    const status = boltStatus(workspace, entry, runs, containers);
+    if (status.failing > 0) return { text: `${glyphs.dot} something stopped`, color: "red" };
+    if (status.running > 0) {
+      const all = status.running === status.commands;
+      return { text: `${glyphs.dot} ${all ? "running" : `${status.running} of ${status.commands} running`}`, color: all ? "green" : "yellow" };
+    }
+    const last = lastRun(entry.label);
+    if (!last) return undefined;
+    if (last.running) return { text: `${glyphs.dot} running, step ${Math.min(last.steps.length + 1, last.total ?? last.steps.length + 1)} of ${last.total ?? "?"}`, color: "cyan" };
+    if (last.interrupted) return { text: `! interrupted ${since(last.startedAt)}`, color: "yellow" };
+    return last.ok ? { text: `${glyphs.ok} ${since(last.startedAt)}`, color: "green", dim: true } : { text: `${glyphs.fail} failed ${since(last.startedAt)}`, color: "red" };
+  };
 
-  const { items: shownBolts, offset, stepRoom: room } = boltWindow(bolts, boltIndex, height);
-  const stepRoom = Math.max(1, room - (selected?.notes ? 1 : 0) - (confirming ? 1 : 0));
-  const stepLines = [
-    ...steps.map((step) => ({ key: `${step.kind}:${step.id}:${step.label}`, label: `${step.kind === "bolt" ? glyphs.bolt : ""}${describeStep(step, false, selected?.job ?? false).replace("›", glyphs.arrow)}`, note: step.workspace ? ` (from ${step.workspace})` : "", waiting: false })),
-    ...waiting.map((item) => ({ key: `held:${item.id}`, label: item.kind === "command" ? `start ${item.label}` : `start ${item.label}`, note: "", waiting: true })),
-  ];
+  const rows = shownBolts.map((entry) => ({ entry, state: stateOf(entry) }));
+  const stateWidth = Math.max(0, ...rows.map(({ state }) => state?.text.length ?? 0));
+  const stateColumn = stateWidth > 0 ? stateWidth + 3 : 0;
+  const longest = Math.max(0, ...rows.map(({ entry }) => entry.label.length + (entry.job ? 4 : 0)));
+  const showSteps = 2 + Math.min(longest, 24) + stateColumn + 10 <= width;
+  const labelWidth = Math.max(10, Math.min(longest, width - 2 - stateColumn - (showSteps ? 10 : 0)));
 
-  return (
-    <Box flexDirection="column" flexGrow={1} flexShrink={1} minWidth={0} borderStyle={glyphs.border} borderColor={focused ? TONE.accent : "gray"} paddingX={1} overflow="hidden">
+  const header = (
+    <>
       <Text wrap="truncate-end">
         {workspace.icon && glyphs.border === "round" ? `${workspace.icon} ` : ""}
         <Text bold color={workspace.color}>{workspace.name}</Text>
@@ -142,76 +159,149 @@ export function WorkspacePanel(props: { read: WorkspaceRead; boltIndex: number; 
         {errors > 0 ? <Text color="red">{`  ${errors} problem${errors === 1 ? "" : "s"} — c to check`}</Text> : null}
       </Text>
       <Text> </Text>
-      <Text bold dimColor={!focused}>
-        {`${glyphs.bolt}Bolts`}
-      </Text>
-      {bolts.length === 0 ? (
-        <>
-          <Text bold={focused}>
-            {focused ? glyphs.pointer : " "} <Text color={focused ? undefined : "magenta"} inverse={focused}>+ add a bolt</Text>
-          </Text>
-          <Text> </Text>
-          <Text dimColor>{"  A bolt is one thing you do, like \"Work on the API\": what to start, in order."}</Text>
-        </>
+    </>
+  );
+
+  const list =
+    bolts.length === 0 ? (
+      <>
+        <Text bold={focused}>
+          {focused ? glyphs.pointer : " "} <Text color={focused ? undefined : "magenta"} inverse={focused}>+ add a bolt</Text>
+        </Text>
+        <Text> </Text>
+        <Text dimColor>{"  A bolt is one thing you do, like \"Work on the API\": what to start, in order."}</Text>
+      </>
+    ) : (
+      rows.map(({ entry, state }, position) => {
+        const isSelected = offset + position === boltIndex;
+        const tag = entry.job ? " job" : "";
+        const name = clip(entry.label, Math.max(4, labelWidth - tag.length));
+        const gap = " ".repeat(Math.max(0, labelWidth - name.length - tag.length));
+        const count = entry.steps.length;
+        return (
+          <Fragment key={entry.id}>
+            <Text wrap="truncate-end" bold={isSelected}>
+              {isSelected ? glyphs.pointer : " "} <Text color={isSelected && confirming ? "red" : isSelected && focused ? undefined : entry.color} inverse={isSelected && focused}>{name}</Text>
+              {tag ? <Text color="cyan">{tag}</Text> : null}
+              {gap}
+              {stateWidth > 0 ? (
+                state ? <Text color={state.color} dimColor={state.dim ?? false}>{`   ${state.text.padEnd(stateWidth)}`}</Text> : <Text>{" ".repeat(stateWidth + 3)}</Text>
+              ) : null}
+              {showSteps ? <Text dimColor>{`   ${count} step${count === 1 ? "" : "s"}`}</Text> : null}
+            </Text>
+            {isSelected && confirming ? <AskHere question={confirming.question} yes={confirming.yes} onAnswer={confirming.onAnswer} /> : null}
+          </Fragment>
+        );
+      })
+    );
+
+  const details = selected ? (
+    <BoltDetails
+      read={read}
+      bolt={selected}
+      state={stateOf(selected)}
+      last={lastRun(selected.label)}
+      here={here}
+      glyphs={glyphs}
+      full={split}
+      room={split ? Math.max(1, height - topHeight - 2) : stepRoom}
+    />
+  ) : null;
+
+  if (!split) {
+    return (
+      <Box flexDirection="column" flexGrow={1} flexShrink={1} minWidth={0} borderStyle={glyphs.border} borderColor={focused ? TONE.accent : "gray"} paddingX={1} overflow="hidden">
+        {header}
+        {list}
+        {details ? <Text> </Text> : null}
+        {details}
+      </Box>
+    );
+  }
+
+  return (
+    <Box flexDirection="column" flexGrow={1} flexShrink={1} minWidth={0}>
+      <Box flexDirection="column" height={topHeight} flexShrink={0} borderStyle={glyphs.border} borderColor={focused ? TONE.accent : "gray"} paddingX={1} overflow="hidden">
+        {header}
+        {list}
+      </Box>
+      <Box flexDirection="column" flexGrow={1} borderStyle={glyphs.border} borderColor="gray" paddingX={1} overflow="hidden">
+        {details}
+      </Box>
+    </Box>
+  );
+}
+
+function BoltDetails(props: { read: WorkspaceRead; bolt: Bolt; state: BoltState | undefined; last: HistoryEntry | undefined; here: boolean; glyphs: Glyphs; full: boolean; room: number }) {
+  const { read, bolt, state, last, here, glyphs, full, room } = props;
+  const { workspace } = read;
+  const held = new Map(read.withheld.map((item) => [item.id, item]));
+  const waiting = bolt.steps.flatMap((step) => {
+    const id = step.kind === "asset" ? step.id : step.kind === "compose" ? `compose:${step.file}` : undefined;
+    return id && held.has(id) ? [held.get(id)!] : [];
+  });
+  const lines = [
+    ...collectBoltTargets(workspace, bolt).map((step) => ({ key: `${step.kind}:${step.id}:${step.label}`, label: `${step.kind === "bolt" ? glyphs.bolt : ""}${describeStep(step, false, bolt.job ?? false).replace("›", glyphs.arrow)}`, note: step.workspace ? ` (from ${step.workspace})` : "", waiting: false })),
+    ...waiting.map((item) => ({ key: `held:${item.id}`, label: `start ${item.label}`, note: "", waiting: true })),
+  ];
+  const neededBy = workspace.bolts.filter((other) => other.steps.some((step) => step.kind === "bolt" && !step.workspace && step.bolt.toLowerCase() === bolt.label.toLowerCase())).map((other) => other.label);
+  const typed = here ? shortest(bolt, workspace.bolts) : `${slugify(workspace.name)} ${shortest(bolt, workspace.bolts)}`;
+
+  const used = full ? 1 + (bolt.notes ? 1 : 0) + 2 + 3 : bolt.notes ? 1 : 0;
+  const space = Math.max(1, room - used);
+  const shown = lines.length > space ? Math.max(1, space - 1) : lines.length;
+
+  const facts = [
+    last ? (last.running ? `running now, #${last.number ?? ""}` : `last run ${last.interrupted ? "!" : last.ok ? glyphs.ok : glyphs.fail} #${last.number ?? ""} ${since(last.startedAt)}`) : "never run yet",
+    neededBy.length > 0 ? `needed by ${neededBy.join(", ")}` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  return (
+    <>
+      {full ? (
+        <Text wrap="truncate-end">
+          <Text color={TONE.accent}>{glyphs.bolt}</Text>
+          <Text bold color={bolt.color}>{bolt.label}</Text>
+          {bolt.job ? <Text color="cyan"> job</Text> : null}
+          {state ? <Text color={state.color} dimColor={state.dim ?? false}>{`   ${state.text}`}</Text> : null}
+        </Text>
+      ) : null}
+      {bolt.notes ? <Text wrap="truncate-end">{full ? bolt.notes : `  ${bolt.notes}`}</Text> : null}
+      {full ? <Text> </Text> : null}
+      {lines.length === 0 ? (
+        <Text dimColor>{full ? "It has no steps yet — press e to add some." : "  It has no steps yet — press e to add some."}</Text>
       ) : (
-        shownBolts.map((entry, position) => {
-          const at = offset + position;
-          const isSelected = at === boltIndex;
-          // Every step it has, allowed to run yet or not: the preview below lists them all.
-          const count = entry.steps.length;
-          const status = boltStatus(workspace, entry, runs, containers);
-          const up = status.failing > 0 ? "failing" : status.running > 0 ? (status.running === status.commands ? "up" : "partial") : undefined;
-          return (
-            <Fragment key={entry.id}>
-              <Text wrap="truncate-end" bold={isSelected}>
-                {isSelected ? glyphs.pointer : " "} <Text color={isSelected && confirming ? "red" : isSelected && focused ? undefined : entry.color} inverse={isSelected && focused}>{entry.label}</Text>
-                {entry.job ? <Text color="cyan"> job</Text> : null}
-                {up ? (
-                  <Text color={up === "up" ? "green" : up === "failing" ? "red" : "yellow"}>
-                    {` ${glyphs.dot} ${up === "up" ? "running" : up === "failing" ? "something stopped" : `${status.running} of ${status.commands} running`}`}
-                  </Text>
-                ) : null}
-                {(() => {
-                  const last = lastRun(entry.label);
-                  if (!last || up) return null;
-                  if (last.running) return <Text color="cyan">{`  ${glyphs.dot} running, step ${Math.min(last.steps.length + 1, last.total ?? last.steps.length + 1)} of ${last.total ?? "?"}`}</Text>;
-                  if (last.interrupted) return <Text color="yellow">{`  ! interrupted ${since(last.startedAt)}`}</Text>;
-                  return last.ok ? (
-                    <Text color="green" dimColor>{`  ${glyphs.ok} ${since(last.startedAt)}`}</Text>
-                  ) : (
-                    <Text color="red">{`  ${glyphs.fail} failed ${since(last.startedAt)}`}</Text>
-                  );
-                })()}
-                <Text dimColor>{`  ${count} step${count === 1 ? "" : "s"}`}</Text>
-              </Text>
-              {isSelected && confirming ? <AskHere question={confirming.question} yes={confirming.yes} onAnswer={confirming.onAnswer} /> : null}
-            </Fragment>
-          );
-        })
-      )}
-      {selected && stepLines.length === 0 ? (
         <>
-          <Text> </Text>
-          <Text dimColor>  It has no steps yet — press e to add some.</Text>
-        </>
-      ) : selected ? (
-        <>
-          <Text> </Text>
-          {selected.notes ? <Text wrap="truncate-end">{`  ${selected.notes}`}</Text> : null}
-          <Text dimColor>{selected.job ? "  When you run it, it will — and stop at the first failure:" : "  When you run it, it will:"}</Text>
-          {windowed(stepLines, 0, stepRoom).items.map((line, at) => (
+          <Text dimColor>{`${full ? "" : "  "}${bolt.job ? "When you run it, it will — and stop at the first failure:" : "When you run it, it will:"}`}</Text>
+          {lines.slice(0, shown).map((line, at) => (
             <Text key={line.key} wrap="truncate-end">
-              <Text dimColor>{`  ${String(at + 1).padStart(2)}. `}</Text>
+              <Text dimColor>{`${full ? "" : "  "}${String(at + 1).padStart(2)}. `}</Text>
               {line.waiting ? <Text dimColor>{line.label}</Text> : line.label}
               {line.note ? <Text dimColor>{line.note}</Text> : null}
               {line.waiting ? <Text color="yellow"> (not trusted)</Text> : null}
             </Text>
           ))}
-          {stepLines.length > stepRoom ? <Text dimColor>{`  … ${stepLines.length - stepRoom} more`}</Text> : null}
+          {lines.length > shown ? <Text dimColor>{`${full ? "" : "  "}… ${lines.length - shown} more · v shows it whole`}</Text> : null}
+        </>
+      )}
+      {full ? (
+        <>
+          <Box flexGrow={1} />
+          <Text dimColor wrap="truncate-end">{facts}</Text>
+          <Text wrap="truncate-end">
+            <Text dimColor>from a terminal: </Text>
+            <Text color="cyan">{`wisp ${typed}`}</Text>
+          </Text>
         </>
       ) : null}
-    </Box>
+    </>
   );
+}
+
+function clip(text: string, width: number): string {
+  return text.length <= width ? text : `${text.slice(0, Math.max(0, width - 1))}…`;
 }
 
 export function SearchPanel({ hits, index, query, glyphs, height }: { hits: SearchHit[]; index: number; query: string; glyphs: Glyphs; height: number }) {

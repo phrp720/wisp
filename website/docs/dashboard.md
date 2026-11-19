@@ -8,7 +8,8 @@ it started, look back at past runs. It works the same at your desk, over SSH and
 ## Three tabs
 
 - **`1` Bolts:** your projects (and your own workspaces) on the left, their bolts on the
-  right. `⏎` runs one and shows each step.
+  right, and under them the selected bolt: its notes, its steps, how its last run went, what
+  needs it, and the command that runs it from a terminal. `⏎` runs one and shows each step.
 - **`2` Running:** what each bolt started, as a pipeline, with live output, health and
   ports, and a log of what crashed and came back. Beside the list, each command has tabs
   for its logs, its details and its past runs, as in lazydocker.
@@ -62,4 +63,4 @@ you'd rather.
 | `t` · `c` | allow a file's commands · check it for problems |
 | `s` | settings: your editor, and where commands run |
 | `D` | on History: delete the selected run, or the selected bolt's runs |
-| `r` · `?` · `q` | reload the files · every key · quit |
+| `r` · `?` · `q` | reload the files · the keys of the tab you're on · quit |

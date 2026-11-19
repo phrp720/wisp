@@ -45,7 +45,7 @@ export type View =
       logQuery?: string;
       logTyping?: boolean;
     }
-  | { kind: "help" }
+  | { kind: "help"; back?: View }
   | { kind: "history" }
   /** `adding`: straight to choosing its first step — a bolt was just made. */
   | { kind: "editor"; file: string; bolt: string; adding?: boolean }
@@ -174,9 +174,9 @@ export const KIND: Record<StepKind, string> = {
 export function since(iso: string): string {
   const seconds = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 1000));
   if (seconds < 60) return "just now";
-  if (seconds < 3600) return `${Math.round(seconds / 60)}m ago`;
-  if (seconds < 86400) return `${Math.round(seconds / 3600)}h ago`;
-  return `${Math.round(seconds / 86400)}d ago`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
 }
 
 /** State whose latest value is readable straight away, through the returned ref. */

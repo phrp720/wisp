@@ -105,8 +105,87 @@ describe("the TUI", () => {
     expect(frame).toContain("Workspaces");
     expect(frame.indexOf("Acme")).toBeLessThan(frame.indexOf("infra"));
     expect(frame).toContain("❯ Work on api");
-    expect(frame).toContain("⚡ Bolts");
     expect(frame).toContain("pnpm dev");
+  });
+
+  it("shows the bolts in one box and the selected one in a box below, with the command that runs it", async () => {
+    const app = await open(services());
+    const frame = app.lastFrame() ?? "";
+    const list = frame.indexOf("❯ Work on api");
+    const details = frame.indexOf("⚡ Work on api");
+    expect(list).toBeGreaterThan(-1);
+    expect(details).toBeGreaterThan(frame.indexOf("Work on web"));
+    expect(frame.slice(list, details)).toContain("╰");
+    expect(frame).toContain("When you run it, it will:");
+    expect(frame).toContain("never run yet");
+    expect(frame).toContain("from a terminal: wisp api");
+    app.stdin.write("j");
+    await tick();
+    expect(app.lastFrame()).toContain("⚡ Work on web");
+    expect(app.lastFrame()).toContain("from a terminal: wisp web");
+  });
+
+  it("keeps one box on a short terminal", async () => {
+    const app = render(<App services={services()} glyphs={unicode} size={{ columns: 100, rows: 16 }} />);
+    await tick();
+    const frame = app.lastFrame() ?? "";
+    expect(frame).toContain("❯ Work on api");
+    expect(frame).toContain("pnpm dev");
+    expect(frame).not.toContain("from a terminal");
+  });
+
+  it("fits the keys and the version on an 80-column terminal", async () => {
+    const app = render(<App services={services()} glyphs={unicode} size={{ columns: 80, rows: 24 }} />);
+    await tick();
+    const footer = (app.lastFrame() ?? "").split("\n").at(-1) ?? "";
+    expect(footer).toContain("? keys · q quit");
+    expect(footer).toContain(`v${VERSION}`);
+  });
+
+  it("shows the keys of the tab you are on with ?, and goes back there", async () => {
+    const app = await open(services());
+    app.stdin.write("2");
+    await tick();
+    app.stdin.write("?");
+    await tick();
+    expect(app.lastFrame()).toContain("Keys on Running");
+    expect(app.lastFrame()).toContain("show the ones that stopped too");
+    app.stdin.write(" ");
+    await tick();
+    expect(app.lastFrame()).not.toContain("Keys on Running");
+    expect((app.lastFrame() ?? "").split("\n").at(-1)).toContain("? keys · esc");
+  });
+
+  it("puts History's keys along the bottom, like the other tabs, and keeps your run across ?", async () => {
+    const run = (id: string, number: number): HistoryEntry => ({ id, workspace: acme.workspace.file, workspaceName: "Acme", bolt: "Check", job: true, number, startedAt: new Date(Date.now() - number * 60_000).toISOString(), finishedAt: new Date().toISOString(), ok: true, steps: [] });
+    const app = await open(services({ history: async () => [run("bbbbbbbbbbbb", 2), run("aaaaaaaaaaaa", 1)] }));
+    app.stdin.write("h");
+    await tick();
+    await tick();
+    const lines = (app.lastFrame() ?? "").split("\n");
+    expect(lines.at(-1)).toContain("⏎ open · ← bolts");
+    expect(lines.slice(0, -1).join("\n")).not.toContain("⏎ open · ← bolts");
+    app.stdin.write("j");
+    await tick();
+    app.stdin.write("?");
+    await tick();
+    expect(app.lastFrame()).toContain("Keys on History");
+    app.stdin.write("x");
+    await tick();
+    expect(app.lastFrame()).toMatch(/❯ ✓ Check #1/);
+    app.stdin.write("\r");
+    await tick();
+    await tick();
+    expect((app.lastFrame() ?? "").split("\n").at(-1)).toContain("↑↓ steps");
+  });
+
+  it("cuts a long bolt name in History short, never into its count", async () => {
+    const entry: HistoryEntry = { id: "", workspace: acme.workspace.file, workspaceName: "Acme", bolt: "Work on the whole Flower Testbed", job: false, number: 1, startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), ok: true, steps: [] };
+    const app = await open(services({ history: async () => Array.from({ length: 14 }, (_, at) => ({ ...entry, id: `${at}`.padStart(12, "a"), number: at + 1 })) }));
+    app.stdin.write("h");
+    await tick();
+    await tick();
+    expect(app.lastFrame()).toMatch(/Work on the[^│]*…\s+14 │/);
   });
 
   it("shows the version at the bottom right", async () => {
@@ -722,7 +801,7 @@ describe("jobs, down and history in the TUI", () => {
     const runs = [{ id: "ab12", kind: "window", label: "pnpm dev", command: "pnpm dev", workspace: acme.workspace.file, workspaceName: "Acme", asset: "command:pnpm dev", pid: 1, startedAt: new Date().toISOString(), alive: true }];
     const app = await open(services({ runs: async () => runs as never }));
     await tick();
-    expect(app.lastFrame()).toMatch(/Work on api ● running/);
+    expect(app.lastFrame()).toMatch(/Work on api\s+● running/);
   });
 
   it("shows past runs like a CI: bolts to filter by, numbered runs, and a run's summary, pipeline and logs", async () => {
@@ -1463,6 +1542,9 @@ describe("the mouse", () => {
     const run = vi.fn(services().run);
     const { mouse, frame } = await withMouse(services({ run }));
     mouse.emit({ kind: "click", ...at(frame(), "Work on web") });
+    await tick();
+    expect(frame()).toContain("❯ Work on web");
+    mouse.emit({ kind: "click", ...at(frame(), "When you run it") });
     await tick();
     expect(frame()).toContain("❯ Work on web");
     mouse.emit({ kind: "click", ...at(frame(), "infra", 2) });
