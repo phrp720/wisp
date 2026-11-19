@@ -44,7 +44,7 @@ export function BoltView(props: BoltViewProps) {
   const bolt = read.workspace.bolts.find((entry) => entry.label === props.bolt);
 
   const lines = bolt ? layout({ read, bolt, reads, runs, containers, glyphs }) : [];
-  const room = Math.max(3, height - 9);
+  const room = Math.max(3, height - 9 - (bolt?.notes ? 1 : 0));
   const top = Math.max(0, Math.min(scroll, lines.length - room));
 
   useInput((input, key) => {
@@ -81,6 +81,7 @@ export function BoltView(props: BoltViewProps) {
         <Text dimColor>{`  ${read.workspace.name} · `}</Text>
         {bolt.job ? <Text color="cyan">a job — runs to the end, stops at the first failure</Text> : <Text dimColor>starts things and leaves them running</Text>}
       </Text>
+      {bolt.notes ? <Text wrap="truncate-end">{bolt.notes}</Text> : null}
       <Text wrap="truncate-end" dimColor>
         {[
           last ? `last run ${last.ok ? glyphs.ok : glyphs.fail} #${last.number ?? ""} ${ago(last.startedAt)}` : "never run yet",

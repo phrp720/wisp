@@ -7,8 +7,9 @@ Every command takes `--help`; most take `--json`, for scripts and agents.
 | Command | |
 |---|---|
 | `wisp` | the dashboard; without a terminal, what this project can run |
-| `wisp <bolt>` | run a bolt of this project, by any distinctive word of its name |
+| `wisp <bolt>` | run a bolt of this project, by its slug or any whole word of its name |
 | `wisp <workspace> <bolt>` | run a bolt of another project, from any folder |
+| `wisp pick [workspace]` | choose a bolt from a list and run it |
 | `wisp use <file> <bolt>` | run a bolt of a file by its path, for cron and scripts |
 | `wisp down <bolt>` | stop what it started, then run its `down` steps |
 | `wisp restart <bolt>` | down, then up again |
@@ -27,18 +28,25 @@ Every command takes `--help`; most take `--json`, for scripts and agents.
 
 ### How Wisp reads `wisp <name>`
 
-- **Inside a project,** a name is one of its bolts first: `wisp api` runs "Work on api".
-- **Then a workspace:** `wisp payments-service` lists its bolts, and
-  `wisp payments-service services` runs one.
-- **Then a bolt of any project you've used,** from any folder: `wisp website`. When several
-  projects have one by that name, Wisp lists them (`wisp shop dev · wisp blog dev`) and runs
-  nothing.
-- **A name can be** the full name in quotes (`"Payments Service"`), its slug (`payments-service`,
-  shown by `wisp list`), or any part of it that only one matches (`pay`). When several
-  match, Wisp lists them and runs nothing.
+- **One word is a bolt of the project you're in,** and only of that project: `wisp api` runs
+  "Work on api". When it isn't a bolt here, nothing runs, and Wisp says what to type instead:
+  `Elsewhere: wisp mira deploy`.
+- **Two words are a workspace and one of its bolts,** from any folder:
+  `wisp payments-service services`.
+- **To see a workspace's bolts,** `wisp show payments-service`. To choose one from a list,
+  `wisp pick payments-service`, or `wisp pick` to choose the workspace too.
+- **A name can be** the full name in quotes (`"Work on api"`), its slug (`work-on-api`, shown
+  by `wisp show` and `wisp list`), or whole words of it that only one name has (`api`,
+  `on-api`). Never part of a word: `doc` doesn't run "Documentation". When several match,
+  Wisp lists them and runs nothing.
+- **A bolt named like a command** (`list`, `check`) still runs with `wisp use list`.
 
 `down` and `restart` take `--deps`, for the bolts it needed too; `down --dry-run` shows what
-would stop.
+would stop. `wisp <workspace> --all` opens everything a workspace holds.
+
+`wisp pick` lists the bolts with what's running, their slugs and notes: type to filter, `⏎`
+runs the one selected, `esc` cancels. It takes the same options as running a bolt. Without
+a terminal, or with `--json`, it asks nothing and prints the list instead.
 
 ## Setting up
 
@@ -77,7 +85,7 @@ would stop.
 | Command | |
 |---|---|
 | `wisp list` | every workspace: yours, and the projects you've used |
-| `wisp show [workspace]` | everything a workspace holds, and what each bolt does |
+| `wisp show [workspace]` | a workspace's bolts, with their slugs, notes and what's running, then everything it holds |
 | `wisp doctor` | what works on this machine, and where Wisp keeps its files |
 | `wisp help agents` | the full reference, for AI agents (also `wisp spec`) |
 

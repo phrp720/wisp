@@ -78,7 +78,7 @@ export async function loadWorkspaces(options: ReadOptions = {}): Promise<Workspa
  * A workspace named by any distinctive part of its name.
  *
  * The same rule bolts use, so there is one rule to learn: an exact name, slug or path
- * wins, and otherwise the needle must appear in exactly one name.
+ * wins, and otherwise the needle must be whole words of exactly one name.
  */
 export function matchWorkspace<T extends { workspace: Workspace } | Workspace>(
   query: string,
@@ -99,10 +99,10 @@ export function matchWorkspace<T extends { workspace: Workspace } | Workspace>(
   const bySlug = items.filter((item) => slugify(of(item).name) === slugify(needle));
   if (bySlug.length === 1) return { match: bySlug[0] as T, candidates: bySlug };
 
-  const containing = items.filter((item) => of(item).name.toLowerCase().includes(needle));
-  if (containing.length === 1) return { match: containing[0] as T, candidates: containing };
+  const byWords = items.filter((item) => hasWords(of(item).name, needle));
+  if (byWords.length === 1) return { match: byWords[0] as T, candidates: byWords };
 
-  return { candidates: containing.length > 0 ? containing : bySlug };
+  return { candidates: byWords.length > 0 ? byWords : bySlug };
 }
 
 /** Like {@link matchWorkspace}, but says what went wrong. */
@@ -119,6 +119,16 @@ export function resolveWorkspace<T extends { workspace: Workspace } | Workspace>
   }
 
   throw new WispError(`No workspace matching "${query}"`, "NOT_FOUND");
+}
+
+export function hasWords(name: string, needle: string): boolean {
+  const words = slugify(name).split("-").filter(Boolean);
+  const wanted = slugify(needle).split("-").filter(Boolean);
+  if (wanted.length === 0) return false;
+  for (let at = 0; at + wanted.length <= words.length; at += 1) {
+    if (wanted.every((word, offset) => words[at + offset] === word)) return true;
+  }
+  return false;
 }
 
 export function slugify(value: string): string {

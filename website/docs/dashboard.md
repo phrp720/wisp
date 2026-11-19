@@ -35,7 +35,8 @@ terminal app that uses the mouse. Rather select freely? Turn it off in [Settings
 ## No JSON needed
 
 `a` adds a bolt and `e` edits one: steps are picked from a list (Start, Wait, Open) and
-filled in through short forms. `E` opens the file itself if you'd rather.
+filled in through short forms, and `n` sets its name and notes. `E` opens the file itself if
+you'd rather.
 
 ![Making a bolt in the dashboard: name it, then add a command, a wait and a website through short forms, then run it](/demo/editor.gif)
 

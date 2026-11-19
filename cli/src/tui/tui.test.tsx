@@ -58,6 +58,7 @@ function services(overrides: Partial<Services> = {}, library: Library = { reads:
       bolt: async (_file, bolt) => ({ label: bolt, targets: [] }),
       addBolt: async () => undefined,
       renameBolt: async () => undefined,
+      setBoltNotes: async () => undefined,
       removeBolt: async () => undefined,
       moveBolt: async () => undefined,
       setJob: async () => undefined,
@@ -989,6 +990,30 @@ describe("doing everything without JSON", () => {
     expect(addStep).toHaveBeenCalled();
     const step = (addStep.mock.calls[0] as unknown[])[2] as Record<string, string>;
     expect(typeof step["bolt"]).toBe("string");
+  });
+
+  it("shows a bolt's notes, and sets them through the name form without renaming it", async () => {
+    const setBoltNotes = vi.fn(async () => undefined);
+    const renameBolt = vi.fn(async () => undefined);
+    const noted = read("/dev/acme/.wisp.json", { name: "Acme", bolts: [{ label: "Work on api", notes: "The API and its database", targets: [{ folder: "apps/api" }] }] });
+    const bolt = async () => ({ label: "Work on api", notes: "The API and its database", targets: [] });
+    const app = await open(services({ editing: { ...services().editing, bolt, setBoltNotes, renameBolt } }, { reads: [noted], here: noted.workspace.file, unreadable: [] }));
+    expect(app.lastFrame()).toContain("The API and its database");
+    app.stdin.write("e");
+    await tick();
+    app.stdin.write("n");
+    await tick();
+    expect(app.lastFrame()).toContain("Notes");
+    app.stdin.write("\r");
+    await tick();
+    for (const char of " too") app.stdin.write(char);
+    await tick();
+    app.stdin.write("\r");
+    app.stdin.write("\r");
+    await tick();
+    await tick();
+    expect(renameBolt).not.toHaveBeenCalled();
+    expect(setBoltNotes).toHaveBeenCalledWith(noted.workspace.file, "Work on api", "The API and its database too");
   });
 
   it("says what is wrong with a field, in words", async () => {

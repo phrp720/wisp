@@ -19,7 +19,8 @@ Your editor autocompletes all of this once the file has its `$schema` line.
 
 | Field | |
 |---|---|
-| `label` | its name; any distinctive word of it runs it. Name it after the job: "Work on api" |
+| `label` | its name, and what you type: its slug or any whole word of it runs it. Keep it short: "Deploy", "Work on api" |
+| `notes` | a line on what it does, shown in `wisp show`, `wisp pick`, tab completion and the dashboard |
 | `targets` | its [steps](#steps), in order |
 | `job` | `true` makes it a [job](./jobs): runs to the end, stops at the first failure, kept in history |
 | `down` | steps `wisp down` runs after stopping what it started, like `docker compose stop` |

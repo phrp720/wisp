@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <b>Start any project from anywhere, with one word.</b><br />
+  <b>Start any project with one word.</b><br />
   The database, the server, your editor in the right folder, the page in your browser:<br />
   described once, brought up with <code>wisp &lt;bolt&gt;</code> from any terminal.<br />
   Your workflows too: checks, builds and releases, kept like CI runs.
@@ -49,8 +49,10 @@ Windows without Node: [Releases](https://github.com/phrp720/wisp/releases) has a
 cd ~/dev/acme
 wisp init     # suggests bolts from what the project has; keep the ones you want
 wisp trust    # allow its commands, after reading them
-wisp <bolt>      # run any bolt, from any folder: any distinctive word of its name
+wisp <bolt>   # run a bolt of this project: its slug, or any whole word of its name
+wisp pick     # choose a bolt from a list
 wisp          # the dashboard
+wisp acme <bolt>   # from any folder, name the project too
 ```
 
 `wisp init` reads package.json scripts, compose files, Django, FastAPI, Gradle, Maven, Go,

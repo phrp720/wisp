@@ -81,7 +81,7 @@ export function fail(error: unknown): never {
 /** What to try next, for the failures that have an obvious next thing to try. */
 const HINTS: Record<string, string> = {
   NOT_FOUND: "Run `wisp list` to see what's available.",
-  NO_BOLT: "Run `wisp` to see this project's bolts.",
+  NO_BOLT: "`wisp show [workspace]` lists the bolts, `wisp pick [workspace]` chooses one.",
   NOT_TRUSTED: "Read what it would run with `wisp check`, then allow it with `wisp trust` (at a terminal). --skip-untrusted runs only the allowed part.",
   AMBIGUOUS: "Name it more precisely.",
   PROJECT_INVALID: "Run `wisp check` to see what is wrong with the file.",

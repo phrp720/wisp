@@ -10,6 +10,7 @@ to start, in order; that is the whole idea. Every field is in the [File referenc
   "bolts": [
     {
       "label": "Work on api",
+      "notes": "The API with its database, opened in the browser",
       "targets": [
         { "compose": "compose.yaml", "services": ["postgres"] },
         { "folder": "apps/api" },
@@ -21,6 +22,10 @@ to start, in order; that is the whole idea. Every field is in the [File referenc
   ]
 }
 ```
+
+A bolt's `label` is what you type, so keep it short: `wisp api`, or its slug `wisp work-on-api`,
+runs this one. `notes` says what it does; Wisp shows it in `wisp show`, `wisp pick`, tab
+completion and the dashboard.
 
 Paths are relative to the file, so it works on everyone's machine. Commit it. The
 `$schema` line (which `wisp init` adds) makes your editor autocomplete and check the file as

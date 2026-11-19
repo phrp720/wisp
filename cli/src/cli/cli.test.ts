@@ -44,6 +44,7 @@ describe("commands", () => {
   it("keep the everyday list short", () => {
     expect(COMMANDS.filter((command) => command.group === "everyday").map((command) => command.name)).toEqual([
       "use",
+      "pick",
       "init",
       "trust",
       "list",
@@ -56,6 +57,12 @@ describe("shortest", () => {
     const bolts = ["Work on core", "Work on the app", "Work on the CLI"].map((label) => ({ id: label, label, steps: [] }));
     expect(shortest(bolts[0]!, bolts)).toBe("core");
     expect(shortest(bolts[2]!, bolts)).toBe("cli");
+  });
+
+  it("counts only whole words as a clash, and falls back to the slug", () => {
+    const bolts = ["Documentation", "Docs", "Work on api", "Work on api again"].map((label) => ({ id: label, label, steps: [] }));
+    expect(shortest(bolts[1]!, bolts)).toBe("docs");
+    expect(shortest(bolts[2]!, bolts)).toBe("work-on-api");
   });
 });
 
@@ -93,7 +100,7 @@ describe("failing", () => {
       expect(() => fail(new WispError("No bolt called nope", "NO_BOLT"))).toThrow("exit 1");
       expect(JSON.parse(printed.join("\n"))).toEqual({
         ok: false,
-        error: { code: "NO_BOLT", message: "No bolt called nope", hint: "Run `wisp` to see this project's bolts." },
+        error: { code: "NO_BOLT", message: "No bolt called nope", hint: "`wisp show [workspace]` lists the bolts, `wisp pick [workspace]` chooses one." },
       });
     } finally {
       process.argv = before;

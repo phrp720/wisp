@@ -23,10 +23,10 @@ export async function status(): Promise<void> {
       console.log();
       printBolts(workspace, false, here.withheld, await listRuns());
       console.log();
-      console.log(dim(`Run one with \`wisp ${shortest(workspace.bolts[0]!, workspace.bolts)}\`, or \`wisp use\` to pick.`));
+      console.log(dim(`Run one with \`wisp ${shortest(workspace.bolts[0]!, workspace.bolts)}\`, or \`wisp pick\` to choose.`));
     } else {
       console.log();
-      console.log(dim("No bolts in this file yet — add some, then `wisp use`."));
+      console.log(dim("No bolts in this file yet. Add some, then `wisp <bolt>`."));
     }
 
     const trust = trustLine(here);
@@ -53,5 +53,5 @@ export async function status(): Promise<void> {
   }
   for (const failure of unreadable) console.log(`${red("✗")} ${dim(tildify(failure.file))} ${failure.error}`);
   console.log();
-  console.log(dim("Run one with `wisp use <workspace> <bolt>`."));
+  console.log(dim("`wisp show <workspace>` lists its bolts, `wisp <workspace> <bolt>` runs one, `wisp pick` chooses."));
 }

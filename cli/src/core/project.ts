@@ -702,6 +702,8 @@ function bolts(entries: Entry[], declared: { id: string; label: string }[], ctx:
     skippedSteps.set(id, skipped);
 
     const bolt: Bolt = { id, label, steps };
+    const notes = optionalString(entry["notes"]);
+    if (notes) bolt.notes = notes;
     const color = optionalString(entry["color"]);
     if (color) bolt.color = color;
 

@@ -29,6 +29,11 @@ links, apps and shell commands, with optional waits and dependencies between the
 }
 \`\`\`
 
+A bolt's \`label\` is what people type, so keep it short (\`Deploy\`, \`Work on api\`).
+Its slug (\`work-on-api\`) or any whole word of it (\`api\`) runs it, never part of a
+word. An optional \`"notes"\` says what it does in a line, and Wisp shows it beside the
+bolt in \`wisp show\`, \`wisp pick\`, tab completion and the TUI.
+
 ## Bolt steps
 
 \`targets\` is an ordered list. Each entry is one of:
@@ -134,12 +139,14 @@ under "Runs code" and ask them to approve it.**
 |---|---|
 | \`wisp\` | at a terminal, the TUI; without one (pipes, scripts, agents), what this project can run |
 | \`wisp status\` | what this project can run, as text, even at a terminal |
-| \`wisp <bolt>\` | run a bolt by any distinctive word of its label: this project's first, then any known project's (ambiguous: exit 1, \`AMBIGUOUS\`) |
-| \`wisp use <file> <bolt>\` | run a bolt of a workspace file by path, for cron and scripts |
-| \`wisp use <workspace> <bolt>\` | run a bolt of any known workspace |
+| \`wisp <bolt>\` | run a bolt of this project, and only this project, by its label, slug or a whole word of it. Not a bolt here: exit 1, \`NO_BOLT\`, and the message names what to type. Ambiguous: exit 1, \`AMBIGUOUS\` |
+| \`wisp <workspace> <bolt>\` | run a bolt of any known workspace, from any folder |
+| \`wisp <workspace> --all\` | open everything a workspace holds |
+| \`wisp use <file> <bolt>\` | run a bolt of a workspace file by path, for cron and scripts. \`use\` is implied above; say it for a bolt named like a command (\`wisp use list\`) |
+| \`wisp pick [workspace]\` | at a terminal, choose a bolt from a list and run it; without one (or with \`--json\`) it asks nothing and prints what \`wisp show\` would |
 | \`wisp init [--print] [--yes] [--only <bolts>]\` | write a \`.wisp.json\` from what the project has, at its root and one folder down: package.json and Deno; Python (Django, FastAPI, Flask, pytest, ruff, uv, poetry); Gradle and Maven (Spring Boot); Go; Rust; Rails; PHP and Laravel; .NET; Elixir and Phoenix; docker compose, Makefile, justfile, mise, Taskfile, Procfile. \`--only "Check,Work on api"\` keeps just those of the suggested bolts |
 | \`wisp check [path] [--json]\` | validate a file, or the one in a folder: errors, warnings, what would run |
-| \`wisp show [workspace] [--json]\` | everything a workspace holds |
+| \`wisp show [workspace] [--json]\` | a workspace's bolts (label, slug, notes, what is up), then everything it holds |
 | \`wisp list [--json]\` | every known workspace |
 | \`wisp trust\` | approve a file's commands (for the user, not an agent) |
 | \`wisp down <bolt> [--deps]\` · \`wisp restart <bolt>\` | stop what a bolt started · stop it and run it again |
@@ -159,8 +166,9 @@ Run flags: \`--dry-run\` (show what would happen and where, change nothing), \`-
 
 1. \`wisp spec\` (this), then \`wisp show --json\` to see what exists. In a project
    without a file, \`wisp init --yes\` writes one from its scripts.
-2. Edit \`.wisp.json\`. Prefer inline steps; add shared assets only when several bolts
-   need the same thing. Keep paths relative.
+2. Edit \`.wisp.json\`. Give each bolt a short label and a \`notes\` line. Prefer inline
+   steps; add shared assets only when several bolts need the same thing. Keep paths
+   relative.
 3. \`wisp check --json\`: exit code 1 means errors. Fix them until \`errors\` is 0.
 4. \`wisp <bolt> --dry-run --json\`: confirm the plan and where each command would run.
    Steps the file is not allowed to run yet are listed under \`waitingForTrust\`.
@@ -174,7 +182,7 @@ Run flags: \`--dry-run\` (show what would happen and where, change nothing), \`-
 
 \`wisp\` at a terminal opens it. Everything above can be done there without writing JSON:
 a folder with no file is offered a setup; \`e\` edits the selected bolt through forms
-(add, change, move, remove steps; rename; make it a job), \`a\` adds a bolt, \`N\` a
+(add, change, move, remove steps; its name and notes; make it a job), \`a\` adds a bolt, \`N\` a
 personal workspace; \`v\` shows a bolt whole and read-only, its dependencies opened up;
 \`p\` (or \`2\`) shows what is running, grouped by the bolt that started it, with live
 output (\`[\` and \`]\` switch to a command's details and past runs); \`h\` (or \`3\`) the

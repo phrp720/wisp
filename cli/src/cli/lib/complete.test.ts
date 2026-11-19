@@ -29,7 +29,8 @@ describe("tab completion", () => {
 
   it("offers a workspace's bolts after its name, and nothing after a bolt of this project", async () => {
     expect(await values(["payments-service", ""])).toEqual(["services", "test"]);
-    expect(await values(["pay", "se"])).toEqual(["services"]);
+    expect(await values(["payments", "se"])).toEqual(["services"]);
+    expect(await values(["pay", "se"])).toEqual([]);
     expect(await values(["work-on-api", ""])).toEqual([]);
   });
 
@@ -40,6 +41,7 @@ describe("tab completion", () => {
     expect(await values(["open-with", "terminal", "gh"])).toEqual(["Ghostty"]);
     expect(await values(["open-with", "folder", ""])).toEqual(["WebStorm"]);
     expect(await values(["completion", ""])).toEqual(["zsh", "bash", "fish"]);
+    expect(await values(["pick", ""])).toEqual(["acme", "payments-service"]);
     expect(await values(["help", "a"])).toEqual(["agents"]);
   });
 

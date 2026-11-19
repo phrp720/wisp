@@ -2,17 +2,18 @@ import { recordProject } from "../../core/config.js";
 import { listHistory } from "../../core/history.js";
 import { WispError } from "../../core/errors.js";
 import { matchBolt, planRetry, runPlan, switchToWorkspace, type RunDeps } from "../../core/switch.js";
-import type { Bolt, RunMode, SwitchOptions, SwitchResult, SwitchTarget, TargetResult, Workspace } from "../../core/types.js";
+import type { RunMode, SwitchOptions, SwitchResult, SwitchTarget, TargetResult, Workspace } from "../../core/types.js";
 import { bold, cyan, dim, green, kindLabel, plural, red, title, yellow } from "../format.js";
-import { emitJson, findWorkspaceForDependency, resolveRun } from "../lib/context.js";
+import { emitJson, findWorkspaceForDependency, resolveRun, workspaceFor } from "../lib/context.js";
 import type { CommandDef } from "../lib/define.js";
-import { diagnosticSummary, named as showNamed, printWithheld, resultLine, suggestBolts, trustLine } from "../lib/render.js";
+import { diagnosticSummary, named as showNamed, printWithheld, resultLine, trustLine } from "../lib/render.js";
 import { tildify } from "../../core/paths.js";
 import { trustProject } from "../../core/trust.js";
 import { waitingForTrust } from "../../core/waiting.js";
+import { slugify } from "../../core/workspaces.js";
 import { Prompter } from "../prompt.js";
 
-interface Options {
+export interface UseOptions {
   dryRun?: boolean;
   all?: boolean;
   inline?: boolean;
@@ -23,7 +24,7 @@ interface Options {
   json?: boolean;
 }
 
-export const use: CommandDef<Options> = {
+export const use: CommandDef<UseOptions> = {
   name: "use",
   aliases: ["run"],
   summary: "Run a bolt: start what it lists, in the order it lists it",
@@ -42,30 +43,30 @@ export const use: CommandDef<Options> = {
     ["--json", "print the result as JSON"],
   ],
   examples: [
-    "wisp api                          # a bolt of this project — `use` is implied",
-    'wisp use acme "API development"   # a bolt of a named workspace',
-    "wisp api --dry-run                # what would happen, and where",
-    "wisp api --detach                 # commands in the background, on a server",
+    "wisp api                  # a bolt of this project: `use` is implied",
+    "wisp acme api             # a bolt of another workspace, from any folder",
+    "wisp api --dry-run        # what would happen, and where",
+    "wisp api --detach         # commands in the background, on a server",
+    "wisp acme --all           # everything a workspace holds",
   ],
 
   async run([first, second], options) {
-    const resolved = await resolveRun(first, second, undefined);
-    const { bolt: named, workspaceRef } = resolved;
+    const locate = async () =>
+      options.all && !second ? { read: await workspaceFor(first), ...(first ? { workspaceRef: first } : {}) } : await resolveRun(first, second, undefined);
+    const resolved = await locate();
+    const { bolt, workspaceRef } = resolved;
     let { read } = resolved;
     let { workspace } = read;
     const mode: RunMode = options.inline ? "inline" : options.detach ? "background" : options.window ? "terminal" : "auto";
 
-    const chosen = named ?? (options.all ? undefined : await chooseBolt(workspace, options));
-    if (chosen === null) {
-      console.log(dim("Nothing ran."));
-      return;
-    }
-    const bolt = chosen;
     if (!options.all && !bolt) {
-      if (options.json) return emitJson({ workspace: workspace.name, bolts: workspace.bolts });
-      console.log(`${dim("in")} ${title(workspace)}`);
-      suggestBolts(workspace, workspaceRef);
-      return;
+      const prefix = workspaceRef ? `${workspaceRef} ` : "";
+      throw new WispError(
+        workspace.bolts.length > 0
+          ? `Name a bolt of ${workspace.name}: ${workspace.bolts.map((entry) => `\`wisp ${prefix}${slugify(entry.label)}\``).join(", ")}`
+          : `${workspace.name} has no bolts yet`,
+        "NO_BOLT",
+      );
     }
 
     // Not half a run: when steps it needs wait for trust, ask (at a terminal) or stop, and
@@ -96,7 +97,7 @@ export const use: CommandDef<Options> = {
         await trustProject(workspace.file, read.hash);
         console.log(`${green("✓")} trusted ${dim(tildify(workspace.file))}`);
         console.log();
-        read = (await resolveRun(first, second, undefined)).read;
+        read = (await locate()).read;
         workspace = read.workspace;
       }
     }
@@ -179,7 +180,7 @@ export const use: CommandDef<Options> = {
         process.exitCode = 1;
         return;
       }
-      suggestBolts(workspace, workspaceRef);
+      console.log(dim("  nothing ran: this workspace holds nothing to open here"));
       return;
     }
 
@@ -210,7 +211,7 @@ export const use: CommandDef<Options> = {
     if (!result.ok) {
       const next = [
         result.historyId ? `\`wisp history ${result.historyId}\`` : "",
-        failedAt && result.historyId ? `\`wisp ${shortName(name)} --retry\` runs only what failed` : "",
+        failedAt && result.historyId ? `\`wisp ${workspaceRef ? `${workspaceRef} ` : ""}${slugify(name)} --retry\` runs only what failed` : "",
       ].filter(Boolean);
       console.error(`\n${red("✗")} ${bold(name)} ${failedAt ? `failed at ${failedAt.label}` : "was stopped"}${next.length > 0 ? dim(` · ${next.join(" · ")}`) : ""}`);
       process.exitCode = 1;
@@ -225,38 +226,6 @@ function boltLabel(workspace: Workspace, ref: string): string {
   const exact = workspace.bolts.find((bolt) => bolt.id === ref || bolt.label === ref);
   if (exact) return exact.label;
   return matchBolt(workspace, ref).bolt?.label ?? ref;
-}
-
-/**
- * Which bolt, when nothing said. Only on a terminal: a script that pipes `wisp use`
- * somewhere must not stop on a question nobody is there to answer.
- */
-/** The bolt picked, undefined when there was nothing to ask, null when you cancelled. */
-async function chooseBolt(workspace: Workspace, options: Options): Promise<string | undefined | null> {
-  const bolts = workspace.bolts;
-  if (bolts.length === 0 || options.json) return undefined;
-  if (!process.stdin.isTTY || !process.stdout.isTTY) return undefined;
-  if (bolts.length === 1) return (bolts[0] as Bolt).id;
-
-  console.log(`${dim("in")} ${title(workspace)}`);
-  bolts.forEach((bolt, index) => {
-    console.log(`  ${dim(`${index + 1}.`)} ${bold(bolt.label)} ${dim(plural(bolt.steps.length, "step"))}`);
-  });
-
-  // No default: ⏎ on its own, q or Ctrl+C means you changed your mind, and nothing runs.
-  const prompt = new Prompter();
-  try {
-    const answer = (await prompt.ask(dim("  which? a number or name · ⏎ cancels"))).trim();
-    if (!answer || answer.toLowerCase() === "q") return null;
-    const index = Number.parseInt(answer, 10) - 1;
-    if (Number.isInteger(index) && index >= 0 && index < bolts.length) return (bolts[index] as Bolt).id;
-    return answer;
-  } catch (error) {
-    if (error instanceof WispError && error.code === "CANCELLED") return null;
-    throw error;
-  } finally {
-    prompt.close();
-  }
 }
 
 /**
@@ -293,7 +262,3 @@ function formatMs(ms: number): string {
   return `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`;
 }
 
-/** The bolt as a word to type: a single word as it is, more than one in quotes. */
-function shortName(label: string): string {
-  return /\s/.test(label) ? `"${label}"` : label;
-}

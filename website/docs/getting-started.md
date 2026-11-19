@@ -1,8 +1,8 @@
 # Getting started
 
-Wisp starts any project from anywhere, with one word: the database, the server, your editor
-in the right folder, the page in your browser. You describe it once; after that, `wisp api`
-brings it all up from any terminal, and Wisp keeps watch while you work.
+Wisp starts any project with one word: the database, the server, your editor in the right
+folder, the page in your browser. You describe it once; after that, `wisp api` brings it all
+up, `wisp acme api` does from any terminal, and Wisp keeps watch while you work.
 
 It runs your workflows too: checks, builds and releases, step by step, stopping at the first
 failure, with every run kept like a CI.
@@ -56,7 +56,8 @@ A file's commands run only once you've allowed them. [Why](./trust).
 ## 4. Run it
 
 ```bash
-wisp api      # the "api" bolt: any distinctive word of its name
+wisp api      # the "api" bolt: its slug, or any whole word of its name
+wisp pick     # choose one from a list
 wisp          # the dashboard: every bolt, what's running, history
 ```
 
@@ -64,9 +65,9 @@ wisp          # the dashboard: every bolt, what's running, history
 
 Servers keep running in the background: `wisp ps` lists them, `wisp down api` stops them.
 
-**From any folder,** the same word works: `wisp api` finds the bolt in any project you've
-used. If two projects have one, name the project: `wisp acme api`. `wisp scan ~/dev` finds
-projects you haven't used yet.
+**From any folder,** name the project too: `wisp acme api`. `wisp list` shows your projects,
+`wisp show acme` lists a project's bolts, and `wisp pick` lets you choose both from a list.
+`wisp scan ~/dev` finds projects you haven't used yet.
 
 ## Update or remove
 

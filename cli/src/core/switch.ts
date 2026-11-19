@@ -17,7 +17,7 @@ import { listRuns, newRunId, pidFileFor, recordWindowRun, runningFor, startRun, 
 import { restartLoop, shellInvocation, windowInvocation } from "./shell.js";
 import { normalizeUrl, sameUrl } from "./url.js";
 import { describeWait, waitFor } from "./wait.js";
-import { slugify } from "./workspaces.js";
+import { hasWords, slugify } from "./workspaces.js";
 import type {
   AssetBase,
   Bolt,
@@ -848,7 +848,7 @@ export function composeFiles(workspace: Workspace): string[] {
  *
  * Bolt labels are written to be read ("API development"), which makes them the worst
  * thing to type. One rule: an exact id or label wins, and otherwise the needle has to
- * appear in exactly one label. Not a prefix rule — bolts are named after jobs and jobs
+ * be whole words of exactly one label. Not a prefix rule — bolts are named after jobs and jobs
  * cluster ("Work on core", "Work on the app"), so the distinguishing word is at the end.
  */
 export function matchBolt(workspace: Workspace, ref: string): { bolt?: Bolt; candidates: Bolt[] } {
@@ -866,7 +866,7 @@ export function matchBolt(workspace: Workspace, ref: string): { bolt?: Bolt; can
   const bySlug = bolts.filter((bolt) => slugify(bolt.label) === slugify(needle));
   if (bySlug.length === 1) return { bolt: bySlug[0] as Bolt, candidates: bySlug };
 
-  const matches = bolts.filter((bolt) => bolt.label.toLowerCase().includes(needle));
+  const matches = bolts.filter((bolt) => hasWords(bolt.label, needle));
   if (matches.length === 1) return { bolt: matches[0] as Bolt, candidates: matches };
 
   return { candidates: matches };

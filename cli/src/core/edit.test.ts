@@ -18,6 +18,7 @@ import {
   removeStep,
   renameBolt,
   replaceStep,
+  setBoltNotes,
   setJob,
   stepValues,
 } from "./edit.js";
@@ -102,6 +103,15 @@ describe("editing a workspace without writing JSON", () => {
     await removeBolt(file, "Work on api");
     read = await readProjectFile(file);
     expect(read.workspace.bolts.map((bolt) => bolt.label)).toEqual(["Run the tests"]);
+  });
+
+  it("writes a bolt's notes right after its label, and drops them when cleared", async () => {
+    await setBoltNotes(file, "Work on api", "  The API with its database  ");
+    expect(Object.keys(JSON.parse(await readFile(file, "utf8")).bolts[0])).toEqual(["label", "notes", "color", "targets"]);
+    expect((await readProjectFile(file)).workspace.bolts[0]?.notes).toBe("The API with its database");
+    await setBoltNotes(file, "Work on api", "");
+    expect(JSON.parse(await readFile(file, "utf8")).bolts[0]).not.toHaveProperty("notes");
+    expect((await readProjectFile(file)).workspace.bolts[0]?.notes).toBeUndefined();
   });
 
   it("keeps a file trusted when the change was made here, by the person who trusted it", async () => {
