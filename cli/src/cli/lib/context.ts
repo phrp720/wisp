@@ -64,10 +64,8 @@ export async function findWorkspaceForDependency(ref: string): Promise<Workspace
 /**
  * What `wisp use <a> [b]` means.
  *
- * Two words are a workspace and a bolt. One word is a workspace if one answers to it,
- * and otherwise — only otherwise — a bolt of the project you are standing in. So the
- * documented form keeps working, and `wisp api` inside a repository means the obvious
- * thing; the fallback can only fire where the first reading was impossible anyway.
+ * Two words are a workspace and a bolt. One word is a bolt of the project you are
+ * standing in, and only that: a bolt of another project runs only when you name it.
  */
 export async function resolveRun(
   first: string | undefined,
@@ -82,46 +80,17 @@ export async function resolveRun(
 
   if (first && !flag) {
     const here = await maybeProject();
-
-    // Standing in a project, its own bolts come first: `wisp api` in a repository that
-    // has an "API" bolt means that bolt, even if some other workspace is called "api".
     if (here) {
       const { bolt: match, candidates } = matchBolt(here.workspace, first);
       if (match) return { read: here, bolt: first };
       if (candidates.length > 1) {
         throw new WispError(
-          `"${first}" matches several bolts: ${candidates.map((candidate) => candidate.label).join(", ")}`,
+          `"${first}" matches several bolts: ${candidates.map((candidate) => `${candidate.label} (${slugify(candidate.label)})`).join(", ")}`,
           "AMBIGUOUS",
         );
       }
     }
-
-    const all = await everything();
-    const { match } = matchWorkspace(first, all);
-    if (match) return { read: match, workspaceRef: first };
-
-    // One word from anywhere: a bolt of any project you've used. One match runs; several
-    // are listed, with what to type for each, and nothing runs.
-    const found = boltsEverywhere(first, all);
-    if (found.length === 1) return { read: found[0]!.read, bolt: found[0]!.label };
-    if (found.length > 1) {
-      throw new WispError(
-        `"${first}" is a bolt in several projects. Name the project: ${found.map((hit) => `wisp ${slugify(hit.read.workspace.name)} ${slugify(hit.label)}`).join(" · ")}`,
-        "AMBIGUOUS",
-      );
-    }
-
-    if (here) {
-      const bolts = here.workspace.bolts;
-      throw new WispError(
-        bolts.length > 0
-          ? `No bolt or workspace called "${first}". ${here.workspace.name} has ${bolts.map((entry) => entry.label).join(", ")}`
-          : `No workspace called "${first}", and ${here.workspace.name} has no bolts yet`,
-        "NO_BOLT",
-      );
-    }
-
-    return { read: resolveWorkspace(first, all) };
+    throw await noBoltHere(first, here);
   }
 
   return {
@@ -129,6 +98,34 @@ export async function resolveRun(
     ...(bolt ? { bolt } : {}),
     ...(first ? { workspaceRef: first } : {}),
   };
+}
+
+async function noBoltHere(word: string, here: WorkspaceRead | undefined): Promise<WispError> {
+  const all = await everything();
+  const others = all.filter((read) => read.workspace.file !== here?.workspace.file);
+  const workspace = matchWorkspace(word, others).match;
+  const elsewhere = boltsEverywhere(word, others);
+
+  const typed = slugify(word);
+  const close = typed ? (here?.workspace.bolts ?? []).filter((entry) => slugify(entry.label).split("-").some((part) => part.startsWith(typed))) : [];
+
+  const said = here
+    ? `${here.workspace.name} has no bolt called "${word}".`
+    : `"${word}" is not a bolt here: this folder has no ${PROJECT_FILE}.`;
+  const next = [
+    close.length > 0 ? `Did you mean ${close.map((entry) => `\`wisp ${slugify(entry.label)}\``).join(", ")}?` : "",
+    workspace
+      ? `${workspace.workspace.name} is a workspace: \`wisp show ${slugify(workspace.workspace.name)}\` lists its bolts, \`wisp pick ${slugify(workspace.workspace.name)}\` picks one.`
+      : "",
+    elsewhere.length > 0
+      ? `Elsewhere: ${elsewhere.map((hit) => `\`wisp ${slugify(hit.read.workspace.name)} ${slugify(hit.label)}\``).join(", ")}.`
+      : "",
+    close.length === 0 && !workspace && elsewhere.length === 0 && here && here.workspace.bolts.length > 0
+      ? `It has ${here.workspace.bolts.map((entry) => slugify(entry.label)).join(", ")}.`
+      : "",
+    !workspace && elsewhere.length === 0 && !here ? "`wisp list` shows your workspaces." : "",
+  ].filter(Boolean);
+  return new WispError([said, ...next].join(" "), "NO_BOLT");
 }
 
 /** `links,folders` and friends, as the kinds the runner understands. */

@@ -37,21 +37,28 @@ wisp completion --install
 
 ## Running things
 
-::: details What's the difference between `wisp <bolt>` and `wisp <workspace>`?
-Inside a project, a word is one of its bolts first: `wisp api` runs "Work on api".
-Anywhere else, it's a workspace: `wisp payments-service` lists its bolts, and
-`wisp payments-service services` runs one. `wisp list` shows each workspace's short name.
+::: details What's the difference between `wisp <bolt>` and `wisp <workspace> <bolt>`?
+One word is a bolt of the project you're in: `wisp api` runs "Work on api". Two words are
+a workspace and its bolt, from any folder: `wisp payments-service services`.
+`wisp show payments-service` lists its bolts, and `wisp list` shows each workspace's short
+name.
 
 → [How Wisp reads a name](./commands#how-wisp-reads-wisp-name)
 :::
 
 ::: details Can I run a bolt from any folder?
-Yes: `wisp api` finds the bolt in any project you've used. If two projects have one, Wisp
-lists them; name the project to pick: `wisp acme api`. `wisp scan ~/dev` finds the rest.
+Yes, name its project: `wisp acme api`. One word on its own only looks in the project you're
+in, so a bolt of another project never runs by surprise. `wisp pick` lets you choose the
+project and the bolt from a list. `wisp scan ~/dev` finds the rest.
 :::
 
-::: details Wisp asked "which?" and I changed my mind.
-Press `⏎` on its own, type `q`, or press Ctrl+C. Nothing runs.
+::: details Why doesn't `wisp doc` run "Documentation"?
+A word has to be a whole word of the name, or its slug: `wisp documentation`. Part of a word
+would stop working the day a "Docker" bolt shows up. Tab completion fills in the slug.
+:::
+
+::: details I opened `wisp pick` and changed my mind.
+Press `esc` or Ctrl+C. Nothing runs.
 :::
 
 ::: details A command asks something (y/n, a password). What do I do?

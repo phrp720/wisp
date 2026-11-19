@@ -183,19 +183,24 @@ export function BoltEditor({ file, bolt, others, elsewhere = [], adding = false,
   if (mode.kind === "rename") {
     return (
       <Form
-        title={`Rename "${label}"`}
-        intro="Name it after the job it does. Any word of it runs it: `wisp api`."
-        fields={[{ key: "label", label: "Name", required: true, placeholder: "Work on the API" }]}
-        initial={{ label }}
-        submitLabel="Rename"
+        title={`Name "${label}"`}
+        intro="A short name, since you type it: any whole word of it runs it, `wisp api`. Notes say what it does."
+        fields={[
+          { key: "label", label: "Name", required: true, placeholder: "Deploy" },
+          { key: "notes", label: "Notes", placeholder: "Builds the website and deploys it to production" },
+        ]}
+        initial={{ label, notes: raw?.notes ?? "" }}
+        submitLabel="Save"
         glyphs={glyphs}
         height={height}
         onCancel={() => setMode({ kind: "list" })}
         onSubmit={async (values) => {
           const name = values["label"]?.trim() ?? "";
+          const notes = values["notes"]?.trim() ?? "";
           try {
             onSaving?.();
-            await editing.renameBolt(file, label, name);
+            if (name !== label) await editing.renameBolt(file, label, name);
+            if (notes !== (raw?.notes ?? "")) await editing.setBoltNotes(file, name, notes);
           } catch (failure) {
             return { label: failure instanceof Error ? failure.message : String(failure) };
           }
@@ -269,7 +274,7 @@ export function BoltEditor({ file, bolt, others, elsewhere = [], adding = false,
       })}
       {steps.length === 0 ? <Text dimColor>{"\n  No steps yet. A bolt does its steps in order: start a server, wait for it, open it."}</Text> : null}
       <Box flexGrow={1} />
-      <Text dimColor>{`⏎ ${index === steps.length ? "add" : "change"} · a add after this one · d remove · K J move · n rename · t ${raw?.job ? "make it start things" : "make it a job"} · esc done`}</Text>
+      <Text dimColor>{`⏎ ${index === steps.length ? "add" : "change"} · a add after this one · d remove · K J move · n name and notes · t ${raw?.job ? "make it start things" : "make it a job"} · esc done`}</Text>
     </Box>
   );
 }

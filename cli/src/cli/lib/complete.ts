@@ -65,6 +65,7 @@ export async function complete(words: string[], sources: CompletionSources = SOU
         if (position === 2) return boltsOf(await workspaceNamed(before[1] as string, sources));
         return [];
       case "show":
+      case "pick":
         return position === 1 ? workspaceSlugs(sources) : [];
       case "logs":
       case "stop":
@@ -127,7 +128,7 @@ async function herebolts(sources: CompletionSources): Promise<Candidate[]> {
 
 function boltsOf(workspace: Workspace | undefined): Candidate[] {
   if (!workspace) return [];
-  return workspace.bolts.map((bolt) => ({ value: slugify(bolt.label), description: `${bolt.job ? "job" : "bolt"} · ${bolt.label}` }));
+  return workspace.bolts.map((bolt) => ({ value: slugify(bolt.label), description: [bolt.job ? "job" : "bolt", bolt.label, bolt.notes].filter(Boolean).join(" · ") }));
 }
 
 async function workspaceSlugs(sources: CompletionSources): Promise<Candidate[]> {

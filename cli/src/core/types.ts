@@ -123,6 +123,7 @@ export type BoltStep =
 export interface Bolt {
   id: string;
   label: string;
+  notes?: string;
   color?: string;
   steps: BoltStep[];
   /**

@@ -103,7 +103,8 @@ export function WorkspacePanel(props: { read: WorkspaceRead; boltIndex: number; 
       })
     : [];
 
-  const { items: shownBolts, offset, stepRoom } = boltWindow(bolts, boltIndex, height);
+  const { items: shownBolts, offset, stepRoom: room } = boltWindow(bolts, boltIndex, height);
+  const stepRoom = Math.max(1, room - (selected?.notes ? 1 : 0));
   const stepLines = [
     ...steps.map((step) => ({ key: `${step.kind}:${step.id}:${step.label}`, label: `${step.kind === "bolt" ? glyphs.bolt : ""}${describeStep(step, false, selected?.job ?? false).replace("›", glyphs.arrow)}`, note: step.workspace ? ` (from ${step.workspace})` : "", waiting: false })),
     ...waiting.map((item) => ({ key: `held:${item.id}`, label: item.kind === "command" ? `start ${item.label}` : `start ${item.label}`, note: "", waiting: true })),
@@ -180,6 +181,7 @@ export function WorkspacePanel(props: { read: WorkspaceRead; boltIndex: number; 
       ) : selected ? (
         <>
           <Text> </Text>
+          {selected.notes ? <Text wrap="truncate-end">{`  ${selected.notes}`}</Text> : null}
           <Text dimColor>{selected.job ? "  When you run it, it will — and stop at the first failure:" : "  When you run it, it will:"}</Text>
           {windowed(stepLines, 0, stepRoom).items.map((line, at) => (
             <Text key={line.key} wrap="truncate-end">

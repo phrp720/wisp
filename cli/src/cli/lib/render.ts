@@ -3,6 +3,7 @@ import { tildify } from "../../core/paths.js";
 import type { RunStatus } from "../../core/processes.js";
 import { boltStatus, collectBoltTargets, collectDownTargets } from "../../core/switch.js";
 import type { Bolt, Diagnostic, SwitchTarget, Withheld, Workspace, WorkspaceRead } from "../../core/types.js";
+import { hasWords, slugify } from "../../core/workspaces.js";
 import { bold, cyan, dim, green, kindLabel, plural, red, yellow } from "../format.js";
 
 /**
@@ -51,7 +52,8 @@ export function printBolts(workspace: Workspace, expand = false, withheld: Withh
       return id && held.has(id) ? [held.get(id) as Withheld] : [];
     });
     const note = waiting.length > 0 ? yellow(` · ${waiting.length} waiting for trust`) : "";
-    console.log(`  ${upMark(workspace, bolt, runs)}${bold(bolt.label)}${bolt.job ? dim(" job") : ""} ${dim(plural(steps.length, "step"))}${note}`);
+    console.log(`  ${upMark(workspace, bolt, runs)}${bold(bolt.label)}${bolt.job ? dim(" job") : ""} ${cyan(slugify(bolt.label))} ${dim(plural(steps.length, "step"))}${note}`);
+    if (bolt.notes) console.log(`    ${dim(bolt.notes)}`);
     if (!expand) continue;
     for (const step of steps) console.log(`    ${dim(kindLabel(step.kind))} ${step.label}`);
     for (const item of waiting) console.log(`    ${dim(kindLabel(item.kind))} ${dim(item.label)} ${yellow("(not trusted)")}`);
@@ -72,22 +74,6 @@ export function upMark(workspace: Workspace, bolt: Workspace["bolts"][number], r
  * What to run, when a command needed a bolt and was not given one. Ends on a line that
  * can be pasted, naming the workspace whenever the workspace was named.
  */
-export function suggestBolts(workspace: Workspace, workspaceRef?: string): void {
-  const bolts = workspace.bolts;
-
-  if (bolts.length === 0) {
-    console.log(dim("  no bolts yet — add some to the file, or --all to open everything"));
-    return;
-  }
-
-  console.log(dim("  name one of these, or --all for everything:"));
-  printBolts(workspace);
-
-  const example = shortest(bolts[0] as Bolt, bolts);
-  const line = workspaceRef ? `wisp use ${workspaceRef} ${example}` : `wisp ${example}`;
-  console.log(dim(`  e.g. \`${line}\``));
-}
-
 /**
  * The shortest thing that still names this bolt among the ones it sits with. The
  * suggestion is where the matching rule is taught, so it shows what is actually enough.
@@ -95,19 +81,17 @@ export function suggestBolts(workspace: Workspace, workspaceRef?: string): void 
 export function shortest(bolt: Bolt, among: Bolt[] = []): string {
   const others = among.filter((candidate) => candidate.id !== bolt.id);
 
-  const words = bolt.label
-    .toLowerCase()
-    .split(/[\s_-]+/)
+  const words = slugify(bolt.label)
+    .split("-")
     .filter(Boolean)
     .sort((left, right) => left.length - right.length);
 
   for (const word of words) {
-    const clashes = others.some((other) => other.label.toLowerCase().includes(word));
+    const clashes = others.some((other) => hasWords(other.label, word));
     if (!clashes) return word;
   }
 
-  const label = bolt.label.toLowerCase();
-  return /\s/.test(label) ? `"${bolt.label}"` : label;
+  return slugify(bolt.label);
 }
 
 /** Everything a workspace file had to say about itself, worst first. */

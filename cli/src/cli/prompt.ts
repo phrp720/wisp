@@ -172,3 +172,104 @@ export async function checklist(question: string, items: ChecklistItem[]): Promi
   stdin.pause();
   return chosen;
 }
+
+export interface ChoiceItem {
+  label: string;
+  mark?: string;
+  tag?: string;
+  slug?: string;
+  hint?: string;
+}
+
+export function filterChoices(items: ChoiceItem[], query: string): number[] {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  return items.flatMap((item, index) => {
+    const text = [item.label, item.slug ?? "", item.tag ?? "", item.hint ?? ""].join(" ").toLowerCase();
+    return words.every((word) => text.includes(word)) ? [index] : [];
+  });
+}
+
+export async function choose(question: string, items: ChoiceItem[], action = "run"): Promise<number | undefined> {
+  const { stdin, stdout } = process;
+  const width = Math.max(40, stdout.columns || 80);
+  const room = Math.max(3, Math.min(items.length, (stdout.rows || 24) - 4));
+  const fit = (text: string, space: number) => (text.length <= space ? text : `${text.slice(0, Math.max(0, space - 1))}…`);
+  const names = items.map((item) => (item.tag ? `${item.label} ${item.tag}` : item.label));
+  const nameWidth = Math.min(Math.max(...names.map((name) => name.length)), Math.floor(width / 3));
+  const slugWidth = Math.min(Math.max(0, ...items.map((item) => item.slug?.length ?? 0)), Math.floor(width / 4));
+
+  let query = "";
+  let at = 0;
+  let first = 0;
+  let drawn = 0;
+  let shown = filterChoices(items, query);
+
+  const row = (index: number, active: boolean) => {
+    const item = items[index] as ChoiceItem;
+    const mark = item.mark ?? "  ";
+    const name = fit(names[index] as string, nameWidth).padEnd(nameWidth);
+    const slug = slugWidth > 0 ? `  ${fit(item.slug ?? "", slugWidth).padEnd(slugWidth)}` : "";
+    const space = width - nameWidth - slugWidth - 10;
+    const hint = item.hint && space > 8 ? `  ${dim(fit(item.hint, space))}` : "";
+    const body = active ? inverse(` ${name} `) : ` ${name} `;
+    return `${active ? cyan("›") : " "}${mark}${body}${cyan(slug)}${hint}`;
+  };
+
+  const draw = () => {
+    if (drawn > 0) stdout.write(`\u001B[${drawn}A\r\u001B[0J`);
+    if (at < first) first = at;
+    if (at >= first + room) first = at - room + 1;
+    const head = fit(question, width - 20);
+    const typed = query ? ` ${fit(query, width - head.length - 4)}` : dim(" type to filter");
+    const lines = [`${cyan("?")} ${bold(head)}${typed}`];
+    if (shown.length === 0) lines.push(dim(`  nothing matches "${fit(query, width - 20)}"`));
+    shown.slice(first, first + room).forEach((index, offset) => lines.push(row(index, first + offset === at)));
+    const more = shown.length > room ? ` · ${shown.length} in all` : "";
+    lines.push(dim(fit(`↑↓ move · ⏎ ${action} · esc cancel${more}`, width)));
+    stdout.write(`${lines.join("\n")}\n`);
+    drawn = lines.length;
+  };
+
+  emitKeypressEvents(stdin);
+  const wasRaw = stdin.isRaw;
+  stdin.setRawMode?.(true);
+  stdin.resume();
+  stdout.write("\u001B[?25l");
+  draw();
+
+  const chosen = await new Promise<number | undefined>((resolve) => {
+    const onKey = (input: string | undefined, key: { name?: string; ctrl?: boolean; meta?: boolean } = {}) => {
+      if (key.ctrl && key.name === "c") return finish(undefined);
+      if (key.name === "escape") {
+        if (!query) return finish(undefined);
+        query = "";
+      } else if (key.name === "return") {
+        const index = shown[at];
+        if (index === undefined) return;
+        return finish(index);
+      } else if (key.name === "up" || (key.ctrl && key.name === "p")) at = Math.max(0, at - 1);
+      else if (key.name === "down" || (key.ctrl && key.name === "n")) at = Math.min(Math.max(0, shown.length - 1), at + 1);
+      else if (key.name === "backspace") query = query.slice(0, -1);
+      else if (input && !key.ctrl && !key.meta && /^[\p{L}\p{N} ._-]$/u.test(input)) query += input;
+      else return;
+      if (key.name !== "up" && key.name !== "down" && !key.ctrl) {
+        shown = filterChoices(items, query);
+        at = 0;
+        first = 0;
+      }
+      draw();
+    };
+    const finish = (result: number | undefined) => {
+      stdin.off("keypress", onKey);
+      resolve(result);
+    };
+    stdin.on("keypress", onKey);
+  });
+
+  stdout.write(`\u001B[${drawn}A\r\u001B[0J`);
+  stdout.write(chosen === undefined ? `${dim("✗")} ${dim(question)} ${dim("cancelled")}\n` : `${green("✓")} ${bold(question)} ${dim(items[chosen]?.label ?? "")}\n`);
+  stdout.write("\u001B[?25h");
+  stdin.setRawMode?.(wasRaw ?? false);
+  stdin.pause();
+  return chosen;
+}

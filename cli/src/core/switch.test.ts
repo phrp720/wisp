@@ -58,6 +58,17 @@ describe("matchBolt", () => {
   it("says when a word is ambiguous", () => {
     expect(() => resolveBolt(ws, "work")).toThrow(/several bolts/);
   });
+
+  it("takes only whole words, or a run of them, never part of one", () => {
+    const docs = workspace({ bolts: [{ label: "Documentation" }, { label: "Document" }, { label: "Work on the CLI" }] });
+    expect(matchBolt(docs, "doc").bolt).toBeUndefined();
+    expect(matchBolt(docs, "doc").candidates).toEqual([]);
+    expect(matchBolt(docs, "ation").bolt).toBeUndefined();
+    expect(matchBolt(docs, "document").bolt?.label).toBe("Document");
+    expect(matchBolt(docs, "the cli").bolt?.label).toBe("Work on the CLI");
+    expect(matchBolt(docs, "on-the").bolt?.label).toBe("Work on the CLI");
+    expect(matchBolt(docs, "work-on-the-cli").bolt?.label).toBe("Work on the CLI");
+  });
 });
 
 describe("planBolt", () => {

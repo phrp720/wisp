@@ -1,11 +1,11 @@
 ---
 layout: home
 title: Wisp
-titleTemplate: Start any project from anywhere, with one word
+titleTemplate: Start any project with one word
 
 hero:
   name: Wisp
-  text: Start any project from anywhere, with one word.
+  text: Start any project with one word.
   tagline: One word brings up the database, the server and the page, from any terminal. Your checks and builds run like a local CI.
   actions:
     - theme: brand

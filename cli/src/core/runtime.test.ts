@@ -194,6 +194,12 @@ describe("matchWorkspace", () => {
     expect(matchWorkspace("infra", all).match?.name).toBe("Acme Infra");
     expect(matchWorkspace("e", all).match).toBeUndefined();
   });
+
+  it("takes only whole words of a name", () => {
+    expect(matchWorkspace("inf", all).match).toBeUndefined();
+    expect(matchWorkspace("acme-infra", all).match?.name).toBe("Acme Infra");
+    expect(matchWorkspace("pers", all).match).toBeUndefined();
+  });
 });
 
 describe("sameUrl", () => {

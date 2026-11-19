@@ -48,6 +48,6 @@ export const list: CommandDef<{ json?: boolean }> = {
     }
 
     for (const failure of unreadable) console.log(`${red("✗")} ${dim(tildify(failure.file))} ${failure.error}`);
-    console.log(dim("\n`wisp <name>` lists a workspace's bolts · `wisp <name> <bolt>` runs one, from any folder"));
+    console.log(dim("\n`wisp show <name>` lists a workspace's bolts · `wisp <name> <bolt>` runs one, from any folder · `wisp pick <name>` chooses"));
   },
 };

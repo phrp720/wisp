@@ -6,6 +6,7 @@ import { down, history, hook, restart } from "../commands/lifecycle.js";
 import { list } from "../commands/list.js";
 import { logs, ps, stop } from "../commands/processes.js";
 import { scan } from "../commands/scan.js";
+import { pick } from "../commands/pick.js";
 import { openWith } from "../commands/settings.js";
 import { show } from "../commands/show.js";
 import { spec } from "../commands/spec.js";
@@ -19,6 +20,7 @@ import type { CommandDef } from "./define.js";
  */
 export const COMMANDS: CommandDef<never>[] = [
   { ...use, group: "everyday" },
+  { ...pick, group: "everyday" },
   { ...init, group: "everyday" },
   { ...trust, group: "everyday" },
   { ...list, group: "everyday" },

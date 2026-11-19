@@ -95,6 +95,7 @@ export interface Editing {
   bolt(file: string, bolt: string): Promise<RawBolt>;
   addBolt(file: string, label: string, options?: { job?: boolean }): Promise<void>;
   renameBolt(file: string, bolt: string, label: string): Promise<void>;
+  setBoltNotes(file: string, bolt: string, notes: string): Promise<void>;
   removeBolt(file: string, bolt: string): Promise<void>;
   moveBolt(file: string, bolt: string, by: -1 | 1): Promise<void>;
   setJob(file: string, bolt: string, job: boolean): Promise<void>;

@@ -173,6 +173,7 @@ export function realServices(hooks: { suspend: () => void; resume: () => void })
       bolt: edit.readBolt,
       addBolt: edit.addBolt,
       renameBolt: edit.renameBolt,
+      setBoltNotes: edit.setBoltNotes,
       removeBolt: edit.removeBolt,
       moveBolt: edit.moveBolt,
       setJob: edit.setJob,

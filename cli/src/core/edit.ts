@@ -21,6 +21,7 @@ export type RawStep = string | Record<string, unknown>;
 
 export interface RawBolt {
   label: string;
+  notes?: string;
   job?: boolean;
   color?: string;
   targets: RawStep[];
@@ -274,6 +275,14 @@ export async function renameBolt(file: string, bolt: string, label: string): Pro
     throw new WispError(`There is already a bolt called "${name}"`, "DUPLICATE_NAME");
   }
   await changeBolt(file, bolt, (current) => ({ ...current, label: name }));
+}
+
+export async function setBoltNotes(file: string, bolt: string, notes: string): Promise<void> {
+  const text = notes.trim();
+  await changeBolt(file, bolt, (current) => {
+    const { label, notes: _notes, ...rest } = current;
+    return text ? { label, notes: text, ...rest } : { label, ...rest };
+  });
 }
 
 export async function removeBolt(file: string, bolt: string): Promise<void> {

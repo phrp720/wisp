@@ -609,10 +609,17 @@
         "label": {
           "type": "string",
           "minLength": 1,
-          "description": "Name it after the job, not the things it holds. Any distinctive word of it runs it: `wisp api`.",
+          "description": "What you type to run it, so keep it short. Its slug or any whole word of it runs it: `wisp api` runs \"Work on api\". Say more in `notes`.",
           "examples": [
-            "Work on api",
-            "Incident response"
+            "Deploy",
+            "Work on api"
+          ]
+        },
+        "notes": {
+          "type": "string",
+          "description": "A line on what this bolt does, shown beside it in `wisp show`, `wisp pick`, tab completion and the TUI.",
+          "examples": [
+            "Builds the website and deploys it to production"
           ]
         },
         "color": {
