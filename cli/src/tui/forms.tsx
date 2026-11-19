@@ -390,26 +390,7 @@ export function Picker(props: {
   );
 }
 
-/** "Are you sure?", with what would happen said plainly, and only y saying yes. */
-export function Confirm(props: { title: string; detail?: string; yes: string; glyphs: Glyphs; height: number; onAnswer: (yes: boolean) => void }) {
-  const { title, detail, yes, glyphs, height, onAnswer } = props;
-  return (
-    <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor="yellow" paddingX={1}>
-      <Text bold>{title}</Text>
-      {detail ? <Text dimColor wrap="wrap">{detail}</Text> : null}
-      <Text> </Text>
-      <Choice yes={`Yes, ${yes}`} no="No, keep it" danger onAnswer={onAnswer} />
-    </Box>
-  );
-}
-
-/**
- * Two buttons side by side, as a dialog has: ←→ or tab moves between them, ⏎ presses the
- * one picked, esc is always "no". y and n still work, for those who know them. A choice that
- * deletes or allows something starts on "no", so a stray ⏎ does nothing harmful.
- */
-export function Choice(props: { yes: string; no: string; danger?: boolean; onAnswer: (yes: boolean) => void; onCancel?: () => void }) {
-  const { yes, no, danger = false, onAnswer, onCancel } = props;
+function useChoice(danger: boolean, onAnswer: (yes: boolean) => void, onCancel?: () => void): boolean {
   const [onYes, setOnYes] = useState(!danger);
   const picked = useRef(onYes);
   const pick = (yes: boolean) => {
@@ -441,19 +422,66 @@ export function Choice(props: { yes: string; no: string; danger?: boolean; onAns
     }
     if (key.escape || input === "n" || input === "N" || input === "q") return answer(false);
   });
-  const button = (label: string, focused: boolean, color: string) => (
+  return onYes;
+}
+
+function choiceButton(label: string, focused: boolean, color: string) {
+  return (
     <Text color={focused ? "black" : color} backgroundColor={focused ? color : undefined} bold={focused}>
       {focused ? `▸ ${label} ` : `  ${label} `}
     </Text>
   );
+}
+
+export const CONFIRM_KEYS = "←→ choose · ⏎ confirm · esc cancel";
+
+export const ASK_KEYS = "⏎ confirm · esc cancel";
+
+export function AskHere(props: { question: string; yes: string; no?: string; stacked?: boolean; onAnswer: (yes: boolean) => void }) {
+  const { question, yes, no = "Keep", stacked = false, onAnswer } = props;
+  const onYes = useChoice(true, onAnswer);
+  const buttons = (
+    <>
+      {choiceButton(yes, onYes, "red")}
+      <Text> </Text>
+      {choiceButton(no, !onYes, "gray")}
+    </>
+  );
+  if (stacked) {
+    return (
+      <Box flexDirection="column" paddingLeft={2}>
+        <Text color="red" bold wrap="wrap">{question}</Text>
+        <Text wrap="truncate-end">{buttons}</Text>
+      </Box>
+    );
+  }
+  return (
+    <Box paddingLeft={2}>
+      <Text wrap="truncate-end">
+        <Text color="red" bold>{question}</Text>
+        <Text>{"  "}</Text>
+        {buttons}
+      </Text>
+    </Box>
+  );
+}
+
+/**
+ * Two buttons side by side, as a dialog has: ←→ or tab moves between them, ⏎ presses the
+ * one picked, esc is always "no". y and n still work, for those who know them. A choice that
+ * deletes or allows something starts on "no", so a stray ⏎ does nothing harmful.
+ */
+export function Choice(props: { yes: string; no: string; danger?: boolean; onAnswer: (yes: boolean) => void; onCancel?: () => void }) {
+  const { yes, no, danger = false, onAnswer, onCancel } = props;
+  const onYes = useChoice(danger, onAnswer, onCancel);
   return (
     <Box flexDirection="column">
       <Box>
-        {button(yes, onYes, danger ? "red" : TONE.accent)}
+        {choiceButton(yes, onYes, danger ? "red" : TONE.accent)}
         <Text>{"   "}</Text>
-        {button(no, !onYes, "gray")}
+        {choiceButton(no, !onYes, "gray")}
       </Box>
-      <Text dimColor>←→ choose · ⏎ confirm · esc cancel</Text>
+      <Text dimColor>{CONFIRM_KEYS}</Text>
     </Box>
   );
 }

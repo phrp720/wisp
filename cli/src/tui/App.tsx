@@ -12,7 +12,7 @@ import { BoltView, flow } from "./boltview.js";
 import { Footer, Header, headerTabAt, runningStatus } from "./chrome.js";
 import { SetupPanel, TrustPanel } from "./dialogs.js";
 import { BoltEditor } from "./editor.js";
-import { Choice, Confirm, Form } from "./forms.js";
+import { Choice, Form } from "./forms.js";
 import { type Glyphs, glyphs as defaultGlyphs } from "./glyphs.js";
 import { HistoryScreen } from "./history.js";
 import { boltWindow, Empty, FIRST_BOLT_LINE, SearchPanel, WorkspaceList, workspaceListWidth, WorkspacePanel, workspaceRows } from "./home.js";
@@ -927,6 +927,30 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
     return false;
   };
   useEffect(() => mouse?.subscribe((event) => onMouse.current(event)), [mouse]);
+
+  function deleteWorkspace(asked: Extract<View, { kind: "delete-workspace" }>, yes: boolean) {
+    setView({ kind: "browse" });
+    if (!yes) return;
+    const { file, name, personal } = asked;
+    void (personal ? services.editing.removePersonalWorkspace(file) : services.editing.forgetProject(file))
+      .then(() => reload())
+      .then(() => say(personal ? `Deleted "${name}"` : `Removed "${name}" from your list`))
+      .catch((error: unknown) => setMessage(describe(error)));
+  }
+
+  function deleteBolt(asked: Extract<View, { kind: "delete-bolt" }>, yes: boolean) {
+    setView({ kind: "browse" });
+    if (!yes) return;
+    savedAt.current = Date.now();
+    void services.editing
+      .removeBolt(asked.file, asked.bolt)
+      .then(() => reload(asked.file))
+      .then(() => {
+        setBoltIndex(Math.max(0, boltIndex - 1));
+        say(`Deleted "${asked.bolt}"`);
+      })
+      .catch((error: unknown) => setMessage(describe(error)));
+  }
   // Screens with state of their own (History) take their clicks themselves, from under the tabs.
   const mouseArea = useMemo(() => (mouse ? { source: mouse, top: 1 } : undefined), [mouse]);
 
@@ -1117,48 +1141,6 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
             onCancel={() => setView({ kind: "browse" })}
           />
         </Box>
-      ) : view.kind === "delete-workspace" ? (
-        <Confirm
-          title={view.personal ? `Delete the workspace "${view.name}"?` : `Remove "${view.name}" from your list?`}
-          detail={
-            view.personal
-              ? "Its file and its bolts go. Anything it started keeps running: x takes a bolt down first."
-              : "Its .wisp.json stays in the repository, untouched. Running one of its bolts lists it again."
-          }
-          yes={view.personal ? "delete it" : "remove it"}
-          glyphs={glyphs}
-          height={bodyHeight}
-          onAnswer={(yes) => {
-            setView({ kind: "browse" });
-            if (!yes) return;
-            const { file, name, personal } = view;
-            void (personal ? services.editing.removePersonalWorkspace(file) : services.editing.forgetProject(file))
-              .then(() => reload())
-              .then(() => say(personal ? `Deleted "${name}"` : `Removed "${name}" from your list`))
-              .catch((error: unknown) => setMessage(describe(error)));
-          }}
-        />
-      ) : view.kind === "delete-bolt" ? (
-        <Confirm
-          title={`Delete the bolt "${view.bolt}"?`}
-          detail="Its steps go with it. Anything it started keeps running — `x` takes a bolt down."
-          yes="delete it"
-          glyphs={glyphs}
-          height={bodyHeight}
-          onAnswer={(yes) => {
-            setView({ kind: "browse" });
-            if (!yes) return;
-            savedAt.current = Date.now();
-            void services.editing
-              .removeBolt(view.file, view.bolt)
-              .then(() => reload(view.file))
-              .then(() => {
-                setBoltIndex(Math.max(0, boltIndex - 1));
-                say(`Deleted "${view.bolt}"`);
-              })
-              .catch((error: unknown) => setMessage(describe(error)));
-          }}
-        />
       ) : view.kind === "history" ? (
         <HistoryScreen
           services={services}
@@ -1221,9 +1203,23 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
         <Empty glyphs={glyphs} height={bodyHeight} unreadable={library.unreadable.length} />
       ) : (
         <Box height={bodyHeight}>
-          <WorkspaceList reads={reads} index={wsIndex} here={library.here} focused={focus === "workspaces"} glyphs={glyphs} height={bodyHeight} width={workspaceListWidth(columns)} />
+          <WorkspaceList
+            reads={reads}
+            index={wsIndex}
+            here={library.here}
+            focused={focus === "workspaces"}
+            glyphs={glyphs}
+            height={bodyHeight}
+            width={workspaceListWidth(columns)}
+            confirming={
+              view.kind === "delete-workspace"
+                ? { question: view.personal ? `Delete "${view.name}"?` : `Remove "${view.name}"?`, yes: view.personal ? "Delete" : "Remove", onAnswer: (yes) => deleteWorkspace(view, yes) }
+                : undefined
+            }
+          />
           {current ? (
             <WorkspacePanel
+              confirming={view.kind === "delete-bolt" ? { question: `Delete "${view.bolt}"?`, yes: "Delete", onAnswer: (yes) => deleteBolt(view, yes) } : undefined}
               read={current}
               boltIndex={boltIndex}
               focused={focus === "bolts"}
@@ -1237,7 +1233,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
         </Box>
       )}
 
-      <Footer view={view} notice={notice} message={message ?? (library?.unreadable.length ? `${library.unreadable.length} workspace file(s) could not be read — \`wisp list\`` : undefined)} />
+      <Footer view={view} notice={notice} columns={columns} message={message ?? (library?.unreadable.length ? `${library.unreadable.length} workspace file(s) could not be read — \`wisp list\`` : undefined)} />
     </Box>
     </MouseContext.Provider>
   );

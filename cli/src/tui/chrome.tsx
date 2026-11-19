@@ -2,6 +2,8 @@
 
 import { Box, Text } from "ink";
 
+import { VERSION } from "../cli/version.js";
+import { ASK_KEYS } from "./forms.js";
 import type { Glyphs } from "./glyphs.js";
 import { type Services } from "./model.js";
 import type { Notice, View } from "./state.js";
@@ -81,14 +83,16 @@ function TabLabel({ number, title, on }: { number: string; title: string; on: bo
   );
 }
 
-export function Footer({ view, message, notice }: { view: View; message?: string | undefined; notice?: Notice | undefined }) {
+export function Footer({ view, message, notice, columns = 0 }: { view: View; message?: string | undefined; notice?: Notice | undefined; columns?: number }) {
   const keys: Record<View["kind"], string> = {
     browse: "⏎ run · v view · e edit · a add · x stop · / search · 1 2 3 tabs · s settings · ? keys · q quit",
     editor: "",
     "new-bolt": "",
     "new-workspace": "",
-    "delete-bolt": "",
-    "delete-workspace": "",
+    "delete-bolt": `Its steps go too; what it started keeps running · ${ASK_KEYS}`,
+    "delete-workspace": view.kind === "delete-workspace" && view.personal
+      ? `Its file and bolts go; what it started keeps running · ${ASK_KEYS}`
+      : `Only from this list; its .wisp.json stays in the repository · ${ASK_KEYS}`,
     view: "",
     "stop-bolt": "",
     settings: "",
@@ -103,15 +107,22 @@ export function Footer({ view, message, notice }: { view: View; message?: string
   };
   return (
     <Box paddingX={1}>
-      {notice ? (
-        <Text color={notice.tone === "bad" ? "red" : notice.tone === "good" ? "green" : "cyan"} bold={notice.tone === "bad"} wrap="truncate-end">
-          {`${notice.tone === "bad" ? "! " : ""}${notice.text}`}
-        </Text>
-      ) : message ? (
-        <Text color="cyan" wrap="truncate-end">{message}</Text>
-      ) : (
-        <Text dimColor wrap="truncate-end">{typingHint(view) ?? keys[view.kind]}</Text>
-      )}
+      <Box flexGrow={1} flexShrink={1} overflow="hidden">
+        {notice ? (
+          <Text color={notice.tone === "bad" ? "red" : notice.tone === "good" ? "green" : "cyan"} bold={notice.tone === "bad"} wrap="truncate-end">
+            {`${notice.tone === "bad" ? "! " : ""}${notice.text}`}
+          </Text>
+        ) : message ? (
+          <Text color="cyan" wrap="truncate-end">{message}</Text>
+        ) : (
+          <Text dimColor wrap="truncate-end">{typingHint(view) ?? keys[view.kind]}</Text>
+        )}
+      </Box>
+      {columns >= 60 ? (
+        <Box flexShrink={0} marginLeft={2}>
+          <Text dimColor>{`v${VERSION}`}</Text>
+        </Box>
+      ) : null}
     </Box>
   );
 }

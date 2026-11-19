@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { Platform } from "../platform/types.js";
 import type { Environment } from "./environment.js";
-import { getHistory, listHistory } from "./history.js";
+import { forgetHistory, getHistory, listHistory, recordHistory, type HistoryEntry } from "./history.js";
 import { spawn } from "node:child_process";
 
 import { listRuns, stopRun } from "./processes.js";
@@ -361,5 +361,50 @@ describe("history like a CI", () => {
       ["Database", "1 step"],
       ["Check", "1 step"],
     ]);
+  });
+
+  it("shows a run while it goes, step by step, under the number it ends with", async () => {
+    const ws = workspace({ bolts: [{ label: "Check", job: true, targets: [{ run: "sleep 0.3", label: "lint" }, { run: "true", label: "test" }] }] });
+    const seen: HistoryEntry[] = [];
+    let first = true;
+    const deps = { platform: recorder(), environment: desktop, defaults: {} };
+    const onStep = () => {
+      if (!first) return;
+      first = false;
+      void listHistory().then(([entry]) => entry && seen.push(entry));
+    };
+    await switchToWorkspace(ws, { bolt: "check", onStep }, deps);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({ running: true, total: 2, pid: process.pid, steps: [] });
+    const [done] = await listHistory();
+    expect(done?.running).toBeUndefined();
+    expect(done?.ok).toBe(true);
+    expect(done?.number).toBe(1);
+    expect(done?.id).toBe(seen[0]?.id);
+    expect(await listHistory()).toHaveLength(1);
+  });
+
+  it("calls a run whose Wisp went away interrupted", async () => {
+    await recordHistory({ id: "aaaaaaaaaaaa", workspace: "/a/.wisp.json", workspaceName: "A", bolt: "Check", job: true, startedAt: "2026-01-01T00:00:00.000Z", finishedAt: "2026-01-01T00:00:00.000Z", ok: false, steps: [], running: true, pid: 999_999_999, total: 3 });
+    const [entry] = await listHistory();
+    expect(entry?.running).toBeUndefined();
+    expect(entry?.interrupted).toBe(true);
+    expect(entry?.ok).toBe(false);
+  });
+
+  it("deletes runs by id, workspace or bolt, keeping the ones still going", async () => {
+    const run = (id: string, bolt: string, workspace = "/a/.wisp.json", running = false): HistoryEntry => ({
+      id, workspace, workspaceName: "A", bolt, job: true, startedAt: "2026-01-01T00:00:00.000Z", finishedAt: "2026-01-01T00:00:01.000Z", ok: true, steps: [],
+      ...(running ? { running: true, pid: process.pid, total: 1 } : {}),
+    });
+    for (const entry of [run("a1", "Check"), run("a2", "Check (retry)"), run("a3", "Build"), run("b1", "Check", "/b/.wisp.json"), run("a4", "Check", "/a/.wisp.json", true)]) await recordHistory(entry);
+
+    const byBolt = await forgetHistory({ workspace: "/a/.wisp.json", bolt: "check" });
+    expect(byBolt.removed.map((entry) => entry.id).sort()).toEqual(["a1", "a2"]);
+    expect(byBolt.running.map((entry) => entry.id)).toEqual(["a4"]);
+    expect((await listHistory()).map((entry) => entry.id).sort()).toEqual(["a3", "a4", "b1"]);
+
+    await forgetHistory({ ids: ["b1"] });
+    expect((await listHistory()).map((entry) => entry.id).sort()).toEqual(["a3", "a4"]);
   });
 });

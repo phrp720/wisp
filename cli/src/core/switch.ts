@@ -134,6 +134,7 @@ export async function runPlan(
   const record = (options.record ?? true) && !dryRun && steps.length > 0;
   const historyId = record ? newHistoryId() : undefined;
   const startedAt = new Date();
+  const git = record ? gitState(dirname(workspace.file)) : Promise.resolve(undefined);
 
   const context: Context = {
     environment: deps.environment ?? detectEnvironment(),
@@ -149,56 +150,66 @@ export async function runPlan(
   let halted: string | undefined;
   options.onPlan?.(steps.map((step) => step.target));
 
-  for (const [index, step] of steps.entries()) {
-    if (options.signal?.aborted && !halted) halted = "the run was stopped";
-    if (halted) {
-      const result: TargetResult = { ...step.target, ok: false, skipped: true, note: `not reached — ${halted}` };
+  const owned = (result: TargetResult, at: number): HistoryStep => {
+    const owner = steps[at]?.bolt;
+    return { ...toHistoryStep(result), ...(owner && owner !== options.label.replace(/ \((retry|down)\)$/, "") ? { bolt: owner } : {}) };
+  };
+  const entry = (done: { ok: boolean; running: boolean }): HistoryEntry => ({
+    id: historyId as string,
+    workspace: workspace.file,
+    workspaceName: workspace.name,
+    bolt: options.label,
+    job: options.job,
+    ...(options.trigger ? { trigger: options.trigger } : {}),
+    startedAt: startedAt.toISOString(),
+    finishedAt: new Date().toISOString(),
+    ok: done.ok,
+    steps: results.map(owned),
+    ...(done.running ? { running: true, pid: process.pid, total: steps.length } : {}),
+  });
+  let saving: Promise<void> = Promise.resolve();
+  const save = (next: HistoryEntry) => (saving = saving.then(() => recordHistory(next)).catch(() => undefined));
+  if (record && historyId) await save(entry({ ok: false, running: true }));
+
+  try {
+    for (const [index, step] of steps.entries()) {
+      if (options.signal?.aborted && !halted) halted = "the run was stopped";
+      if (halted) {
+        const result: TargetResult = { ...step.target, ok: false, skipped: true, note: `not reached — ${halted}` };
+        results.push(result);
+        options.onResult?.(result);
+        continue;
+      }
+
+      options.onStep?.(step.target, { attached: !dryRun && attached(step, context) });
+      const began = Date.now();
+      const outcome = dryRun ? preview(step, context) : await execute(step, index, context);
+      const result: TargetResult = { ...outcome, durationMs: Date.now() - began };
+      // Cut short by a stop, not broken: say so, rather than a signal's exit code.
+      if (options.signal?.aborted && !result.ok && !result.skipped) {
+        result.error = "stopped";
+        halted = "the run was stopped";
+      }
+      if (result.run && !result.note?.startsWith("already running")) context.started.push({ id: result.run });
       results.push(result);
       options.onResult?.(result);
-      continue;
-    }
+      if (record && historyId && index < steps.length - 1) void save(entry({ ok: false, running: true }));
 
-    options.onStep?.(step.target, { attached: !dryRun && attached(step, context) });
-    const began = Date.now();
-    const outcome = dryRun ? preview(step, context) : await execute(step, index, context);
-    const result: TargetResult = { ...outcome, durationMs: Date.now() - began };
-    // Cut short by a stop, not broken: say so, rather than a signal's exit code.
-    if (options.signal?.aborted && !result.ok && !result.skipped) {
-      result.error = "stopped";
-      halted = "the run was stopped";
+      if (!result.ok && !result.skipped && !halted) {
+        if (step.target.kind === "wait") halted = "an earlier wait gave up";
+        else if (step.job || options.job) halted = `"${step.target.label}" failed`;
+      }
     }
-    if (result.run && !result.note?.startsWith("already running")) context.started.push({ id: result.run });
-    results.push(result);
-    options.onResult?.(result);
-
-    if (!result.ok && !result.skipped && !halted) {
-      if (step.target.kind === "wait") halted = "an earlier wait gave up";
-      else if (step.job || options.job) halted = `"${step.target.label}" failed`;
-    }
+  } catch (error) {
+    if (record && historyId) await save(entry({ ok: false, running: false }));
+    throw error;
   }
 
   const ok = results.every((result) => result.ok || result.skipped === true) && !halted;
 
   if (record && historyId) {
-    const git = await gitState(dirname(workspace.file));
-    await recordHistory({
-      id: historyId,
-      workspace: workspace.file,
-      workspaceName: workspace.name,
-      bolt: options.label,
-      job: options.job,
-      ...(options.trigger ? { trigger: options.trigger } : {}),
-      ...(git ? { git } : {}),
-      startedAt: startedAt.toISOString(),
-      finishedAt: new Date().toISOString(),
-      ok,
-      // Each step remembers its bolt when a dependency brought it in, so history can draw
-      // the dependency as one group, as a CI draws a reused workflow.
-      steps: results.map((result, at) => {
-        const owner = steps[at]?.bolt;
-        return { ...toHistoryStep(result), ...(owner && owner !== options.label.replace(/ \((retry|down)\)$/, "") ? { bolt: owner } : {}) };
-      }),
-    }).catch(() => undefined);
+    const where = await git;
+    await save({ ...entry({ ok, running: false }), ...(where ? { git: where } : {}) });
     // The run that dropped out of History takes its output with it.
     await tidyState().catch(() => undefined);
   }

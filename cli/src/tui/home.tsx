@@ -1,6 +1,7 @@
 /** The main screen: workspaces on the left, the selected one's bolts on the right; and search. */
 
 import { Box, Text } from "ink";
+import { Fragment } from "react";
 
 import type { Container } from "../core/docker.js";
 import { baseLabel, type HistoryEntry } from "../core/history.js";
@@ -8,6 +9,7 @@ import { tildify } from "../core/paths.js";
 import type { RunStatus } from "../core/processes.js";
 import { boltStatus, collectBoltTargets } from "../core/switch.js";
 import type { WorkspaceRead } from "../core/types.js";
+import { AskHere } from "./forms.js";
 import type { Glyphs } from "./glyphs.js";
 import { describeStep, type SearchHit, windowed } from "./model.js";
 import { counts, needsTrust, since } from "./state.js";
@@ -18,9 +20,15 @@ import { TONE } from "./tones.js";
  * project of the folder Wisp was opened in, the other projects you have used, and the
  * workspaces of your own.
  */
-export function WorkspaceList(props: { reads: WorkspaceRead[]; index: number; here?: string | undefined; focused: boolean; glyphs: Glyphs; height: number; width: number }) {
-  const { reads, index, here, focused, glyphs, height, width } = props;
-  const items = workspaceRows(reads, here, index, height);
+export interface Asking {
+  question: string;
+  yes: string;
+  onAnswer: (yes: boolean) => void;
+}
+
+export function WorkspaceList(props: { reads: WorkspaceRead[]; index: number; here?: string | undefined; focused: boolean; glyphs: Glyphs; height: number; width: number; confirming?: Asking | undefined }) {
+  const { reads, index, here, focused, glyphs, height, width, confirming } = props;
+  const items = workspaceRows(reads, here, index, height - (confirming ? 3 : 0));
 
   return (
     <Box flexDirection="column" width={width} flexShrink={0} borderStyle={glyphs.border} borderColor={focused ? TONE.accent : "gray"} paddingX={1} overflow="hidden">
@@ -41,12 +49,15 @@ export function WorkspaceList(props: { reads: WorkspaceRead[]; index: number; he
         return (
           // Only the name is highlighted: inverting coloured pieces separately makes a patchwork.
           // "!" marks a file not allowed to run its commands yet — the panel beside says why.
-          <Text key={read.workspace.file} wrap="truncate-end" bold={selected}>
-            {selected ? glyphs.pointer : " "}{" "}
-            {read.workspace.icon && glyphs.border === "round" ? `${read.workspace.icon} ` : ""}
-            <Text color={selected && focused ? undefined : read.workspace.color} inverse={selected && focused}>{read.workspace.name}</Text>
-            {warn ? <Text color={TONE.busy} bold>{" !"}</Text> : null}
-          </Text>
+          <Fragment key={read.workspace.file}>
+            <Text wrap="truncate-end" bold={selected}>
+              {selected ? glyphs.pointer : " "}{" "}
+              {read.workspace.icon && glyphs.border === "round" ? `${read.workspace.icon} ` : ""}
+              <Text color={selected && confirming ? "red" : selected && focused ? undefined : read.workspace.color} inverse={selected && (focused || Boolean(confirming))}>{read.workspace.name}</Text>
+              {warn ? <Text color={TONE.busy} bold>{" !"}</Text> : null}
+            </Text>
+            {selected && confirming ? <AskHere stacked question={confirming.question} yes={confirming.yes} onAnswer={confirming.onAnswer} /> : null}
+          </Fragment>
         );
       })}
     </Box>
@@ -86,8 +97,8 @@ export function boltWindow<T>(bolts: T[], boltIndex: number, height: number): { 
   return { ...windowed(bolts, boltIndex, boltRoom), stepRoom: Math.max(1, listRoom - boltRoom) };
 }
 
-export function WorkspacePanel(props: { read: WorkspaceRead; boltIndex: number; focused: boolean; glyphs: Glyphs; height: number; runs: RunStatus[]; containers: Container[]; history: HistoryEntry[] }) {
-  const { read, boltIndex, focused, glyphs, height, runs, containers, history } = props;
+export function WorkspacePanel(props: { read: WorkspaceRead; boltIndex: number; focused: boolean; glyphs: Glyphs; height: number; runs: RunStatus[]; containers: Container[]; history: HistoryEntry[]; confirming?: Asking | undefined }) {
+  const { read, boltIndex, focused, glyphs, height, runs, containers, history, confirming } = props;
   const lastRun = (label: string) => history.find((entry) => baseLabel(entry.bolt) === label);
   const { workspace } = read;
   const held = new Map(read.withheld.map((item) => [item.id, item]));
@@ -104,7 +115,7 @@ export function WorkspacePanel(props: { read: WorkspaceRead; boltIndex: number; 
     : [];
 
   const { items: shownBolts, offset, stepRoom: room } = boltWindow(bolts, boltIndex, height);
-  const stepRoom = Math.max(1, room - (selected?.notes ? 1 : 0));
+  const stepRoom = Math.max(1, room - (selected?.notes ? 1 : 0) - (confirming ? 1 : 0));
   const stepLines = [
     ...steps.map((step) => ({ key: `${step.kind}:${step.id}:${step.label}`, label: `${step.kind === "bolt" ? glyphs.bolt : ""}${describeStep(step, false, selected?.job ?? false).replace("›", glyphs.arrow)}`, note: step.workspace ? ` (from ${step.workspace})` : "", waiting: false })),
     ...waiting.map((item) => ({ key: `held:${item.id}`, label: item.kind === "command" ? `start ${item.label}` : `start ${item.label}`, note: "", waiting: true })),
@@ -151,25 +162,30 @@ export function WorkspacePanel(props: { read: WorkspaceRead; boltIndex: number; 
           const status = boltStatus(workspace, entry, runs, containers);
           const up = status.failing > 0 ? "failing" : status.running > 0 ? (status.running === status.commands ? "up" : "partial") : undefined;
           return (
-            <Text key={entry.id} wrap="truncate-end" bold={isSelected}>
-              {isSelected ? glyphs.pointer : " "} <Text color={isSelected && focused ? undefined : entry.color} inverse={isSelected && focused}>{entry.label}</Text>
-              {entry.job ? <Text color="cyan"> job</Text> : null}
-              {up ? (
-                <Text color={up === "up" ? "green" : up === "failing" ? "red" : "yellow"}>
-                  {` ${glyphs.dot} ${up === "up" ? "running" : up === "failing" ? "something stopped" : `${status.running} of ${status.commands} running`}`}
-                </Text>
-              ) : null}
-              {(() => {
-                const last = lastRun(entry.label);
-                if (!last || up) return null;
-                return last.ok ? (
-                  <Text color="green" dimColor>{`  ${glyphs.ok} ${since(last.startedAt)}`}</Text>
-                ) : (
-                  <Text color="red">{`  ${glyphs.fail} failed ${since(last.startedAt)}`}</Text>
-                );
-              })()}
-              <Text dimColor>{`  ${count} step${count === 1 ? "" : "s"}`}</Text>
-            </Text>
+            <Fragment key={entry.id}>
+              <Text wrap="truncate-end" bold={isSelected}>
+                {isSelected ? glyphs.pointer : " "} <Text color={isSelected && confirming ? "red" : isSelected && focused ? undefined : entry.color} inverse={isSelected && focused}>{entry.label}</Text>
+                {entry.job ? <Text color="cyan"> job</Text> : null}
+                {up ? (
+                  <Text color={up === "up" ? "green" : up === "failing" ? "red" : "yellow"}>
+                    {` ${glyphs.dot} ${up === "up" ? "running" : up === "failing" ? "something stopped" : `${status.running} of ${status.commands} running`}`}
+                  </Text>
+                ) : null}
+                {(() => {
+                  const last = lastRun(entry.label);
+                  if (!last || up) return null;
+                  if (last.running) return <Text color="cyan">{`  ${glyphs.dot} running, step ${Math.min(last.steps.length + 1, last.total ?? last.steps.length + 1)} of ${last.total ?? "?"}`}</Text>;
+                  if (last.interrupted) return <Text color="yellow">{`  ! interrupted ${since(last.startedAt)}`}</Text>;
+                  return last.ok ? (
+                    <Text color="green" dimColor>{`  ${glyphs.ok} ${since(last.startedAt)}`}</Text>
+                  ) : (
+                    <Text color="red">{`  ${glyphs.fail} failed ${since(last.startedAt)}`}</Text>
+                  );
+                })()}
+                <Text dimColor>{`  ${count} step${count === 1 ? "" : "s"}`}</Text>
+              </Text>
+              {isSelected && confirming ? <AskHere question={confirming.question} yes={confirming.yes} onAnswer={confirming.onAnswer} /> : null}
+            </Fragment>
           );
         })
       )}

@@ -3,11 +3,11 @@ import { chmod, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises
 import { isAbsolute, join, resolve } from "node:path";
 
 import { WispError } from "../../core/errors.js";
-import { getHistory, listHistory, type HistoryEntry } from "../../core/history.js";
+import { forgetHistory, getHistory, listHistory, type HistoryEntry } from "../../core/history.js";
 import { tildify } from "../../core/paths.js";
-import { downBolt, resolveBolt, switchToWorkspace } from "../../core/switch.js";
+import { downBolt, matchBolt, resolveBolt, switchToWorkspace } from "../../core/switch.js";
 import type { Bolt, WorkspaceRead } from "../../core/types.js";
-import { ago, bold, dim, green, kindLabel, plural, red, title, yellow } from "../format.js";
+import { ago, bold, cyan, dim, green, kindLabel, plural, red, title, yellow } from "../format.js";
 import { emitJson, findWorkspaceForDependency, maybeProject, resolveRun } from "../lib/context.js";
 import type { CommandDef } from "../lib/define.js";
 import { named, resultLine } from "../lib/render.js";
@@ -79,18 +79,20 @@ export const restart: CommandDef<{ deps?: boolean }> = {
   },
 };
 
-export const history: CommandDef<{ all?: boolean; log?: string; json?: boolean }> = {
+export const history: CommandDef<{ all?: boolean; log?: string; clear?: boolean; json?: boolean }> = {
   name: "history",
   summary: "Past runs: what ran, how long it took, what passed — and what each step printed",
   args: [["[run]", "a run's id for its details, or a bolt name to list its runs"]],
   options: [
     ["-a, --all", "every workspace, not only this directory's project"],
     ["--log <step>", "print what one step printed (its number in the details)"],
+    ["--clear", "delete that run, that bolt's runs, or this project's (every project's with --all)"],
     ["--json", "print it as JSON"],
   ],
-  examples: ["wisp history", "wisp history check", "wisp history 3f2a1b", "wisp history 3f2a1b --log 2"],
+  examples: ["wisp history", "wisp history check", "wisp history 3f2a1b", "wisp history 3f2a1b --log 2", "wisp history check --clear"],
 
   async run([query], options) {
+    if (options.clear) return clearHistory(query, options);
     const entry = query ? await getHistory(query) : undefined;
     if (entry) return showEntry(entry, options);
 
@@ -103,12 +105,14 @@ export const history: CommandDef<{ all?: boolean; log?: string; json?: boolean }
       return;
     }
     for (const run of entries.slice(0, 30)) {
-      const mark = run.ok ? green("✓") : red("✗");
+      const mark = run.running ? cyan("●") : run.interrupted ? yellow("!") : run.ok ? green("✓") : red("✗");
       const where = here ? "" : dim(` · ${run.workspaceName}`);
       const tag = run.job ? dim(" job") : "";
       const context = [TRIGGERS[run.trigger ?? ""], run.git ? `${run.git.branch} @ ${run.git.commit}` : ""].filter(Boolean).join(" · ");
       const number = run.number ? dim(` #${run.number}`) : "";
-      console.log(`${mark} ${bold(run.id)}  ${run.bolt}${number}${tag}${where} ${dim(`· ${ago(run.startedAt)} ago · ${duration(run)}${context ? ` · ${context}` : ""}`)}`);
+      const state = run.running ? ` · running, step ${Math.min(run.steps.length + 1, run.total ?? run.steps.length + 1)} of ${run.total ?? "?"}` : run.interrupted ? " · interrupted" : "";
+      const took = run.interrupted ? "" : ` · ${duration(run)}`;
+      console.log(`${mark} ${bold(run.id)}  ${run.bolt}${number}${tag}${where} ${dim(`· ${ago(run.startedAt)} ago${took}${state}${context ? ` · ${context}` : ""}`)}`);
     }
     if (entries.length > 30) console.log(dim(`… ${entries.length - 30} older`));
   },
@@ -124,9 +128,9 @@ async function showEntry(entry: HistoryEntry, options: { log?: string; json?: bo
   }
   if (options.json) return emitJson(entry);
 
-  const mark = entry.ok ? green("passed") : red("failed");
+  const mark = entry.running ? cyan("running") : entry.interrupted ? yellow("interrupted") : entry.ok ? green("passed") : red("failed");
   const context = [TRIGGERS[entry.trigger ?? ""] ? `from ${TRIGGERS[entry.trigger ?? ""]}` : "", entry.git ? `${entry.git.branch} @ ${entry.git.commit}` : ""].filter(Boolean).join(" · ");
-  console.log(`${mark} ${bold(entry.bolt)} ${dim(`· ${entry.workspaceName} · ${new Date(entry.startedAt).toLocaleString()} · ${duration(entry)}${context ? ` · ${context}` : ""}`)}`);
+  console.log(`${mark} ${bold(entry.bolt)} ${dim(`· ${entry.workspaceName} · ${new Date(entry.startedAt).toLocaleString()}${entry.interrupted ? "" : ` · ${duration(entry)}`}${context ? ` · ${context}` : ""}`)}`);
   entry.steps.forEach((step, index) => {
     const markStep = !step.ok ? (step.skipped ? dim("–") : red("✗")) : step.skipped ? dim("–") : green("✓");
     const time = step.durationMs >= 1000 ? dim(` ${(step.durationMs / 1000).toFixed(1)}s`) : "";
@@ -134,12 +138,36 @@ async function showEntry(entry: HistoryEntry, options: { log?: string; json?: bo
     const log = step.log ? dim(`  [--log ${index + 1}]`) : "";
     console.log(`  ${dim(String(index + 1).padStart(2))} ${markStep} ${dim(kindLabel(step.kind))} ${named(step.label, step.value)}${time}${detail}${log}`);
   });
+  if (entry.running && entry.total && entry.total > entry.steps.length) {
+    console.log(`  ${dim(String(entry.steps.length + 1).padStart(2))} ${cyan("●")} ${dim(`running now, ${plural(entry.total - entry.steps.length, "step")} to go`)}`);
+  }
+  if (entry.interrupted) console.log(dim("  Wisp stopped before this run finished."));
+}
+
+async function clearHistory(query: string | undefined, options: { all?: boolean; json?: boolean }): Promise<void> {
+  const one = query ? await getHistory(query) : undefined;
+  const here = options.all ? undefined : await maybeProject();
+  if (!one && !here && !options.all) {
+    throw new WispError("Not in a project: name a run, or add --all to clear every project's runs", "NO_TARGET");
+  }
+  const bolt = !one && query ? (here ? (matchBolt(here.workspace, query).bolt?.label ?? query) : query) : undefined;
+  const { removed, running } = await forgetHistory({
+    ...(one ? { ids: [one.id] } : {}),
+    ...(!one && here ? { workspace: here.workspace.file } : {}),
+    ...(bolt ? { bolt } : {}),
+  });
+
+  if (options.json) return emitJson({ cleared: removed.map((entry) => entry.id), running: running.map((entry) => entry.id) });
+
+  const what = one ? `run ${one.id}` : bolt ? `the runs of "${bolt}"` : here ? `${here.workspace.name}'s runs` : "every run";
+  console.log(removed.length > 0 ? `${green("✓")} cleared ${plural(removed.length, "run")} ${dim(`(${what})`)}` : dim(`Nothing to clear (${what}).`));
+  if (running.length > 0) console.log(dim(`  kept ${plural(running.length, "run")} still going`));
 }
 
 const TRIGGERS: Record<string, string> = { tui: "the dashboard", cli: "the command line", hook: "a git hook", retry: "a retry" };
 
 function duration(entry: HistoryEntry): string {
-  const ms = Math.max(0, Date.parse(entry.finishedAt) - Date.parse(entry.startedAt));
+  const ms = Math.max(0, (entry.running ? Date.now() : Date.parse(entry.finishedAt)) - Date.parse(entry.startedAt));
   if (ms < 1000) return `${ms}ms`;
   return ms >= 60_000 ? `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s` : `${(ms / 1000).toFixed(1)}s`;
 }

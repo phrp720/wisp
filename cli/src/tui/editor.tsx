@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { STEP_FIELDS, STEP_KINDS, buildStep, describeRawStep, stepKindOf, stepValues, type RawBolt, type StepKindName } from "../core/edit.js";
 import { tildify } from "../core/paths.js";
-import { Confirm, Form, Picker } from "./forms.js";
+import { ASK_KEYS, AskHere, Form, Picker } from "./forms.js";
 import type { Glyphs } from "./glyphs.js";
 import { useMouse, useRefs } from "./mouse.js";
 import { TONE } from "./tones.js";
@@ -214,24 +214,8 @@ export function BoltEditor({ file, bolt, others, elsewhere = [], adding = false,
     );
   }
 
-  if (mode.kind === "delete") {
-    const step = steps[mode.at];
-    return (
-      <Confirm
-        title={`Remove this step from "${label}"?`}
-        detail={step === undefined ? "" : describeRawStep(step)}
-        yes="remove it"
-        glyphs={glyphs}
-        height={height}
-        onAnswer={(yes) => {
-          setMode({ kind: "list" });
-          if (yes) void change(() => editing.removeStep(file, label, mode.at), Math.max(0, Math.min(mode.at, steps.length - 2)), "Removed.");
-        }}
-      />
-    );
-  }
-
-  const room = Math.max(1, height - 9);
+  const deleting = mode.kind === "delete" ? mode.at : undefined;
+  const room = Math.max(1, height - 9 - (deleting === undefined ? 0 : 1));
   const listRows = [...steps.map((step, at) => ({ at, text: describeRawStep(step), kind: stepKindOf(step) })), { at: steps.length, text: steps.length === 0 ? "add the first step" : "add a step", kind: "add" }];
   const { items } = windowed(listRows, index, room);
   // A bolt to run first already starts with ⚡ in its words.
@@ -256,7 +240,8 @@ export function BoltEditor({ file, bolt, others, elsewhere = [], adding = false,
         const active = row.at === index;
         const adding = row.kind === "add";
         return (
-          <Box key={row.at} ref={rowNodes.set(row.at)}>
+          <Box key={row.at} flexDirection="column">
+          <Box ref={rowNodes.set(row.at)}>
           <Text wrap="truncate-end">
             <Text color={TONE.accent}>{active ? `${glyphs.pointer} ` : "  "}</Text>
             {adding ? (
@@ -265,16 +250,27 @@ export function BoltEditor({ file, bolt, others, elsewhere = [], adding = false,
               <Text>
                 <Text dimColor>{`${joint(row.at)} ${String(row.at + 1).padStart(2)}  `}</Text>
                 {icon(row.kind)}
-                <Text bold={active} color={active ? TONE.accent : undefined}>{row.text}</Text>
+                <Text bold={active} color={row.at === deleting ? "red" : active ? TONE.accent : undefined}>{row.text}</Text>
               </Text>
             )}
           </Text>
+          </Box>
+          {row.at === deleting ? (
+            <AskHere
+              question="Remove this step?"
+              yes="Remove"
+              onAnswer={(yes) => {
+                setMode({ kind: "list" });
+                if (yes) void change(() => editing.removeStep(file, label, row.at), Math.max(0, Math.min(row.at, steps.length - 2)), "Removed.");
+              }}
+            />
+          ) : null}
           </Box>
         );
       })}
       {steps.length === 0 ? <Text dimColor>{"\n  No steps yet. A bolt does its steps in order: start a server, wait for it, open it."}</Text> : null}
       <Box flexGrow={1} />
-      <Text dimColor>{`⏎ ${index === steps.length ? "add" : "change"} · a add after this one · d remove · K J move · n name and notes · t ${raw?.job ? "make it start things" : "make it a job"} · esc done`}</Text>
+      <Text dimColor>{deleting !== undefined ? `Its place in the order closes up · ${ASK_KEYS}` : `⏎ ${index === steps.length ? "add" : "change"} · a add after this one · d remove · K J move · n name and notes · t ${raw?.job ? "make it start things" : "make it a job"} · esc done`}</Text>
     </Box>
   );
 }

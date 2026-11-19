@@ -12,7 +12,8 @@ it started, look back at past runs. It works the same at your desk, over SSH and
 - **`2` Running:** what each bolt started, as a pipeline, with live output, health and
   ports, and a log of what crashed and came back. Beside the list, each command has tabs
   for its logs, its details and its past runs, as in lazydocker.
-- **`3` History:** every run like a CI run, with its branch, commit, and each step's output.
+- **`3` History:** every run like a CI run, with its branch, commit, and each step's output,
+  including the ones still going. `D` deletes a run, or a bolt's runs.
 
 ## The mouse
 
@@ -48,6 +49,7 @@ you'd rather.
 | `v` | view a bolt whole: its steps, what it needs, what's up |
 | `x` · `R` | stop what it started (asks about the bolts it needed) · restart it |
 | `e` · `a` · `D` | edit · add · delete a bolt (`D` on the left deletes a workspace) |
+| `←` `⏎` or `y` · `esc` | deleting asks on the row itself: delete it · keep it |
 | `K` · `J` | move a bolt up · down |
 | `N` · `E` | a workspace of your own · open the file itself in your editor |
 | `1` `2` `3` | bolts · running · history (`p` and `h` work too) |
@@ -59,4 +61,5 @@ you'd rather.
 | `f` | on Running: the log full screen, where `↑↓` scroll it and `←→` go to the command before or after |
 | `t` · `c` | allow a file's commands · check it for problems |
 | `s` | settings: your editor, and where commands run |
+| `D` | on History: delete the selected run, or the selected bolt's runs |
 | `r` · `?` · `q` | reload the files · every key · quit |

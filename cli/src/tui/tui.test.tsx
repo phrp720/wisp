@@ -1,6 +1,8 @@
 import { render } from "ink-testing-library";
 import { describe, expect, it, vi } from "vitest";
 
+import { VERSION } from "../cli/version.js";
+import type { HistoryEntry } from "../core/history.js";
 import { interpret } from "../core/project.js";
 import type { SwitchResult, TrustState, WorkspaceRead } from "../core/types.js";
 import { App } from "./App.js";
@@ -73,6 +75,7 @@ function services(overrides: Partial<Services> = {}, library: Library = { reads:
     down: async () => ({ stopped: [] }),
     restart: async (run) => ({ ok: true, run }),
     history: async () => [],
+    forgetRuns: async () => undefined,
     readLog: async () => "",
     check: async () => acme,
     trust: async () => undefined,
@@ -104,6 +107,89 @@ describe("the TUI", () => {
     expect(frame).toContain("❯ Work on api");
     expect(frame).toContain("⚡ Bolts");
     expect(frame).toContain("pnpm dev");
+  });
+
+  it("shows the version at the bottom right", async () => {
+    const { lastFrame } = await open(services());
+    expect((lastFrame() ?? "").split("\n").at(-1)).toContain(`v${VERSION}`);
+  });
+
+  it("shows a run still going in History, and D deletes a finished run or a bolt's runs after asking", async () => {
+    const done: HistoryEntry = { id: "aaaaaaaaaaaa", workspace: acme.workspace.file, workspaceName: "Acme", bolt: "Check", job: true, number: 1, startedAt: new Date(Date.now() - 90_000).toISOString(), finishedAt: new Date(Date.now() - 80_000).toISOString(), ok: true, steps: [] };
+    const going: HistoryEntry = { ...done, id: "bbbbbbbbbbbb", number: 2, ok: false, running: true, pid: 1, total: 3, startedAt: new Date().toISOString(), steps: [{ kind: "command", label: "lint", value: "pnpm lint", ok: true, durationMs: 1000 }] };
+    const forgetRuns = vi.fn(async () => undefined);
+    const app = await open(services({ history: async () => [going, done], forgetRuns }));
+    app.stdin.write("h");
+    await tick();
+    await tick();
+    expect(app.lastFrame()).toContain("running, step 2 of 3");
+
+    app.stdin.write("D");
+    await tick();
+    expect(app.lastFrame()).not.toContain("Delete run");
+
+    app.stdin.write("j");
+    await tick();
+    app.stdin.write("D");
+    await tick();
+    expect(app.lastFrame()).toContain("Delete run #1 of Check?");
+    expect(app.lastFrame()).toContain("running, step 2 of 3");
+    app.stdin.write(ARROW_LEFT);
+    await tick();
+    app.stdin.write("\r");
+    await tick();
+    await tick();
+    expect(forgetRuns).toHaveBeenCalledWith(["aaaaaaaaaaaa"]);
+
+    app.stdin.write(ARROW_LEFT);
+    await tick();
+    app.stdin.write("D");
+    await tick();
+    expect(app.lastFrame()).toContain("Clear all 1 run?");
+  });
+
+  it("asks about deleting a bolt on its row, with the rest of the list still there", async () => {
+    const removeBolt = vi.fn(async () => undefined);
+    const app = await open(services({ editing: { ...services().editing, removeBolt } }));
+    app.stdin.write("D");
+    await tick();
+    const frame = app.lastFrame() ?? "";
+    expect(frame).toContain('Delete "Work on api"?');
+    expect(frame).toContain("Work on web");
+    expect(frame).toContain("Workspaces");
+    expect(frame).toContain("what it started keeps running");
+    expect(frame.indexOf('Delete "Work on api"?')).toBeLessThan(frame.indexOf("Work on web"));
+    app.stdin.write(ARROW_LEFT);
+    await tick();
+    app.stdin.write("\r");
+    await tick();
+    await tick();
+    expect(removeBolt).toHaveBeenCalledWith(acme.workspace.file, "Work on api");
+  });
+
+  it("asks about removing a step on its row in the editor, and esc keeps it", async () => {
+    const removeStep = vi.fn(async () => undefined);
+    const bolt = async () => ({ label: "Work on api", targets: [{ folder: "apps/api" }, { run: "pnpm dev" }] });
+    const app = await open(services({ editing: { ...services().editing, bolt, removeStep } }));
+    app.stdin.write("e");
+    await tick();
+    app.stdin.write("d");
+    await tick();
+    const frame = app.lastFrame() ?? "";
+    expect(frame).toContain("Remove this step?");
+    expect(frame).toContain("⚡ Work on api");
+    expect(frame).toContain("pnpm dev");
+    app.stdin.write("\u001B");
+    await tick();
+    await tick();
+    expect(app.lastFrame()).not.toContain("Remove this step?");
+    expect(removeStep).not.toHaveBeenCalled();
+    app.stdin.write("d");
+    await tick();
+    app.stdin.write("y");
+    await tick();
+    await tick();
+    expect(removeStep).toHaveBeenCalledWith(acme.workspace.file, "Work on api", 0);
   });
 
   it("lists projects before personal workspaces, and flags one waiting for trust", async () => {
@@ -322,7 +408,7 @@ describe("the TUI", () => {
     // Still on the workspaces: D asks about the workspace again, not about a bolt.
     app.stdin.write("D");
     await tick();
-    expect(app.lastFrame()).toContain('Remove "Acme" from your list?');
+    expect(app.lastFrame()).toContain('Remove "Acme"?');
   });
 
   it("D on a project in the list removes it from the list, and never deletes its file", async () => {
@@ -334,8 +420,10 @@ describe("the TUI", () => {
     await tick();
     app.stdin.write("D");
     await tick();
-    expect(app.lastFrame()).toContain('Remove "Acme" from your list?');
+    expect(app.lastFrame()).toContain('Remove "Acme"?');
     expect(app.lastFrame()).toContain("stays in the repository");
+    expect(app.lastFrame()).toContain("infra");
+    expect(app.lastFrame()).toContain("Work on api");
     app.stdin.write(ARROW_LEFT);
     await tick();
     app.stdin.write("\r");

@@ -89,7 +89,8 @@ new runs come in. A log that passes 10 MB keeps only its last 5 MB, even while i
 runs. Everything together stays under 500 MB: past that, the oldest output goes first, but
 never the log of something still running. Most setups use a few MB.
 
-`wisp ps --clear` deletes the output of finished commands straight away.
+`wisp ps --clear` deletes the output of finished commands straight away, and
+`wisp history --clear` deletes past runs (`D` in History).
 :::
 
 ::: details How do I stop everything?

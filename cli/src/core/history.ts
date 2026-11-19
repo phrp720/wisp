@@ -43,6 +43,10 @@ export interface HistoryEntry {
   finishedAt: string;
   ok: boolean;
   steps: HistoryStep[];
+  running?: boolean;
+  interrupted?: boolean;
+  pid?: number;
+  total?: number;
 }
 
 /** Enough to see a pattern of failures, not so many that the logs pile up. */
@@ -70,8 +74,9 @@ export async function recordHistory(entry: HistoryEntry): Promise<void> {
     // Numbered per bolt, as a CI numbers a workflow's runs — kept with the run, so the
     // number stays the same when older runs are cleared.
     const label = baseLabel(entry.bolt);
-    const previous = entries.filter((other) => other.workspace === entry.workspace && baseLabel(other.bolt) === label);
-    const number = entry.number ?? Math.max(previous.length, ...previous.map((other) => other.number ?? 0)) + 1;
+    const same = entries.find((other) => other.id === entry.id);
+    const previous = entries.filter((other) => other.workspace === entry.workspace && baseLabel(other.bolt) === label && other.id !== entry.id);
+    const number = entry.number ?? same?.number ?? Math.max(previous.length, ...previous.map((other) => other.number ?? 0)) + 1;
     const kept = [{ ...entry, number }, ...entries.filter((other) => other.id !== entry.id)];
     await Promise.all(kept.slice(KEEP).map((old) => rm(join(stateDir(), "history", old.id), { recursive: true, force: true })));
     await writeJson(historyFile(), { version: 1, runs: kept.slice(0, KEEP) });
@@ -86,6 +91,26 @@ export async function listHistory(filter: { workspace?: string; bolt?: string } 
       (!filter.workspace || entry.workspace === filter.workspace) &&
       (!needle || entry.bolt.toLowerCase().includes(needle)),
   );
+}
+
+export async function forgetHistory(filter: { ids?: string[]; workspace?: string; bolt?: string }): Promise<{ removed: HistoryEntry[]; running: HistoryEntry[] }> {
+  const ids = filter.ids ? new Set(filter.ids) : undefined;
+  const bolt = filter.bolt?.toLowerCase();
+  const matches = (entry: HistoryEntry) =>
+    (!ids || ids.has(entry.id)) &&
+    (!filter.workspace || entry.workspace === filter.workspace) &&
+    (!bolt || baseLabel(entry.bolt).toLowerCase() === bolt);
+  return withLock(historyFile(), async () => {
+    const entries = await loadHistory();
+    const chosen = entries.filter(matches);
+    const running = chosen.filter((entry) => entry.running);
+    const removed = chosen.filter((entry) => !entry.running);
+    if (removed.length === 0) return { removed, running };
+    const gone = new Set(removed.map((entry) => entry.id));
+    await writeJson(historyFile(), { version: 1, runs: entries.filter((entry) => !gone.has(entry.id)) });
+    await Promise.all(removed.map((entry) => rm(join(stateDir(), "history", entry.id), { recursive: true, force: true })));
+    return { removed, running };
+  });
 }
 
 export async function getHistory(id: string): Promise<HistoryEntry | undefined> {
@@ -114,7 +139,23 @@ async function loadHistory(): Promise<HistoryEntry[]> {
     counts.set(key, next);
     if (entry.number === undefined) entry.number = next;
   }
+  for (const entry of entries) {
+    if (entry.running && !(entry.pid && alive(entry.pid))) {
+      delete entry.running;
+      entry.interrupted = true;
+      entry.ok = false;
+    }
+  }
   return entries;
+}
+
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as { code?: string }).code === "EPERM";
+  }
 }
 
 /** The branch and short commit of a directory, or nothing when it is not a repository. */

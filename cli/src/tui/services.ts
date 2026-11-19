@@ -13,7 +13,7 @@ import { describe as describeError } from "../core/errors.js";
 import { PROJECT_FILE, checkProject, findProjectFile } from "../core/project.js";
 import { bolts as draftBolts, draftProject, writeProjectDraft } from "../core/scaffold.js";
 import { downBolt, planRetry, runPlan, switchToWorkspace } from "../core/switch.js";
-import { listHistory } from "../core/history.js";
+import { forgetHistory, listHistory } from "../core/history.js";
 import { trustProject } from "../core/trust.js";
 import { which } from "../core/which.js";
 import { discoverWorkspaces, resolveWorkspace } from "../core/workspaces.js";
@@ -90,6 +90,7 @@ export function realServices(hooks: { suspend: () => void; resume: () => void })
       downBolt(read.workspace, bolt, options.deps ? { deps: true } : {}, { findWorkspace: async (ref) => resolveWorkspace(ref, await everything()).workspace }),
 
     history: () => listHistory(),
+    forgetRuns: async (ids) => void (await forgetHistory({ ids })),
     // A log that is gone rejects, so it is not shown as "printed nothing".
     readLog: (path) => readFile(path, "utf8"),
 
