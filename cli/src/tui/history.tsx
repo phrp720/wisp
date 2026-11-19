@@ -5,7 +5,9 @@ import { cleanOutput } from "../core/ansi.js";
 import { baseLabel, type HistoryEntry, type HistoryStep } from "../core/history.js";
 import { ASK_KEYS, AskHere } from "./forms.js";
 import type { Glyphs } from "./glyphs.js";
+import { HelpPanel } from "./panels.js";
 import { spell } from "./spells.js";
+import { since } from "./state.js";
 import { TONE } from "./tones.js";
 import { matchesAll, shortUrl, windowed, type Services } from "./model.js";
 import { FilterLine, filterLog, MatchLine } from "./logfilter.js";
@@ -25,6 +27,7 @@ export interface HistoryScreenProps {
   onRetry: (entry: HistoryEntry) => void;
   /** Run the whole bolt again. */
   onRerun: (entry: HistoryEntry) => void;
+  onHint?: (hint: string) => void;
 }
 
 /** A bolt in the sidebar: the filter, like a workflow in a CI's list. */
@@ -43,7 +46,7 @@ export interface BoltFilter {
  * their logs expanding in place.
  */
 export function HistoryScreen(props: HistoryScreenProps) {
-  const { services, glyphs, height, columns, onClose, onRunning, onRetry, onRerun, onJump } = props;
+  const { services, glyphs, height, columns, onClose, onRunning, onRetry, onRerun, onJump, onHint } = props;
   const [entries, setEntries] = useState<HistoryEntry[]>();
   const [filterIndex, setFilterIndex] = useState(0);
   const [runIndex, setRunIndex] = useState(0);
@@ -53,6 +56,7 @@ export function HistoryScreen(props: HistoryScreenProps) {
   const [typing, setTyping] = useState(false);
   const [forget, setForget] = useState<{ ids: string[]; title: string; detail: string; one: boolean }>();
   const [reloads, setReloads] = useState(0);
+  const [help, setHelp] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -114,7 +118,9 @@ export function HistoryScreen(props: HistoryScreenProps) {
       setRunIndex(at);
     }
     return true;
-  }, !opened && !forget);
+  }, !opened && !forget && !help);
+
+  useInput(() => setHelp(false), { isActive: help });
 
   useInput(
     (input, key) => {
@@ -149,6 +155,7 @@ export function HistoryScreen(props: HistoryScreenProps) {
         return setRunIndex(0);
       }
       if (input === "p") return onRunning();
+      if (input === "?") return setHelp(true);
       if (onJump && (input === "1" || input === "2")) return onJump(input);
       if (input === "D") return askToForget();
       if (run && input === "r" && !run.ok && !run.running) return onRetry(run);
@@ -172,7 +179,7 @@ export function HistoryScreen(props: HistoryScreenProps) {
       if (key.downArrow || input === "j") return setRunIndex((at) => Math.min(shown.length - 1, at + 1));
       if (key.return && run) return setOpen(run.id);
     },
-    { isActive: !opened && !forget },
+    { isActive: !opened && !forget && !help },
   );
 
   function askToForget() {
@@ -202,6 +209,20 @@ export function HistoryScreen(props: HistoryScreenProps) {
     });
   }
 
+  const listHint = !entries
+    ? ""
+    : entries.length === 0
+      ? "esc back"
+      : forget
+        ? `${forget.detail} · ${ASK_KEYS}`
+        : typing
+          ? "type to search · ⏎ keep it · esc clear"
+          : [focus === "runs" ? "⏎ open" : "→ runs", "← bolts", "/ search", run && !run.ok && !run.running ? "r retry" : "", "R run again", focus === "runs" ? "D delete" : "D clear", "? keys", "esc"].filter(Boolean).join(" · ");
+  useEffect(() => {
+    if (help) onHint?.("any key to go back");
+    else if (!opened) onHint?.(listHint);
+  }, [help, opened, listHint, onHint]);
+
   if (!entries) {
     return (
       <Box height={height} borderStyle={glyphs.border} paddingX={1}>
@@ -212,6 +233,8 @@ export function HistoryScreen(props: HistoryScreenProps) {
       </Box>
     );
   }
+
+  if (help) return <HelpPanel glyphs={glyphs} height={height} tab="history" />;
 
   if (opened) {
     return (
@@ -224,6 +247,8 @@ export function HistoryScreen(props: HistoryScreenProps) {
         onBack={() => setOpen(undefined)}
         onRetry={() => onRetry(opened)}
         onRerun={() => onRerun(opened)}
+        onHelp={() => setHelp(true)}
+        {...(onHint ? { onHint } : {})}
       />
     );
   }
@@ -236,8 +261,6 @@ export function HistoryScreen(props: HistoryScreenProps) {
         </Text>
         <Text> </Text>
         <Text>Nothing has run yet. Every run of a bolt shows up here — whether it worked, how long each step took, and what it printed — the way a CI shows its runs.</Text>
-        <Box flexGrow={1} />
-        <Text dimColor>esc back</Text>
       </Box>
     );
   }
@@ -253,17 +276,17 @@ export function HistoryScreen(props: HistoryScreenProps) {
           Bolts
         </Text>
         {filterLines(filters, filterIndex, height).map((line) => {
-          if (line.kind === "heading") return <Text key={line.key} dimColor>{line.text}</Text>;
+          if (line.kind === "heading") return <Text key={line.key} dimColor wrap="truncate-end">{clip(line.text, sideWidth - 4)}</Text>;
           const entry = filters[line.at] as BoltFilter;
           const selected = line.at === filterIndex;
           return (
             <Box key={entry.key}>
               <Box flexGrow={1} minWidth={0}>
                 <Text wrap="truncate-end" inverse={selected && focus === "bolts"} bold={selected}>
-                  {selected ? glyphs.pointer : " "} {entry.bolt ?? "All bolts"}
+                  {selected ? glyphs.pointer : " "} {clip(entry.bolt ?? "All bolts", sideWidth - 8 - String(entry.count).length)}
                 </Text>
               </Box>
-              <Text dimColor>{` ${entry.count}`}</Text>
+              <Text dimColor>{`  ${entry.count}`}</Text>
             </Box>
           );
         })}
@@ -288,7 +311,7 @@ export function HistoryScreen(props: HistoryScreenProps) {
           const failedAt = entry.steps.find((step) => !step.ok && !step.skipped);
           const state = entry.running ? `running, step ${Math.min(entry.steps.length + 1, entry.total ?? entry.steps.length + 1)} of ${entry.total ?? "?"}` : entry.interrupted ? "interrupted" : "";
           // A fixed width, so the times line up down the list whatever their length.
-          const right = `${(entry.interrupted ? "?" : formatDuration(totalMs(entry)) || "0ms").padStart(7)} · ${ago(entry.startedAt).padEnd(8)}`;
+          const right = `${(entry.interrupted ? "?" : formatDuration(totalMs(entry)) || "0ms").padStart(7)} · ${since(entry.startedAt).padEnd(8)}`;
           const doomed = forget?.ids.includes(entry.id) ?? false;
           const branch = entry.git ? ` ${entry.git.branch} ` : "";
           return (
@@ -327,14 +350,6 @@ export function HistoryScreen(props: HistoryScreenProps) {
             </Box>
           );
         })}
-        <Box flexGrow={1} />
-        <Text dimColor wrap="truncate-end">
-          {forget
-            ? `${forget.detail} · ${ASK_KEYS}`
-            : [focus === "runs" ? "⏎ open the run" : "→ its runs", "← bolts", "/ search", run && !run.ok && !run.running ? "r retry what failed" : "", "R run again", focus === "runs" ? "D delete it" : "D clear these", "p running", "esc back"]
-                .filter(Boolean)
-                .join(" · ")}
-        </Text>
       </Box>
     </Box>
   );
@@ -342,7 +357,7 @@ export function HistoryScreen(props: HistoryScreenProps) {
 
 /** How wide the bolts on the left are, the runs taking the rest. */
 export function historySideWidth(columns: number): number {
-  return Math.min(32, Math.max(22, Math.floor(columns * 0.24)));
+  return Math.min(36, Math.max(22, Math.floor(columns * 0.27)));
 }
 
 /**
@@ -362,7 +377,7 @@ export function filterLines(filters: BoltFilter[], filterIndex: number, height: 
 
 /** The runs that fit on the right, two lines each, kept around the chosen one. */
 export function runWindow<T>(shown: T[], runIndex: number, height: number): { items: T[]; offset: number } {
-  return windowed(shown, runIndex, Math.max(1, Math.floor((height - 5) / 2)));
+  return windowed(shown, runIndex, Math.max(1, Math.floor((height - 4) / 2)));
 }
 
 /** The run at a line of the runs panel, counted from its top border: the title, the search line, then two lines a run. */
@@ -382,8 +397,10 @@ function RunDetail(props: {
   onBack: () => void;
   onRetry: () => void;
   onRerun: () => void;
+  onHelp: () => void;
+  onHint?: (hint: string) => void;
 }) {
-  const { entry, services, glyphs, height, columns, onBack, onRetry, onRerun } = props;
+  const { entry, services, glyphs, height, columns, onBack, onRetry, onRerun, onHelp, onHint } = props;
   const firstFailed = Math.max(0, entry.steps.findIndex((step) => !step.ok && !step.skipped));
   const [selected, setSelectedState] = useState(firstFailed);
   // Keys can arrive together ("↓⏎" typed fast): each must see the step the one before chose,
@@ -417,6 +434,14 @@ function RunDetail(props: {
     setTypingState(next);
   };
   const filtering = query !== "";
+  const hint = (
+    typing
+      ? ["type to filter the logs", "⏎ keep it", "esc clear"]
+      : ["↑↓ steps", "⏎ its log", "/ filter", "u d scroll", entry.ok || entry.running ? "" : "r retry", "R run again", "? keys", filtering ? "esc clear" : "esc back"]
+  )
+    .filter(Boolean)
+    .join(" · ");
+  useEffect(() => onHint?.(hint), [hint, onHint]);
 
   useEffect(() => {
     // Filtering reads every step's log, not just the open ones.
@@ -576,6 +601,7 @@ function RunDetail(props: {
     if (key.escape || key.leftArrow || input === "q") return onBack();
     if (input === "r" && !entry.ok && !entry.running) return onRetry();
     if (input === "R") return onRerun();
+    if (input === "?") return onHelp();
     const scrollTo = (next: number) => {
       setScrolled(true);
       setTop(Math.min(most, Math.max(0, next)));
@@ -647,15 +673,6 @@ function RunDetail(props: {
       {visible.map((row) => (
         <Box key={row.key}>{row.node}</Box>
       ))}
-      <Box flexGrow={1} />
-      <Text dimColor wrap="truncate-end">
-        {(typing
-          ? ["type to filter the logs", "⏎ keep it", "esc clear"]
-          : ["↑↓ steps", "⏎ show or hide its log", "/ filter the logs", "u d scroll", entry.ok || entry.running ? "" : "r retry what failed", "R run again", filtering ? "esc clear the filter" : "esc back to the runs"]
-        )
-          .filter(Boolean)
-          .join(" · ")}
-      </Text>
     </Box>
   );
 }
@@ -663,7 +680,7 @@ function RunDetail(props: {
 /** The line under a run's title: how it started, against what, how it ended, how long. */
 function Summary({ entry }: { entry: HistoryEntry }) {
   const cells: [string, string, string?][] = [
-    ["Triggered", `${triggerWords(entry.trigger) ? `from ${triggerWords(entry.trigger)} ` : ""}${ago(entry.startedAt)}`],
+    ["Triggered", `${triggerWords(entry.trigger) ? `from ${triggerWords(entry.trigger)} ` : ""}${since(entry.startedAt)}`],
     ...(entry.git ? ([["Commit", `${entry.git.branch} @ ${entry.git.commit}${entry.git.subject ? `  “${clip(entry.git.subject, 40)}”` : ""}`]] as [string, string][]) : []),
     entry.running
       ? ["Status", `Running, step ${Math.min(entry.steps.length + 1, entry.total ?? entry.steps.length + 1)} of ${entry.total ?? "?"}`, "cyan"]
@@ -782,13 +799,6 @@ function triggerWords(trigger: string | undefined): string {
   return { tui: "the dashboard", cli: "the command line", hook: "a git hook", retry: "a retry" }[trigger ?? ""] ?? "";
 }
 
-function ago(iso: string): string {
-  const seconds = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 1000));
-  if (seconds < 60) return "just now";
-  if (seconds < 3600) return `${Math.round(seconds / 60)}m ago`;
-  if (seconds < 86400) return `${Math.round(seconds / 3600)}h ago`;
-  return `${Math.round(seconds / 86400)}d ago`;
-}
 
 /** How many lines text takes, wrapped at spaces to a width as the terminal will show it. */
 export function wrappedLines(text: string, width: number): number {

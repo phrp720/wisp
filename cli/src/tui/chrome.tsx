@@ -14,7 +14,7 @@ function typingHint(view: View): string | undefined {
   if (view.kind !== "processes") return undefined;
   if (view.logTyping) return "type to filter the log · ⏎ keep it · esc clear";
   if (view.typing) return "type to filter the list · ⏎ keep it · esc clear";
-  return view.full ? "↑↓ scroll · ←→ previous, next · [ ] tabs · u d page · G newest · / filter the log · f back to the list · esc" : undefined;
+  return view.full ? "↑↓ scroll · ←→ next command · / filter · f back · ? keys · esc" : undefined;
 }
 
 /** The three screens, as tabs along the top: the one you are on, and the key for each. */
@@ -83,9 +83,9 @@ function TabLabel({ number, title, on }: { number: string; title: string; on: bo
   );
 }
 
-export function Footer({ view, message, notice, columns = 0 }: { view: View; message?: string | undefined; notice?: Notice | undefined; columns?: number }) {
+export function Footer({ view, message, notice, hint, columns = 0 }: { view: View; message?: string | undefined; notice?: Notice | undefined; hint?: string | undefined; columns?: number }) {
   const keys: Record<View["kind"], string> = {
-    browse: "⏎ run · v view · e edit · a add · x stop · / search · 1 2 3 tabs · s settings · ? keys · q quit",
+    browse: "⏎ run · v view · e edit · a add · x stop · / search · ? keys · q quit",
     editor: "",
     "new-bolt": "",
     "new-workspace": "",
@@ -101,7 +101,7 @@ export function Footer({ view, message, notice, columns = 0 }: { view: View; mes
     run: "",
     check: "↑↓ scroll · t trust · esc back",
     trust: "",
-    processes: "↑↓ choose · [ ] tabs · u d scroll · G newest · x stop · r restart · / filter · f full log · o show stopped · esc",
+    processes: "↑↓ choose · [ ] tabs · f full log · x stop · r restart · ? keys · esc",
     history: "",
     help: "any key to go back",
   };
@@ -115,7 +115,7 @@ export function Footer({ view, message, notice, columns = 0 }: { view: View; mes
         ) : message ? (
           <Text color="cyan" wrap="truncate-end">{message}</Text>
         ) : (
-          <Text dimColor wrap="truncate-end">{typingHint(view) ?? keys[view.kind]}</Text>
+          <Text dimColor wrap="truncate-end">{typingHint(view) ?? hint ?? keys[view.kind]}</Text>
         )}
       </Box>
       {columns >= 60 ? (

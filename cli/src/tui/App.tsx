@@ -62,6 +62,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
   const [notice, setNotice] = useState<Notice>();
   // Past runs, for the last result beside each bolt and the recent runs under them.
   const [recent, setRecent] = useState<HistoryEntry[]>([]);
+  const [historyHint, setHistoryHint] = useState<string>();
   // Whether the finished run is the one being looked at in Running, so it does not vanish mid-read.
   const watchingDone = useRef(false);
   // What was true at the last look, to tell what has changed since.
@@ -580,7 +581,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
     // The trust dialog's buttons take its keys.
     if (view.kind === "trust") return;
 
-    if (view.kind === "help") return setView({ kind: "browse" });
+    if (view.kind === "help") return setView(view.back ?? { kind: "browse" });
 
     if (input === "q" && view.kind === "browse") {
       // Nothing left running attached and unseen.
@@ -646,6 +647,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
       if (key.escape && view.full && view.logQuery) return setView({ ...view, logQuery: "", scroll: 0 });
       if (key.escape && view.query) return setView({ ...view, query: "", index: -1 });
       if (key.escape && view.logQuery) return setView({ ...view, logQuery: "", scroll: 0 });
+      if (input === "?") return setView({ kind: "help", back: view });
       if (input === "h") return setView(history_());
       if (jump(input)) return;
       const list = paneItems;
@@ -964,7 +966,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
         here={hereLabel}
         running={runningCount}
         failing={failing}
-        tab={view.kind === "processes" ? "running" : view.kind === "history" ? "history" : "bolts"}
+        tab={view.kind === "processes" || (view.kind === "help" && view.back?.kind === "processes") ? "running" : view.kind === "history" ? "history" : "bolts"}
       />
 
       {loadError ? (
@@ -1150,6 +1152,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
           onClose={() => setView({ kind: "browse" })}
           onRunning={() => setView(activity())}
           onJump={(input) => void jump(input)}
+          onHint={setHistoryHint}
           onRetry={(entry) => {
             const read = reads.find((candidate) => candidate.workspace.file === entry.workspace);
             if (!read) return setMessage(`${entry.workspaceName} is not in the list any more`);
@@ -1196,7 +1199,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
       ) : view.kind === "processes" ? (
         <PanesPanel items={paneItems} activity={events} history={recent} query={view.query ?? ""} typing={Boolean(view.typing)} runs={runs} containers={containers} active={active} tick={tick} stats={stats} dockerError={dockerError} all={view.all} index={processIndex} log={shownLog} scroll={view.scroll} full={view.full} tab={view.tab} reads={reads} logQuery={view.logQuery} logTyping={view.logTyping} glyphs={glyphs} height={bodyHeight} columns={columns} />
       ) : view.kind === "help" ? (
-        <HelpPanel glyphs={glyphs} height={bodyHeight} />
+        <HelpPanel glyphs={glyphs} height={bodyHeight} tab={view.back?.kind === "processes" ? "running" : "bolts"} />
       ) : view.kind === "search" ? (
         <SearchPanel hits={search(reads, view.query)} index={view.index} query={view.query} glyphs={glyphs} height={bodyHeight} />
       ) : reads.length === 0 ? (
@@ -1221,6 +1224,8 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
             <WorkspacePanel
               confirming={view.kind === "delete-bolt" ? { question: `Delete "${view.bolt}"?`, yes: "Delete", onAnswer: (yes) => deleteBolt(view, yes) } : undefined}
               read={current}
+              here={current.workspace.file === library.here}
+              width={columns - workspaceListWidth(columns) - 4}
               boltIndex={boltIndex}
               focused={focus === "bolts"}
               glyphs={glyphs}
@@ -1233,7 +1238,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
         </Box>
       )}
 
-      <Footer view={view} notice={notice} columns={columns} message={message ?? (library?.unreadable.length ? `${library.unreadable.length} workspace file(s) could not be read — \`wisp list\`` : undefined)} />
+      <Footer view={view} notice={notice} columns={columns} hint={view.kind === "history" ? historyHint : undefined} message={message ?? (library?.unreadable.length ? `${library.unreadable.length} workspace file(s) could not be read — \`wisp list\`` : undefined)} />
     </Box>
     </MouseContext.Provider>
   );
