@@ -61,6 +61,7 @@ function services(overrides: Partial<Services> = {}, library: Library = { reads:
       addBolt: async () => undefined,
       renameBolt: async () => undefined,
       setBoltNotes: async () => undefined,
+      setWorkspaceDetails: async () => undefined,
       removeBolt: async () => undefined,
       moveBolt: async () => undefined,
       setJob: async () => undefined,
@@ -242,6 +243,21 @@ describe("the TUI", () => {
     app.stdin.write("D");
     await tick();
     await eventually(() => expect(app.lastFrame()).toContain("Clear all 1 run?"));
+  });
+
+  it("edits a workspace's name, icon and notes with e on the workspace list", async () => {
+    const setWorkspaceDetails = vi.fn(async () => undefined);
+    const app = await open(services({ editing: { ...services().editing, setWorkspaceDetails } }));
+    app.stdin.write(ARROW_LEFT);
+    await tick();
+    app.stdin.write("e");
+    await eventually(() => expect(app.lastFrame()).toContain('Workspace "Acme"'));
+    expect(app.lastFrame()).toContain("which your team shares");
+    for (const key of " Labs") app.stdin.write(key);
+    await tick();
+    app.stdin.write("\u0013");
+    await eventually(() => expect(setWorkspaceDetails).toHaveBeenCalledWith(acme.workspace.file, { name: "Acme Labs", icon: "", notes: "" }));
+    await eventually(() => expect(app.lastFrame()).toContain('Renamed "Acme" to "Acme Labs"'));
   });
 
   it("asks about deleting a bolt on its row, with the rest of the list still there", async () => {

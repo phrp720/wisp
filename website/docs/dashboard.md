@@ -49,7 +49,7 @@ you'd rather.
 | `⏎` · `n` | run the selected bolt · dry run it |
 | `v` | view a bolt whole: its steps, what it needs, what's up |
 | `x` · `R` | stop what it started (asks about the bolts it needed) · restart it |
-| `e` · `a` · `D` | edit · add · delete a bolt (`D` on the left deletes a workspace) |
+| `e` · `a` · `D` | edit · add · delete a bolt (on the left: `e` renames a workspace and sets its icon and notes, `D` deletes it) |
 | `←` `⏎` or `y` · `esc` | deleting asks on the row itself: delete it · keep it |
 | `K` · `J` | move a bolt up · down |
 | `N` · `E` | a workspace of your own · open the file itself in your editor |

@@ -89,6 +89,7 @@ export function Footer({ view, message, notice, hint, columns = 0 }: { view: Vie
     editor: "",
     "new-bolt": "",
     "new-workspace": "",
+    "edit-workspace": "",
     "delete-bolt": `Its steps go too; what it started keeps running · ${ASK_KEYS}`,
     "delete-workspace": view.kind === "delete-workspace" && view.personal
       ? `Its file and bolts go; what it started keeps running · ${ASK_KEYS}`

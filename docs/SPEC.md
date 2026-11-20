@@ -181,8 +181,8 @@ Run flags: `--dry-run` (show what would happen and where, change nothing), `--in
 
 `wisp` at a terminal opens it. Everything above can be done there without writing JSON:
 a folder with no file is offered a setup; `e` edits the selected bolt through forms
-(add, change, move, remove steps; its name and notes; make it a job), `a` adds a bolt, `N` a
-personal workspace; `v` shows a bolt whole and read-only, its dependencies opened up;
+(add, change, move, remove steps; its name and notes; make it a job), or, on the workspace
+list, the workspace's name, icon and notes; `a` adds a bolt, `N` a personal workspace; `v` shows a bolt whole and read-only, its dependencies opened up;
 `p` (or `2`) shows what is running, grouped by the bolt that started it, with live
 output (`[` and `]` switch to a command's details and past runs); `h` (or `3`) the
 history of every run, `D` there deleting runs; `/` filters, and in a log full screen (`f`) or an open run of

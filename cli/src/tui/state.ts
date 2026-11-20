@@ -51,6 +51,7 @@ export type View =
   | { kind: "editor"; file: string; bolt: string; adding?: boolean }
   | { kind: "new-bolt"; file: string; workspace: string }
   | { kind: "new-workspace" }
+  | { kind: "edit-workspace"; file: string; name: string; icon: string; notes: string; personal: boolean; local: boolean }
   | { kind: "delete-bolt"; file: string; bolt: string }
   | { kind: "delete-workspace"; file: string; name: string; personal: boolean }
   | { kind: "view"; file: string; bolt: string }
@@ -77,6 +78,7 @@ const TAKES_ITS_OWN_KEYS: Record<View["kind"], boolean> = {
   editor: true,
   "new-bolt": true,
   "new-workspace": true,
+  "edit-workspace": true,
   "delete-bolt": true,
   "delete-workspace": true,
   view: true,

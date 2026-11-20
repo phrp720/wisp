@@ -203,7 +203,7 @@ export function HelpPanel({ glyphs, height, tab = "bolts" }: { glyphs: Glyphs; h
     [
       "Edit",
       [
-        ["e", "edit the selected bolt — its steps, name, kind"],
+        ["e", "edit the selected bolt, or the workspace on the left: its name, icon, notes"],
         ["a  D", "add a bolt · delete the selected bolt, or workspace on the left"],
         ["K  J", "move the selected bolt up · down"],
         ["N", "a new workspace of your own"],

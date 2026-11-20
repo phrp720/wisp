@@ -245,6 +245,35 @@ async function save(file: string, raw: Record<string, unknown>, trustFile: strin
   if (before && !before.workspace.personal && before.trust === "trusted") await trustProject(trustFile);
 }
 
+export interface WorkspaceDetails {
+  name: string;
+  icon: string;
+  notes: string;
+}
+
+export async function setWorkspaceDetails(file: string, details: WorkspaceDetails): Promise<void> {
+  const name = details.name.trim();
+  if (!name) throw new WispError("A workspace needs a name", "INVALID_INPUT");
+  const before = (await readProjectFile(file)).workspace;
+  const main = await readRaw(file);
+  const local = before.local ? await readRaw(before.local) : undefined;
+  const now: Record<keyof WorkspaceDetails, string> = { name, icon: details.icon.trim(), notes: details.notes.trim() };
+  const was: Record<keyof WorkspaceDetails, string> = { name: before.name, icon: before.icon ?? "", notes: before.notes ?? "" };
+  let mainChanged = false;
+  let localChanged = false;
+  for (const key of ["name", "icon", "notes"] as const) {
+    if (now[key] === was[key]) continue;
+    const inLocal = local !== undefined && key in local;
+    const target = inLocal ? local : main;
+    if (now[key]) target[key] = now[key];
+    else delete target[key];
+    if (inLocal) localChanged = true;
+    else mainChanged = true;
+  }
+  if (local && localChanged && before.local) await save(before.local, local, file);
+  if (mainChanged) await save(file, main, file);
+}
+
 /** Apply a change to one bolt, wherever it is written. */
 export async function changeBolt(file: string, bolt: string, change: (bolt: RawBolt) => RawBolt | undefined): Promise<void> {
   const { path, raw } = await locate(file, bolt);

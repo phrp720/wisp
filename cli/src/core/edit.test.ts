@@ -20,6 +20,7 @@ import {
   replaceStep,
   setBoltNotes,
   setJob,
+  setWorkspaceDetails,
   stepValues,
 } from "./edit.js";
 import { LOCAL_FILE, PROJECT_FILE, readProjectFile } from "./project.js";
@@ -112,6 +113,38 @@ describe("editing a workspace without writing JSON", () => {
     await setBoltNotes(file, "Work on api", "");
     expect(JSON.parse(await readFile(file, "utf8")).bolts[0]).not.toHaveProperty("notes");
     expect((await readProjectFile(file)).workspace.bolts[0]?.notes).toBeUndefined();
+  });
+
+  it("renames a workspace, sets its icon and notes, and drops one left empty", async () => {
+    await setWorkspaceDetails(file, { name: "Shop Labs", icon: "🛒", notes: "The storefront" });
+    let raw = JSON.parse(await readFile(file, "utf8"));
+    expect(Object.keys(raw).slice(0, 3)).toEqual(["name", "icon", "notes"]);
+    expect((await readProjectFile(file)).workspace).toMatchObject({ name: "Shop Labs", icon: "🛒", notes: "The storefront" });
+    await setWorkspaceDetails(file, { name: "Shop Labs", icon: "", notes: "The storefront" });
+    raw = JSON.parse(await readFile(file, "utf8"));
+    expect(raw).not.toHaveProperty("icon");
+    await expect(setWorkspaceDetails(file, { name: "  ", icon: "", notes: "" })).rejects.toThrow(/needs a name/);
+  });
+
+  it("leaves a name taken from the folder alone when it did not change", async () => {
+    await writeFile(file, JSON.stringify({ bolts: [] }));
+    const named = (await readProjectFile(file)).workspace.name;
+    await setWorkspaceDetails(file, { name: named, icon: "", notes: "Mine" });
+    expect(JSON.parse(await readFile(file, "utf8"))).not.toHaveProperty("name");
+    expect((await readProjectFile(file)).workspace).toMatchObject({ name: named, notes: "Mine" });
+  });
+
+  it("renames a workspace where its name is set: the local override, when it sets one, keeping trust", async () => {
+    await writeFile(join(dir, LOCAL_FILE), JSON.stringify({ name: "My Shop" }));
+    await trustProject(file);
+    await setWorkspaceDetails(file, { name: "Our Shop", icon: "", notes: "Shared notes" });
+    expect(JSON.parse(await readFile(join(dir, LOCAL_FILE), "utf8")).name).toBe("Our Shop");
+    const main = JSON.parse(await readFile(file, "utf8"));
+    expect(main.name).toBe("Shop");
+    expect(main.notes).toBe("Shared notes");
+    const read = await readProjectFile(file);
+    expect(read.workspace.name).toBe("Our Shop");
+    expect(read.trust).toBe("trusted");
   });
 
   it("keeps a file trusted when the change was made here, by the person who trusted it", async () => {

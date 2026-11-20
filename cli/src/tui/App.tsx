@@ -794,6 +794,10 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
     // Editing, without JSON: e opens the bolt editor, a adds a bolt, N a workspace of
     // your own. E hands the file itself to your editor, for those who want it.
     if (input === "E") return void edit(current);
+    if (input === "e" && focus === "workspaces") {
+      const { file, name, icon, notes, personal, local } = current.workspace;
+      return setView({ kind: "edit-workspace", file, name, icon: icon ?? "", notes: notes ?? "", personal, local: Boolean(local) });
+    }
     if (input === "e") {
       if (!bolt) return setView({ kind: "new-bolt", file: current.workspace.file, workspace: current.workspace.name });
       return setView({ kind: "editor", file: current.workspace.file, bolt: bolt.label });
@@ -1100,6 +1104,40 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
             setFocus("bolts");
             // Straight to its first bolt: a workspace is only as useful as what it runs.
             setView({ kind: "new-bolt", file, workspace: values["name"]?.trim() ?? "" });
+            return undefined;
+          }}
+        />
+      ) : view.kind === "edit-workspace" ? (
+        <Form
+          title={`Workspace "${view.name}"`}
+          intro={
+            view.personal
+              ? "Yours: kept in Wisp's own folder. Its past runs show the new name."
+              : view.local
+                ? "Saved where each value is set now: .wisp.local.json for what it overrides, .wisp.json (shared with your team) for the rest."
+                : "Saved in .wisp.json, which your team shares: they get the new name on their next pull. Its past runs show it too."
+          }
+          fields={[
+            { key: "name", label: "Name", required: true, placeholder: "Acme" },
+            { key: "icon", label: "Icon", hint: "an emoji, or leave it empty", placeholder: "🏢" },
+            { key: "notes", label: "Notes", hint: "a line about what it's for", placeholder: "The API, the web app and their database" },
+          ]}
+          initial={{ name: view.name, icon: view.icon, notes: view.notes }}
+          submitLabel="Save"
+          glyphs={glyphs}
+          height={bodyHeight}
+          onCancel={() => setView({ kind: "browse" })}
+          onSubmit={async (values) => {
+            const name = values["name"]?.trim() ?? "";
+            try {
+              savedAt.current = Date.now();
+              await services.editing.setWorkspaceDetails(view.file, { name, icon: values["icon"] ?? "", notes: values["notes"] ?? "" });
+            } catch (error) {
+              return { name: describe(error) };
+            }
+            await reload(view.file);
+            setView({ kind: "browse" });
+            say(name === view.name ? `Saved "${name}"` : `Renamed "${view.name}" to "${name}"`);
             return undefined;
           }}
         />
