@@ -62,7 +62,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
   const [notice, setNotice] = useState<Notice>();
   // Past runs, for the last result beside each bolt and the recent runs under them.
   const [recent, setRecent] = useState<HistoryEntry[]>([]);
-  const [historyHint, setHistoryHint] = useState<string>();
+  const [screenHint, setScreenHint] = useState<string>();
   // Whether the finished run is the one being looked at in Running, so it does not vanish mid-read.
   const watchingDone = useRef(false);
   // What was true at the last look, to tell what has changed since.
@@ -1034,6 +1034,8 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
           editing={services.editing}
           glyphs={glyphs}
           height={bodyHeight}
+          columns={columns}
+          onHint={setScreenHint}
           onClose={() => setView({ kind: "browse" })}
           onChanged={(label) => {
             savedAt.current = Date.now();
@@ -1055,10 +1057,10 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
             {
               key: "kind",
               label: "Kind",
-              hint: "a job is for tests, builds and releases: it stops at the first failure",
+              hint: "a job is for tests, builds and releases",
               choices: [
-                { value: "start", label: "starts things — servers, apps" },
-                { value: "job", label: "a job — runs to the end" },
+                { value: "start", label: "Starter — starts things and leaves them running" },
+                { value: "job", label: "Job — runs to the end, stops at the first failure" },
               ],
             },
           ]}
@@ -1197,7 +1199,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
           onClose={() => setView({ kind: "browse" })}
           onRunning={() => setView(activity())}
           onJump={(input) => void jump(input)}
-          onHint={setHistoryHint}
+          onHint={setScreenHint}
           onRetry={(entry) => {
             const read = reads.find((candidate) => candidate.workspace.file === entry.workspace);
             if (!read) return setMessage(`${entry.workspaceName} is not in the list any more`);
@@ -1283,7 +1285,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
         </Box>
       )}
 
-      <Footer view={view} notice={notice} columns={columns} hint={view.kind === "history" ? historyHint : undefined} message={message ?? (library?.unreadable.length ? `${library.unreadable.length} workspace file(s) could not be read — \`wisp list\`` : undefined)} />
+      <Footer view={view} notice={notice} columns={columns} hint={view.kind === "history" || view.kind === "editor" ? screenHint : undefined} message={message ?? (library?.unreadable.length ? `${library.unreadable.length} workspace file(s) could not be read — \`wisp list\`` : undefined)} />
     </Box>
     </MouseContext.Provider>
   );

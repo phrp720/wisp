@@ -186,7 +186,7 @@ export function describeRawStep(step: RawStep): string {
       return `start Docker services${services} from ${String(step["compose"])}`;
     }
     case "wait":
-      return `wait for ${stepValues(step)["wait"] ?? "…"}`;
+      return typeof step["wait"] === "number" ? `wait ${step["wait"]}s` : `wait for ${stepValues(step)["wait"] ?? "…"}`;
     case "url":
       return `open ${label ?? String(step["url"])}`;
     case "folder":

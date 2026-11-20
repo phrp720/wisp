@@ -1,10 +1,10 @@
 # Jobs and history
 
-## A job, or a normal bolt?
+## A job, or a starter?
 
 The difference is whether Wisp **waits for each command to finish**.
 
-| | Normal bolt | Job (`"job": true`) |
+| | Starter (the default) | Job (`"job": true`) |
 |---|---|---|
 | **For** | what keeps running: dev servers, databases, watchers | what finishes: tests, lint, builds, deploys, cleanups |
 | **Each command** | starts in the background; Wisp checks it didn't fail at once, then moves on | runs attached: Wisp waits for it, with its output on screen |
@@ -12,11 +12,11 @@ The difference is whether Wisp **waits for each command to finish**.
 | **Afterwards** | it keeps running: watch it on Running, stop it with `x` or `wisp down` | it's over: pass or fail, kept in History |
 | **Already running** | left alone, not started twice | runs again, every time |
 
-**The rule:** if the command keeps running, a normal bolt; if it finishes, a job. A cleanup
-script as a normal bolt starts in the background and you only hear how it went from the
+**The rule:** if the command keeps running, a starter; if it finishes, a job. A cleanup
+script as a starter starts in the background and you only hear how it went from the
 Activity log; as a job it runs in front of you and ends with ✓ or ✗.
 
-To switch, press `e` on the bolt in the dashboard, then `t`; or add `"job": true`.
+To switch, press `e` on the bolt in the dashboard and change its Kind; or add `"job": true`.
 
 ## Jobs
 

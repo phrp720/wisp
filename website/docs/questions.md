@@ -100,12 +100,12 @@ too. `wisp stop --all` stops every command Wisp started.
 → [Up and down](./running#up-and-down)
 :::
 
-::: details What's the difference between a job and a normal bolt?
-A normal bolt starts things and leaves them running: servers, databases. A job runs each
+::: details What's the difference between a job and a starter?
+A starter starts things and leaves them running: servers, databases. A job runs each
 command to the end, in front of you, stops at the first failure, and ends with ✓ or ✗:
 tests, builds, cleanups. If it finishes, make it a job.
 
-→ [A job, or a normal bolt?](./jobs#a-job-or-a-normal-bolt)
+→ [A job, or a starter?](./jobs#a-job-or-a-starter)
 :::
 
 ::: details A check failed. Do I have to run it all again?

@@ -1216,7 +1216,7 @@ describe("doing everything without JSON", () => {
     expect(typeof step["bolt"]).toBe("string");
   });
 
-  it("shows a bolt's notes, and sets them through the name form without renaming it", async () => {
+  it("shows a bolt's notes, and changes them on its Notes row without renaming it", async () => {
     const setBoltNotes = vi.fn(async () => undefined);
     const renameBolt = vi.fn(async () => undefined);
     const noted = read("/dev/acme/.wisp.json", { name: "Acme", bolts: [{ label: "Work on api", notes: "The API and its database", targets: [{ folder: "apps/api" }] }] });
@@ -1224,20 +1224,61 @@ describe("doing everything without JSON", () => {
     const app = await open(services({ editing: { ...services().editing, bolt, setBoltNotes, renameBolt } }, { reads: [noted], here: noted.workspace.file, unreadable: [] }));
     expect(app.lastFrame()).toContain("The API and its database");
     app.stdin.write("e");
-    await tick();
-    app.stdin.write("n");
-    await tick();
-    await eventually(() => expect(app.lastFrame()).toContain("Notes"));
+    await eventually(() => expect(app.lastFrame()).toContain("+  add the first step"));
+    app.stdin.write("\u001B[A");
+    app.stdin.write("\u001B[A");
+    await eventually(() => expect(app.lastFrame()).toMatch(/❯ Notes +The API and its database/));
     app.stdin.write("\r");
-    await tick();
+    await eventually(() => expect(app.lastFrame()).toContain("[ Save ]"));
     for (const char of " too") app.stdin.write(char);
     await tick();
-    app.stdin.write("\r");
-    app.stdin.write("\r");
-    await tick();
-    await tick();
+    app.stdin.write("\u0013");
+    await eventually(() => expect(setBoltNotes).toHaveBeenCalled());
     expect(renameBolt).not.toHaveBeenCalled();
     expect(setBoltNotes).toHaveBeenCalledWith(noted.workspace.file, "Work on api", "The API and its database too");
+  });
+
+  it("renames a bolt and makes it a job from the rows above its steps, each edited on the right", async () => {
+    const renameBolt = vi.fn(async () => undefined);
+    const setJob = vi.fn(async () => undefined);
+    const bolt = async (_file: string, label: string) => ({ label, targets: [{ folder: "apps/api" }, { run: "pnpm dev" }] });
+    const app = await open(services({ editing: { ...services().editing, bolt, renameBolt, setJob } }));
+    app.stdin.write("e");
+    await eventually(() => expect(app.lastFrame()).toMatch(/❯ .*1 .*apps\/api/));
+    app.stdin.write("k");
+    await eventually(() => expect(app.lastFrame()).toMatch(/❯ Kind +Starter/));
+    expect(app.lastFrame()).toContain("Job — runs to the end");
+    app.stdin.write("\r");
+    await eventually(() => expect(app.lastFrame()).toContain("[ Save ]"));
+    app.stdin.write("\u001B[C");
+    await tick();
+    app.stdin.write("\u0013");
+    await eventually(() => expect(setJob).toHaveBeenCalledWith(acme.workspace.file, "Work on api", true));
+    await eventually(() => expect(app.lastFrame()).not.toContain("[ Save ]"));
+    app.stdin.write("k");
+    app.stdin.write("k");
+    await eventually(() => expect(app.lastFrame()).toMatch(/❯ Name +Work on api/));
+    app.stdin.write("\r");
+    await eventually(() => expect(app.lastFrame()).toContain("[ Save ]"));
+    for (const char of " v2") app.stdin.write(char);
+    await tick();
+    app.stdin.write("\u0013");
+    await eventually(() => expect(renameBolt).toHaveBeenCalledWith(acme.workspace.file, "Work on api", "Work on api v2"));
+  });
+
+  it("edits on one screen at a time on a narrow terminal, and esc goes back to the list", async () => {
+    const bolt = async (_file: string, label: string) => ({ label, targets: [{ folder: "apps/api" }, { run: "pnpm dev" }] });
+    const app = render(<App services={services({ editing: { ...services().editing, bolt } })} glyphs={unicode} size={{ columns: 80, rows: 24 }} />);
+    await tick();
+    await eventually(() => expect(app.lastFrame() ?? "").not.toContain("reading your workspaces"));
+    app.stdin.write("e");
+    await eventually(() => expect(app.lastFrame()).toContain("+  add a step"));
+    expect(app.lastFrame()).not.toContain("Step 1 · ");
+    app.stdin.write("\r");
+    await eventually(() => expect(app.lastFrame()).toContain("Step 1 · "));
+    expect(app.lastFrame()).not.toContain("+  add a step");
+    app.stdin.write("\u001B");
+    await eventually(() => expect(app.lastFrame()).toContain("+  add a step"));
   });
 
   it("says what is wrong with a field, in words", async () => {
@@ -1271,7 +1312,8 @@ describe("doing everything without JSON", () => {
     await tick();
     expect(addBolt).toHaveBeenCalledWith(acme.workspace.file, "Run the tests", { job: true });
     // Straight on to its first step.
-    expect(app.lastFrame()).toContain("The first step of ⚡ Run the tests");
+    await eventually(() => expect(app.lastFrame()).toContain("What should happen first when it runs?"));
+    expect(app.lastFrame()).toContain("⚡ Run the tests");
   });
 
   it("shows containers next to commands, with how they are doing", async () => {
@@ -1635,9 +1677,9 @@ describe("the mouse", () => {
     };
     app.stdin.write("a");
     await tick();
-    mouse.emit({ kind: "click", ...(await spot(frame, "a job")) });
+    mouse.emit({ kind: "click", ...(await spot(frame, "Job — runs")) });
     await tick();
-    await eventually(() => expect(frame()).toContain("● a job"));
+    await eventually(() => expect(frame()).toContain("● Job"));
     mouse.emit({ kind: "click", ...(await spot(frame, "Name")) });
     await eventually(() => expect(frame()).toMatch(/┃ Name/));
     await type("Lint");
@@ -1652,10 +1694,11 @@ describe("the mouse", () => {
     await tick();
     expect(addBolt).toHaveBeenCalledWith(acme.workspace.file, "XLint", { job: true });
     // Straight to its first step: a click on one picks it.
-    expect(frame()).toContain("The first step of");
+    await eventually(() => expect(frame()).toContain("What should happen first when it runs?"));
     mouse.emit({ kind: "click", ...(await spot(frame, "Open a folder")) });
     await tick();
-    await eventually(() => expect(frame()).toContain("Adding step 1 of"));
+    await eventually(() => expect(frame()).toContain("The first step · "));
+    expect(frame()).toContain("[ Add step ]");
   });
 
   it("ticks bolts to set up with a click, and sets them up from the button", async () => {
@@ -1710,7 +1753,8 @@ describe("the mouse", () => {
     await eventually(() => expect(frame()).toMatch(/❯ .*pnpm dev/));
     mouse.emit({ kind: "click", ...(await spot(frame, "pnpm dev")) });
     await tick();
-    await eventually(() => expect(frame()).toContain("Changing step 2 of"));
+    await eventually(() => expect(frame()).toContain("[ Save step ]"));
+    expect(frame()).toContain("Step 2 · ");
   });
 
   it("chooses and opens runs in History, shows a step's log with a click, and filters by bolt", async () => {

@@ -36,9 +36,12 @@ terminal app that uses the mouse. Rather select freely? Turn it off in [Settings
 
 ## No JSON needed
 
-`a` adds a bolt and `e` edits one: steps are picked from a list (Start, Wait, Open) and
-filled in through short forms, and `n` sets its name and notes. `E` opens the file itself if
-you'd rather.
+`a` adds a bolt and `e` edits one. The editor has two sides: on the left, the bolt (its
+name, notes and kind, then its steps in order), and on the right, the form for whatever is
+selected there. `⏎` edits it, `ctrl+s` saves, `esc` goes back. New steps are picked from a list
+(Start, Wait, Open) and filled in the same way; `a` adds one after the selected step, `d`
+removes it and `K` `J` move it. On a narrow terminal it shows one side at a time. `E` opens
+the file itself if you'd rather.
 
 ![Making a bolt in the dashboard: name it, then add a command, a wait and a website through short forms, then run it](/demo/editor.gif)
 

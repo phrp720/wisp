@@ -80,7 +80,7 @@ export function BoltView(props: BoltViewProps) {
         <Text color={TONE.accent}>{glyphs.bolt}</Text>
         <Text bold color={bolt.color}>{bolt.label}</Text>
         <Text dimColor>{`  ${read.workspace.name} · `}</Text>
-        {bolt.job ? <Text color="cyan">a job — runs to the end, stops at the first failure</Text> : <Text dimColor>starts things and leaves them running</Text>}
+        {bolt.job ? <Text color="cyan">job — runs to the end, stops at the first failure</Text> : <Text dimColor>starter — starts things and leaves them running</Text>}
       </Text>
       {bolt.notes ? <Text wrap="truncate-end">{bolt.notes}</Text> : null}
       <Text wrap="truncate-end" dimColor>

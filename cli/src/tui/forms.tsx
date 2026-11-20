@@ -32,6 +32,8 @@ export interface FormProps {
   /** Resolves with errors to show per field, or nothing when it worked. */
   onSubmit: (values: Record<string, string>) => Promise<Record<string, string> | undefined>;
   onCancel: () => void;
+  active?: boolean;
+  keys?: boolean;
 }
 
 /**
@@ -40,7 +42,7 @@ export interface FormProps {
  * beside the one you are on, examples in grey where nothing is typed yet, and a button at the
  * bottom that does the thing. ↑↓ or tab move, ⏎ moves on and, on the button, saves.
  */
-export function Form({ title, intro, fields, initial = {}, submitLabel = "Save", preview, glyphs, height, onSubmit, onCancel }: FormProps) {
+export function Form({ title, intro, fields, initial = {}, submitLabel = "Save", preview, glyphs, height, onSubmit, onCancel, active: editing = true, keys = true }: FormProps) {
   // Kept in refs as well as state: keys arrive faster than React redraws — typing fast, or
   // pasting — and each must build on the one before, not on the last frame drawn.
   const start = () => {
@@ -125,7 +127,7 @@ export function Form({ title, intro, fields, initial = {}, submitLabel = "Save",
       }
       setCursor(field.key, next.cursor);
     }
-  });
+  }, { isActive: editing });
 
   // Clicks: on a field, to type in it (on its text, the cursor goes where you clicked); on
   // an option, to choose it; on the button, to save. The wheel moves between fields, as ↑↓.
@@ -144,50 +146,52 @@ export function Form({ title, intro, fields, initial = {}, submitLabel = "Save",
       setIndex(position);
       const values = valuesRef.current;
       const value = values[field.key] ?? "";
-      // Line 0 is the label, line 1 the value, after the bar beside the field (two columns).
-      if (spot.y === 1 && field.choices) {
-        const chosen = choiceAt(field.choices, spot.x - 2);
+      // Line 0 is the label, then the value (one line), or the options (one a line).
+      if (field.choices) {
+        const chosen = field.choices[spot.y - 1];
         if (chosen) setValues({ ...values, [field.key]: chosen.value });
-      } else if (!field.choices) {
+      } else {
         // On the value: where you clicked, after its "› ". Anywhere else: the end.
         setCursor(field.key, spot.y === 1 ? Math.max(0, Math.min(value.length, spot.x - 4)) : value.length);
       }
       return true;
     }
     return false;
-  });
+  }, editing);
 
   const bar = glyphs.border === "round" ? "┃" : "|";
   const said = preview?.(values);
   const onButton = index === fields.length;
+  const needed = 3 + (intro ? 1 : 0) + fields.reduce((sum, entry) => sum + 2 + (entry.choices ? entry.choices.length : 1) + 1, 0) + (said ? 1 : 0) + (editing ? 2 : 0);
+  const compact = needed > height;
   return (
-    <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor={TONE.accent} paddingX={1} overflow="hidden">
-      <Text bold color={TONE.accent}>{title}</Text>
+    <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor={editing ? TONE.accent : "gray"} paddingX={1} overflow="hidden">
+      <Text bold color={editing ? TONE.accent : undefined}>{title}</Text>
       {intro ? <Text dimColor wrap="wrap">{intro}</Text> : null}
       {fields.map((entry, at) => {
-        const active = at === index;
+        const active = editing && at === index;
         const value = values[entry.key] ?? "";
         const edge = <Text color={TONE.accent}>{active ? `${bar} ` : "  "}</Text>;
         return (
-          <Box key={entry.key} ref={fieldNodes.set(entry.key)} flexDirection="column" marginTop={1}>
+          <Box key={entry.key} ref={fieldNodes.set(entry.key)} flexDirection="column" flexShrink={0} marginTop={compact ? 0 : 1}>
             <Text>
               {edge}
               <Text bold={active} color={active ? TONE.accent : undefined}>{entry.label}</Text>
               {entry.required ? <Text color={TONE.failed}>{" *"}</Text> : null}
             </Text>
-            <Text wrap="wrap">
-              {edge}
-              {entry.choices ? (
-                entry.choices.map((option, number) => {
-                  const chosen = option.value === value;
-                  return (
-                    <Text key={option.value}>
-                      {number > 0 ? "   " : ""}
-                      <Text color={chosen ? TONE.accent : undefined} dimColor={!chosen}>{`${chosen ? "●" : "○"} ${option.label}`}</Text>
-                    </Text>
-                  );
-                })
-              ) : (
+            {entry.choices ? (
+              entry.choices.map((option) => {
+                const chosen = option.value === value;
+                return (
+                  <Text key={option.value} wrap="truncate-end">
+                    {edge}
+                    <Text color={chosen ? TONE.accent : undefined} dimColor={!chosen}>{`${chosen ? "●" : "○"} ${option.label}`}</Text>
+                  </Text>
+                );
+              })
+            ) : (
+              <Text wrap="wrap">
+                {edge}
                 <Text>
                   <Text dimColor>{"› "}</Text>
                   {active ? (
@@ -196,8 +200,8 @@ export function Form({ title, intro, fields, initial = {}, submitLabel = "Save",
                     value || <Text dimColor>{entry.placeholder ?? (entry.required ? "" : "optional")}</Text>
                   )}
                 </Text>
-              )}
-            </Text>
+              </Text>
+            )}
             {errors[entry.key] ? (
               <Text color={TONE.failed}>{`${active ? bar : " "} ${errors[entry.key]}`}</Text>
             ) : active && entry.hint ? (
@@ -216,28 +220,18 @@ export function Form({ title, intro, fields, initial = {}, submitLabel = "Save",
           <Text>{said}</Text>
         </Text>
       ) : null}
-      <Box marginTop={1}>
-        <Box ref={button}>
-          <Text color={onButton ? "black" : TONE.accent} backgroundColor={onButton ? TONE.accent : undefined} bold>
-            {saving ? " saving… " : onButton ? ` ▸ ${submitLabel} ` : ` [ ${submitLabel} ] `}
-          </Text>
+      {editing ? (
+        <Box marginTop={1}>
+          <Box ref={button}>
+            <Text color={onButton ? "black" : TONE.accent} backgroundColor={onButton ? TONE.accent : undefined} bold>
+              {saving ? " saving… " : onButton ? ` ▸ ${submitLabel} ` : ` [ ${submitLabel} ] `}
+            </Text>
+          </Box>
+          {keys ? <Text dimColor>{"   ↑↓ fields · ⏎ next · ctrl+s or ⏎ on the button to save · esc cancel"}</Text> : null}
         </Box>
-        <Text dimColor>{"   ↑↓ fields · ⏎ next · ctrl+s or ⏎ on the button to save · esc cancel"}</Text>
-      </Box>
+      ) : null}
     </Box>
   );
-}
-
-/** The option of a choice field at a column of its line: "● label", three spaces apart. */
-export function choiceAt<T extends { label: string }>(choices: T[], column: number): T | undefined {
-  let at = 0;
-  for (const [number, choice] of choices.entries()) {
-    if (number > 0) at += 3;
-    const width = 2 + choice.label.length;
-    if (column >= at && column < at + width) return choice;
-    at += width;
-  }
-  return undefined;
 }
 
 /** A text value with the cursor drawn where it is. */
@@ -302,8 +296,10 @@ export function Picker(props: {
   height: number;
   onPick: (key: string) => void;
   onCancel: () => void;
+  active?: boolean;
+  keys?: boolean;
 }) {
-  const { title, intro, options, glyphs, height, onPick, onCancel } = props;
+  const { title, intro, options, glyphs, height, onPick, onCancel, active: choosing = true, keys = true } = props;
   const [index, setIndexState] = useState(0);
   const [query, setQueryState] = useState("");
   const indexRef = useRef(0);
@@ -343,7 +339,7 @@ export function Picker(props: {
     const number = Number.parseInt(input, 10);
     if (!queryRef.current && number >= 1 && number <= list.length) return onPick((list[number - 1] as { key: string }).key);
     if (input && !key.ctrl && !key.meta && /^[\w\s.-]+$/.test(input)) setQuery(queryRef.current + input);
-  });
+  }, { isActive: choosing });
 
   // A click on an option picks it, as ⏎ does.
   const optionNodes = useRefs<string>();
@@ -352,22 +348,24 @@ export function Picker(props: {
     const hit = optionNodes.entries().find(([, node]) => at(node));
     if (hit) onPick(hit[0]);
     return Boolean(hit);
-  });
+  }, choosing);
 
   let group: string | undefined;
   // Titles padded to one width, so the examples beside them line up in a column.
   const widest = Math.max(0, ...shown.map((option) => option.title.length));
   return (
-    <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor={TONE.accent} paddingX={1} overflow="hidden">
-      <Text bold color={TONE.accent}>{title}</Text>
+    <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor={choosing ? TONE.accent : "gray"} paddingX={1} overflow="hidden">
+      <Text bold color={choosing ? TONE.accent : undefined}>{title}</Text>
       {intro ? <Text dimColor>{intro}</Text> : null}
-      <Text>
-        <Text color={TONE.accent}>{"/ "}</Text>
-        {query ? <Text>{query}</Text> : <Text dimColor>type to find one</Text>}
-      </Text>
+      {choosing ? (
+        <Text>
+          <Text color={TONE.accent}>{"/ "}</Text>
+          {query ? <Text>{query}</Text> : <Text dimColor>type to find one</Text>}
+        </Text>
+      ) : null}
       {shown.length === 0 ? <Text dimColor>{`Nothing matches “${query}” — esc clears it.`}</Text> : null}
       {shown.map((option, at) => {
-        const active = at === index;
+        const active = choosing && at === index;
         const heading = option.group && option.group !== group ? option.group : undefined;
         group = option.group;
         return (
@@ -384,8 +382,12 @@ export function Picker(props: {
           </Box>
         );
       })}
-      <Box flexGrow={1} />
-      <Text dimColor>↑↓ choose · ⏎ pick · type to find · esc cancel</Text>
+      {keys ? (
+        <>
+          <Box flexGrow={1} />
+          <Text dimColor>↑↓ choose · ⏎ pick · type to find · esc cancel</Text>
+        </>
+      ) : null}
     </Box>
   );
 }

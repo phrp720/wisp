@@ -90,7 +90,7 @@ Any step can have a `"label"`, the name Wisp shows for it.
 
 `"job": true` makes a bolt run each command to the end, in order, and stop at the first
 failure, like a CI job. Use it for what finishes (tests, builds, cleanups); leave it off for
-what keeps running (servers). See [a job, or a normal bolt?](./jobs#a-job-or-a-normal-bolt)
+what keeps running (servers). See [a job, or a starter?](./jobs#a-job-or-a-starter)
 
 ## Taking a bolt down
 

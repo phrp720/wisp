@@ -115,6 +115,10 @@ describe("editing a workspace without writing JSON", () => {
     expect((await readProjectFile(file)).workspace.bolts[0]?.notes).toBeUndefined();
   });
 
+  it("says a wait in plain words: seconds, a port, an address", () => {
+    expect([{ wait: 3 }, { wait: "localhost:5432" }, { wait: "http://localhost:3000" }].map(describeRawStep)).toEqual(["wait 3s", "wait for localhost:5432", "wait for http://localhost:3000"]);
+  });
+
   it("renames a workspace, sets its icon and notes, and drops one left empty", async () => {
     await setWorkspaceDetails(file, { name: "Shop Labs", icon: "🛒", notes: "The storefront" });
     let raw = JSON.parse(await readFile(file, "utf8"));
