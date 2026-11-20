@@ -1,5 +1,5 @@
 import { Box, Text, useApp, useInput } from "ink";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { type Container, containerMood, type ContainerStats } from "../core/docker.js";
 import { describe } from "../core/errors.js";
@@ -928,7 +928,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
     }
     return false;
   };
-  useEffect(() => mouse?.subscribe((event) => onMouse.current(event)), [mouse]);
+  useLayoutEffect(() => mouse?.subscribe((event) => onMouse.current(event)), [mouse]);
 
   function deleteWorkspace(asked: Extract<View, { kind: "delete-workspace" }>, yes: boolean) {
     setView({ kind: "browse" });

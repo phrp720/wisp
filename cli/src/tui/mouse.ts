@@ -12,7 +12,7 @@
  */
 
 import type { DOMElement } from "ink";
-import { createContext, useContext, useEffect, useRef } from "react";
+import { createContext, useContext, useLayoutEffect, useRef } from "react";
 
 /** Ask the terminal for clicks and wheel turns, reported as SGR sequences. */
 export const MOUSE_ON = "\u001B[?1000h\u001B[?1006h";
@@ -113,7 +113,7 @@ export function useMouse(handler: (event: MouseEvent, at: Within) => boolean | v
   const area = useContext(MouseContext);
   const latest = useRef(handler);
   latest.current = handler;
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!area || !active) return;
     return area.source.subscribe((event) => {
       if (event.y < area.top) return false;

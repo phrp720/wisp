@@ -88,6 +88,7 @@ function services(overrides: Partial<Services> = {}, library: Library = { reads:
 }
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
+const eventually = (check: () => void) => vi.waitFor(check, { timeout: 2000, interval: 10 });
 const ARROW_DOWN = "\u001B[B";
 const ARROW_LEFT = "\u001B[D";
 const ARROW_RIGHT = "\u001B[C";
@@ -1480,6 +1481,13 @@ describe("the mouse", () => {
     await tick();
     return { app, mouse, frame: () => app.lastFrame() ?? "" };
   };
+  const spot = async (frame: () => string, text: string, after = 0) => {
+    let found = { x: 0, y: 0 };
+    await eventually(() => {
+      found = at(frame(), text, after);
+    });
+    return found;
+  };
   const server = { kind: "background", workspace: acme.workspace.file, workspaceName: "Acme", pid: 1, startedAt: new Date().toISOString(), alive: true, log: "/l" };
   const web = { ...server, id: "w1", label: "web dev", command: "pnpm dev", asset: "command:web dev" };
   const worker = { ...server, id: "k1", label: "worker", command: "pnpm worker", asset: "command:worker" };
@@ -1490,14 +1498,14 @@ describe("the mouse", () => {
     const header = frame().split("\n")[0] ?? "";
     expect(mouse.emit({ kind: "click", x: header.indexOf("2 Running") + 1, y: 0 })).toBe(true);
     await tick();
-    expect(frame()).toContain("Nothing is running");
+    await eventually(() => expect(frame()).toContain("Nothing is running"));
     mouse.emit({ kind: "click", x: header.indexOf("3 History") + 1, y: 0 });
     await tick();
     await tick();
-    expect(frame()).toContain("Nothing has run yet");
+    await eventually(() => expect(frame()).toContain("Nothing has run yet"));
     mouse.emit({ kind: "click", x: header.indexOf("1 Bolts") + 1, y: 0 });
     await tick();
-    expect(frame()).toContain("Workspaces");
+    await eventually(() => expect(frame()).toContain("Workspaces"));
     expect(mouse.emit({ kind: "click", x: 2, y: 0 })).toBe(false);
   });
 
@@ -1506,17 +1514,17 @@ describe("the mouse", () => {
     app.stdin.write("p");
     await tick();
     await tick();
-    expect(frame()).toMatch(/❯ +● web dev/);
-    mouse.emit({ kind: "click", ...at(frame(), "worker") });
+    await eventually(() => expect(frame()).toMatch(/❯ +● web dev/));
+    mouse.emit({ kind: "click", ...(await spot(frame, "worker")) });
     await tick();
     await tick();
-    expect(frame()).toMatch(/❯ +● worker/);
-    mouse.emit({ kind: "click", ...at(frame(), "Info │") });
+    await eventually(() => expect(frame()).toMatch(/❯ +● worker/));
+    mouse.emit({ kind: "click", ...(await spot(frame, "Info │")) });
     await tick();
-    expect(frame()).toMatch(/Command +pnpm worker/);
-    mouse.emit({ kind: "click", ...at(frame(), "Runs   [ ]") });
+    await eventually(() => expect(frame()).toMatch(/Command +pnpm worker/));
+    mouse.emit({ kind: "click", ...(await spot(frame, "Runs   [ ]")) });
     await tick();
-    expect(frame()).toContain("wisp logs <id> prints any of them");
+    await eventually(() => expect(frame()).toContain("wisp logs <id> prints any of them"));
   });
 
   it("scrolls the logs with the wheel over them, and moves the selection over the list", async () => {
@@ -1525,36 +1533,36 @@ describe("the mouse", () => {
     app.stdin.write("p");
     await tick();
     await tick();
-    expect(frame()).toContain("line 80");
+    await eventually(() => expect(frame()).toContain("line 80"));
     const log = at(frame(), "line 80");
     expect(mouse.emit({ kind: "wheel", ...log, by: -1 })).toBe(true);
     await tick();
-    expect(frame()).toContain("↑ 3 lines back");
+    await eventually(() => expect(frame()).toContain("↑ 3 lines back"));
     expect(frame()).not.toContain("line 80");
     mouse.emit({ kind: "wheel", ...log, by: 1 });
     await tick();
-    expect(frame()).toContain("line 80");
+    await eventually(() => expect(frame()).toContain("line 80"));
     // Over the list, it is left to become an arrow key, which moves the selection.
-    expect(mouse.emit({ kind: "wheel", ...at(frame(), "● web dev"), by: 1 })).toBe(false);
+    expect(mouse.emit({ kind: "wheel", ...(await spot(frame, "● web dev")), by: 1 })).toBe(false);
   });
 
   it("selects workspaces and bolts on the Bolts tab, and runs nothing", async () => {
     const run = vi.fn(services().run);
     const { mouse, frame } = await withMouse(services({ run }));
-    mouse.emit({ kind: "click", ...at(frame(), "Work on web") });
+    mouse.emit({ kind: "click", ...(await spot(frame, "Work on web")) });
     await tick();
-    expect(frame()).toContain("❯ Work on web");
-    mouse.emit({ kind: "click", ...at(frame(), "When you run it") });
+    await eventually(() => expect(frame()).toContain("❯ Work on web"));
+    mouse.emit({ kind: "click", ...(await spot(frame, "When you run it")) });
     await tick();
-    expect(frame()).toContain("❯ Work on web");
-    mouse.emit({ kind: "click", ...at(frame(), "infra", 2) });
+    await eventually(() => expect(frame()).toContain("❯ Work on web"));
+    mouse.emit({ kind: "click", ...(await spot(frame, "infra", 2)) });
     await tick();
-    expect(frame()).toContain("Database");
+    await eventually(() => expect(frame()).toContain("Database"));
     expect(frame()).not.toContain("Work on web");
     // The wheel over the workspace list moves through the workspaces.
-    mouse.emit({ kind: "wheel", ...at(frame(), "infra !", 2), by: 1 });
+    mouse.emit({ kind: "wheel", ...(await spot(frame, "infra !", 2)), by: 1 });
     await tick();
-    expect(frame()).toContain("Start the day");
+    await eventually(() => expect(frame()).toContain("Start the day"));
     expect(run).not.toHaveBeenCalled();
   });
 
@@ -1570,11 +1578,11 @@ describe("the mouse", () => {
     };
     app.stdin.write("a");
     await tick();
-    mouse.emit({ kind: "click", ...at(frame(), "a job") });
+    mouse.emit({ kind: "click", ...(await spot(frame, "a job")) });
     await tick();
-    expect(frame()).toContain("● a job");
-    mouse.emit({ kind: "click", ...at(frame(), "Name") });
-    await tick();
+    await eventually(() => expect(frame()).toContain("● a job"));
+    mouse.emit({ kind: "click", ...(await spot(frame, "Name")) });
+    await eventually(() => expect(frame()).toMatch(/┃ Name/));
     await type("Lint");
     // On the "L" of "› Lint": the cursor goes there, and typing goes in before it.
     const value = at(frame(), "› Lint");
@@ -1582,15 +1590,15 @@ describe("the mouse", () => {
     await tick();
     await type("X");
     expect(frame()).toContain("› XLint");
-    mouse.emit({ kind: "click", ...at(frame(), "[ Create bolt ]") });
+    mouse.emit({ kind: "click", ...(await spot(frame, "[ Create bolt ]")) });
     await tick();
     await tick();
     expect(addBolt).toHaveBeenCalledWith(acme.workspace.file, "XLint", { job: true });
     // Straight to its first step: a click on one picks it.
     expect(frame()).toContain("The first step of");
-    mouse.emit({ kind: "click", ...at(frame(), "Open a folder") });
+    mouse.emit({ kind: "click", ...(await spot(frame, "Open a folder")) });
     await tick();
-    expect(frame()).toContain("Adding step 1 of");
+    await eventually(() => expect(frame()).toContain("Adding step 1 of"));
   });
 
   it("ticks bolts to set up with a click, and sets them up from the button", async () => {
@@ -1607,10 +1615,10 @@ describe("the mouse", () => {
     const setUp = vi.fn(async () => infra.workspace.file);
     const { mouse, frame } = await withMouse(services({ suggestSetup: async () => suggestion, setUp }, { reads: [infra], unreadable: [] }));
     await tick();
-    mouse.emit({ kind: "click", ...at(frame(), "Services") });
+    mouse.emit({ kind: "click", ...(await spot(frame, "Services")) });
     await tick();
-    expect(frame()).toContain("[ ] ⚡ Services");
-    mouse.emit({ kind: "click", ...at(frame(), "Set up 1 bolt") });
+    await eventually(() => expect(frame()).toContain("[ ] ⚡ Services"));
+    mouse.emit({ kind: "click", ...(await spot(frame, "Set up 1 bolt")) });
     await tick();
     await tick();
     expect(setUp).toHaveBeenCalledWith(suggestion, ["Check"]);
@@ -1623,10 +1631,10 @@ describe("the mouse", () => {
     app.stdin.write("s");
     await tick();
     await tick();
-    mouse.emit({ kind: "click", ...at(frame(), "Mouse") });
-    await tick();
+    mouse.emit({ kind: "click", ...(await spot(frame, "Mouse")) });
+    await eventually(() => expect(frame()).toMatch(/❯ Mouse/));
     expect(setMouse).not.toHaveBeenCalled();
-    mouse.emit({ kind: "click", ...at(frame(), "Mouse") });
+    mouse.emit({ kind: "click", ...(await spot(frame, "Mouse")) });
     await tick();
     await tick();
     expect(setMouse).toHaveBeenCalledWith(false);
@@ -1640,12 +1648,12 @@ describe("the mouse", () => {
     app.stdin.write("e");
     await tick();
     await tick();
-    mouse.emit({ kind: "click", ...at(frame(), "pnpm dev") });
+    mouse.emit({ kind: "click", ...(await spot(frame, "pnpm dev")) });
     await tick();
-    expect(frame()).toMatch(/❯ .*pnpm dev/);
-    mouse.emit({ kind: "click", ...at(frame(), "pnpm dev") });
+    await eventually(() => expect(frame()).toMatch(/❯ .*pnpm dev/));
+    mouse.emit({ kind: "click", ...(await spot(frame, "pnpm dev")) });
     await tick();
-    expect(frame()).toContain("Changing step 2 of");
+    await eventually(() => expect(frame()).toContain("Changing step 2 of"));
   });
 
   it("chooses and opens runs in History, shows a step's log with a click, and filters by bolt", async () => {
@@ -1670,43 +1678,43 @@ describe("the mouse", () => {
     await tick();
 
     // One click chooses a run; a second on the chosen one opens it.
-    mouse.emit({ kind: "click", ...at(frame(), "Work on web #3") });
+    mouse.emit({ kind: "click", ...(await spot(frame, "Work on web #3")) });
     await tick();
-    expect(frame()).toMatch(/❯ ✓ Work on web #3/);
-    mouse.emit({ kind: "click", ...at(frame(), "Work on web #3") });
+    await eventually(() => expect(frame()).toMatch(/❯ ✓ Work on web #3/));
+    mouse.emit({ kind: "click", ...(await spot(frame, "Work on web #3")) });
     await tick();
-    expect(frame()).toContain("Total duration");
+    await eventually(() => expect(frame()).toContain("Total duration"));
     app.stdin.write("\u001B");
     await tick();
 
-    mouse.emit({ kind: "click", ...at(frame(), "Check #7") });
+    mouse.emit({ kind: "click", ...(await spot(frame, "Check #7")) });
+    await eventually(() => expect(frame()).toMatch(/❯ ✗ Check #7/));
+    mouse.emit({ kind: "click", ...(await spot(frame, "Check #7")) });
     await tick();
-    mouse.emit({ kind: "click", ...at(frame(), "Check #7") });
     await tick();
-    await tick();
-    expect(frame()).toContain("FAIL divides by zero");
+    await eventually(() => expect(frame()).toContain("FAIL divides by zero"));
     // Below the summary and the pipeline: a click on a step hides its log, or shows it.
-    mouse.emit({ kind: "click", ...at(frame(), "run test") });
+    mouse.emit({ kind: "click", ...(await spot(frame, "run test")) });
     await tick();
-    expect(frame()).not.toContain("FAIL divides by zero");
-    mouse.emit({ kind: "click", ...at(frame(), "run lint") });
+    await eventually(() => expect(frame()).not.toContain("FAIL divides by zero"));
+    mouse.emit({ kind: "click", ...(await spot(frame, "run lint")) });
     await tick();
     await tick();
-    expect(frame()).toContain("lint line 1");
+    await eventually(() => expect(frame()).toContain("lint line 1"));
     expect(readLog).toHaveBeenCalledWith("/logs/1");
     const log = at(frame(), "lint line 2");
     mouse.emit({ kind: "wheel", ...log, by: 1 });
     mouse.emit({ kind: "wheel", ...log, by: 1 });
     await tick();
-    expect(frame()).not.toContain("run postgres");
+    await eventually(() => expect(frame()).not.toContain("run postgres"));
     expect(frame()).toContain("lint line 9");
 
     // Back to the runs: the bolts on the left filter them.
     app.stdin.write("\u001B");
     await tick();
-    mouse.emit({ kind: "click", ...at(frame(), "Work on web", 2) });
+    mouse.emit({ kind: "click", ...(await spot(frame, "Work on web", 2)) });
     await tick();
-    expect(frame()).toMatch(/Work on web +1 run/);
+    await eventually(() => expect(frame()).toMatch(/Work on web +1 run/));
     expect(frame()).not.toContain("Check #7");
   });
 });
