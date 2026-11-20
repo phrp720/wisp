@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 
 import { cleanOutput } from "../core/ansi.js";
 import { type Container, containerMood, type ContainerStats, shortStatus } from "../core/docker.js";
-import { baseLabel, type HistoryEntry, type HistoryStep } from "../core/history.js";
+import { allSteps, baseLabel, type HistoryEntry, type HistoryStep } from "../core/history.js";
 import { tildify } from "../core/paths.js";
 import { KEEP_FINISHED, type RunStatus } from "../core/processes.js";
 import { RESTART_MARK } from "../core/shell.js";
@@ -130,8 +130,10 @@ export function PanesPanel(props: {
     }
     if (entry.type === "step") {
       const step = entry.step;
-      const mark = step.skipped ? <Text dimColor>{glyphs.skip}</Text> : step.ok ? <Text color={TONE.up}>{glyphs.ok}</Text> : <Text color={TONE.failed}>{glyphs.fail}</Text>;
       const label = step.kind === "bolt" ? `${glyphs.bolt}${step.label}` : shortStep(step, entry.entry.job ?? false);
+      if (step.state === "running") return line(selected, entry.depth ?? 1, <Text color={TONE.accent}>{glyphs.running[tick % glyphs.running.length]}</Text>, label, "running");
+      if (step.state === "waiting") return line(selected, entry.depth ?? 1, <Text dimColor>{glyphs.pending}</Text>, label, "waiting", "gray");
+      const mark = step.skipped ? <Text dimColor>{glyphs.skip}</Text> : step.ok ? <Text color={TONE.up}>{glyphs.ok}</Text> : <Text color={TONE.failed}>{glyphs.fail}</Text>;
       return line(selected, entry.depth ?? 1, mark, label, step.skipped ? "" : !step.ok ? "failed" : step.durationMs >= 1000 ? `${(step.durationMs / 1000).toFixed(1)}s` : "", !step.ok && !step.skipped ? TONE.failed : undefined);
     }
     if (entry.type === "run") {
@@ -369,7 +371,7 @@ function nestNeededBolts(groups: Map<string, { group: PaneGroup; members: PaneIt
 function pipeline(group: PaneGroup, members: PaneItem[], history: HistoryEntry[]): PaneItem[] {
   if (!group.bolt || !group.workspace) return members;
   const owns = (entry: HistoryEntry, step: HistoryStep) => (step.bolt ?? baseLabel(entry.bolt)) === group.bolt;
-  const entry = history.find((candidate) => candidate.workspace === group.workspace && !candidate.bolt.endsWith(" (down)") && candidate.steps.some((step) => owns(candidate, step)));
+  const entry = history.find((candidate) => candidate.workspace === group.workspace && !candidate.bolt.endsWith(" (down)") && allSteps(candidate).some((step) => owns(candidate, step)));
   if (!entry) return members;
 
   const left = [...members];
@@ -383,7 +385,8 @@ function pipeline(group: PaneGroup, members: PaneItem[], history: HistoryEntry[]
   // The run was this bolt's own, or it came up as another bolt's dependency: only then are
   // the other bolts in that run ones it needed, rather than its siblings.
   const own = baseLabel(entry.bolt) === group.bolt;
-  entry.steps.forEach((step, index) => {
+  const all = allSteps(entry);
+  all.forEach((step, index) => {
     if (!owns(entry, step)) {
       if (!own) return;
       // A step of a bolt this one needed: one line for that bolt, where it ran — its output
@@ -391,22 +394,24 @@ function pipeline(group: PaneGroup, members: PaneItem[], history: HistoryEntry[]
       const name = step.bolt ?? "";
       if (!name || needed.has(name)) return;
       needed.add(name);
-      const its = entry.steps.filter((candidate) => candidate.bolt === name);
-      const printed = [...its].reverse().find((candidate) => candidate.log)?.log;
+      const its = all.filter((candidate) => candidate.bolt === name);
+      const done = its.filter((candidate) => !candidate.state);
+      const printed = [...its].reverse().find((candidate) => candidate.log && candidate.state !== "waiting")?.log;
+      const state = its.some((candidate) => candidate.state === "running") ? "running" : done.length === 0 ? "waiting" : undefined;
       ordered.push({
         type: "step",
         entry,
         index,
         group: group.key,
-        step: { kind: "bolt", label: name, value: name, ok: its.every((candidate) => candidate.ok), ...(its.every((candidate) => candidate.skipped) ? { skipped: true } : {}), durationMs: its.reduce((sum, candidate) => sum + candidate.durationMs, 0), ...(printed ? { log: printed } : {}) },
+        step: { kind: "bolt", label: name, value: name, ok: done.every((candidate) => candidate.ok), ...(done.length > 0 && done.every((candidate) => candidate.skipped) ? { skipped: true } : {}), durationMs: done.reduce((sum, candidate) => sum + candidate.durationMs, 0), ...(printed ? { log: printed } : {}), ...(state ? { state } : {}) },
       });
       return;
     }
-    if (step.kind === "command" && !entry.job) {
+    if (step.kind === "command" && !entry.job && !step.state) {
       const live = take((member) => member.type === "run" && member.run.label === step.label);
       if (live.length > 0) return void ordered.push(...live);
     }
-    if (step.kind === "compose") {
+    if (step.kind === "compose" && !step.state) {
       const live = take((member) => member.type === "container");
       if (live.length > 0) return void ordered.push(...live);
     }

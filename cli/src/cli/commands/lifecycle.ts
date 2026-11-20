@@ -120,7 +120,7 @@ export const history: CommandDef<{ all?: boolean; log?: string; clear?: boolean;
 
 async function showEntry(entry: HistoryEntry, options: { log?: string; json?: boolean }): Promise<void> {
   if (options.log !== undefined) {
-    const step = entry.steps[Number.parseInt(options.log, 10) - 1];
+    const step = [...entry.steps, ...(entry.pending ?? [])][Number.parseInt(options.log, 10) - 1];
     if (!step) throw new WispError(`Run ${entry.id} has no step ${options.log}`, "NOT_FOUND");
     if (!step.log) throw new WispError(`Step ${options.log} kept no output — it ran in its own window`, "NOT_FOUND");
     process.stdout.write(await readFile(step.log, "utf8").catch(() => ""));
@@ -138,9 +138,12 @@ async function showEntry(entry: HistoryEntry, options: { log?: string; json?: bo
     const log = step.log ? dim(`  [--log ${index + 1}]`) : "";
     console.log(`  ${dim(String(index + 1).padStart(2))} ${markStep} ${dim(kindLabel(step.kind))} ${named(step.label, step.value)}${time}${detail}${log}`);
   });
-  if (entry.running && entry.total && entry.total > entry.steps.length) {
-    console.log(`  ${dim(String(entry.steps.length + 1).padStart(2))} ${cyan("●")} ${dim(`running now, ${plural(entry.total - entry.steps.length, "step")} to go`)}`);
-  }
+  (entry.pending ?? []).forEach((step, offset) => {
+    const number = dim(String(entry.steps.length + offset + 1).padStart(2));
+    const log = step.log ? dim(`  [--log ${entry.steps.length + offset + 1}]`) : "";
+    if (offset === 0) console.log(`  ${number} ${cyan("●")} ${dim(kindLabel(step.kind))} ${named(step.label, step.value)} ${cyan("running")}${log}`);
+    else console.log(`  ${number} ${dim("·")} ${dim(`${kindLabel(step.kind)} ${step.label}`)} ${dim("waiting")}`);
+  });
   if (entry.interrupted) console.log(dim("  Wisp stopped before this run finished."));
 }
 

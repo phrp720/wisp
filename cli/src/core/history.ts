@@ -47,6 +47,7 @@ export interface HistoryEntry {
   interrupted?: boolean;
   pid?: number;
   total?: number;
+  pending?: HistoryStep[];
 }
 
 /** Enough to see a pattern of failures, not so many that the logs pile up. */
@@ -63,9 +64,12 @@ export function newHistoryId(): string {
 
 /** Where step `index` of run `id` writes its output. */
 export async function stepLogPath(id: string, index: number): Promise<string> {
-  const dir = join(stateDir(), "history", id);
-  await mkdir(dir, { recursive: true });
-  return join(dir, `${index + 1}.log`);
+  await mkdir(join(stateDir(), "history", id), { recursive: true });
+  return stepLogFile(id, index);
+}
+
+export function stepLogFile(id: string, index: number): string {
+  return join(stateDir(), "history", id, `${index + 1}.log`);
 }
 
 export async function recordHistory(entry: HistoryEntry): Promise<void> {
@@ -141,7 +145,14 @@ async function loadHistory(): Promise<HistoryEntry[]> {
   }
   for (const entry of entries) {
     if (entry.running && !(entry.pid && alive(entry.pid))) {
+      const [cut, ...after] = entry.pending ?? [];
+      entry.steps = [
+        ...entry.steps,
+        ...(cut ? [{ ...cut, ok: false, error: "interrupted" }] : []),
+        ...after.map(({ log: _log, ...step }) => ({ ...step, ok: false, skipped: true, note: "not reached — Wisp stopped" })),
+      ];
       delete entry.running;
+      delete entry.pending;
       entry.interrupted = true;
       entry.ok = false;
     }
@@ -159,6 +170,12 @@ function alive(pid: number): boolean {
 }
 
 /** The branch and short commit of a directory, or nothing when it is not a repository. */
+export type StepProgress = "running" | "waiting";
+
+export function allSteps(entry: HistoryEntry): (HistoryStep & { state?: StepProgress })[] {
+  return [...entry.steps, ...(entry.pending ?? []).map((step, at): HistoryStep & { state: StepProgress } => ({ ...step, state: at === 0 ? "running" : "waiting" }))];
+}
+
 /** "Check (retry)" is a run of Check. */
 export function baseLabel(label: string): string {
   return label.replace(/ \((retry|down)\)$/, "");

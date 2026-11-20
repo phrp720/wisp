@@ -376,8 +376,12 @@ describe("history like a CI", () => {
     await switchToWorkspace(ws, { bolt: "check", onStep }, deps);
     expect(seen).toHaveLength(1);
     expect(seen[0]).toMatchObject({ running: true, total: 2, pid: process.pid, steps: [] });
+    expect(seen[0]?.pending?.map((step) => step.label)).toEqual(["lint", "test"]);
+    expect(seen[0]?.pending?.[0]?.log).toMatch(/1\.log$/);
+    expect(seen[0]?.pending?.[1]?.log).toBeUndefined();
     const [done] = await listHistory();
     expect(done?.running).toBeUndefined();
+    expect(done?.pending).toBeUndefined();
     expect(done?.ok).toBe(true);
     expect(done?.number).toBe(1);
     expect(done?.id).toBe(seen[0]?.id);
@@ -385,11 +389,18 @@ describe("history like a CI", () => {
   });
 
   it("calls a run whose Wisp went away interrupted", async () => {
-    await recordHistory({ id: "aaaaaaaaaaaa", workspace: "/a/.wisp.json", workspaceName: "A", bolt: "Check", job: true, startedAt: "2026-01-01T00:00:00.000Z", finishedAt: "2026-01-01T00:00:00.000Z", ok: false, steps: [], running: true, pid: 999_999_999, total: 3 });
+    const step = (label: string, log?: string) => ({ kind: "command" as const, label, value: `pnpm ${label}`, ok: false, durationMs: 0, ...(log ? { log } : {}) });
+    await recordHistory({ id: "aaaaaaaaaaaa", workspace: "/a/.wisp.json", workspaceName: "A", bolt: "Check", job: true, startedAt: "2026-01-01T00:00:00.000Z", finishedAt: "2026-01-01T00:00:00.000Z", ok: false, steps: [{ ...step("lint"), ok: true }], running: true, pid: 999_999_999, total: 3, pending: [step("test", "/logs/2.log"), step("build")] });
     const [entry] = await listHistory();
     expect(entry?.running).toBeUndefined();
+    expect(entry?.pending).toBeUndefined();
     expect(entry?.interrupted).toBe(true);
     expect(entry?.ok).toBe(false);
+    expect(entry?.steps.map((done) => [done.label, done.ok, done.skipped ?? false, done.error ?? done.note ?? "", done.log ?? ""])).toEqual([
+      ["lint", true, false, "", ""],
+      ["test", false, false, "interrupted", "/logs/2.log"],
+      ["build", false, true, "not reached — Wisp stopped", ""],
+    ]);
   });
 
   it("deletes runs by id, workspace or bolt, keeping the ones still going", async () => {

@@ -39,8 +39,10 @@ A job runs to completion and stops the moment something fails:
 
 Every run is kept, the way a CI keeps them: numbered per bolt, with the branch and commit
 it ran on, what started it, and each step's time and output. A run shows up as soon as it
-starts, as running with the step it's on, and fills in as it goes. One whose Wisp was
-closed or killed before it finished is marked interrupted.
+starts and fills in as it goes: the steps done, the one it's on (with its output so far, for
+a job's step), and the ones still to come. Running shows the same for the bolt. One whose
+Wisp was closed or killed before it finished is marked interrupted, with the steps it never
+reached.
 
 ![A Check job fails at its test; History shows the run like CI, with the test's output; after the fix, --retry runs only the test, and it passes](/demo/jobs.gif)
 

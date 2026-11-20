@@ -11,7 +11,7 @@ import { getOpenWithDefaults } from "./config.js";
 import { composeStopArgs, composeUpArgs, type Container } from "./docker.js";
 import { detectEnvironment, type Environment } from "./environment.js";
 import { WispError, describe } from "./errors.js";
-import { gitState, newHistoryId, recordHistory, stepLogPath, type HistoryEntry, type HistoryStep } from "./history.js";
+import { gitState, newHistoryId, recordHistory, stepLogFile, stepLogPath, type HistoryEntry, type HistoryStep } from "./history.js";
 import { currentOS, expandHome, stateDir, withLock } from "./paths.js";
 import { listRuns, newRunId, pidFileFor, recordWindowRun, runningFor, startRun, stopRun, tidyState, trimLog, type RunStatus } from "./processes.js";
 import { restartLoop, shellInvocation, windowInvocation } from "./shell.js";
@@ -154,7 +154,7 @@ export async function runPlan(
     const owner = steps[at]?.bolt;
     return { ...toHistoryStep(result), ...(owner && owner !== options.label.replace(/ \((retry|down)\)$/, "") ? { bolt: owner } : {}) };
   };
-  const entry = (done: { ok: boolean; running: boolean }): HistoryEntry => ({
+  const entry = (done: { ok: boolean; running: boolean; log?: string | undefined }): HistoryEntry => ({
     id: historyId as string,
     workspace: workspace.file,
     workspaceName: workspace.name,
@@ -165,11 +165,20 @@ export async function runPlan(
     finishedAt: new Date().toISOString(),
     ok: done.ok,
     steps: results.map(owned),
-    ...(done.running ? { running: true, pid: process.pid, total: steps.length } : {}),
+    ...(done.running
+      ? {
+          running: true,
+          pid: process.pid,
+          total: steps.length,
+          pending: steps.slice(results.length).map((step, offset) => {
+            const waiting = owned({ ...step.target, ok: false }, results.length + offset);
+            return offset === 0 && done.log ? { ...waiting, log: done.log } : waiting;
+          }),
+        }
+      : {}),
   });
   let saving: Promise<void> = Promise.resolve();
   const save = (next: HistoryEntry) => (saving = saving.then(() => recordHistory(next)).catch(() => undefined));
-  if (record && historyId) await save(entry({ ok: false, running: true }));
 
   try {
     for (const [index, step] of steps.entries()) {
@@ -181,7 +190,9 @@ export async function runPlan(
         continue;
       }
 
-      options.onStep?.(step.target, { attached: !dryRun && attached(step, context) });
+      const inline = !dryRun && attached(step, context);
+      if (record && historyId) await save(entry({ ok: false, running: true, log: inline ? stepLogFile(historyId, index) : undefined }));
+      options.onStep?.(step.target, { attached: inline });
       const began = Date.now();
       const outcome = dryRun ? preview(step, context) : await execute(step, index, context);
       const result: TargetResult = { ...outcome, durationMs: Date.now() - began };
@@ -193,7 +204,6 @@ export async function runPlan(
       if (result.run && !result.note?.startsWith("already running")) context.started.push({ id: result.run });
       results.push(result);
       options.onResult?.(result);
-      if (record && historyId && index < steps.length - 1) void save(entry({ ok: false, running: true }));
 
       if (!result.ok && !result.skipped && !halted) {
         if (step.target.kind === "wait") halted = "an earlier wait gave up";

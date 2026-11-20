@@ -75,6 +75,25 @@ describe("the Running list", () => {
     expect(titles(items)).toEqual(["group Work on shop", " step Services", "  container postgres", " run web"]);
   });
 
+  it("shows the step a run is on and the ones still to come, not an older run's process in their place", () => {
+    const going: HistoryEntry = {
+      ...entry("Work on shop", [{ kind: "compose", label: "postgres", value: "compose.yaml", ok: true, durationMs: 9000, bolt: "Services" }], "2026-11-18T12:00:00Z"),
+      ok: false,
+      running: true,
+      total: 3,
+      pending: [
+        { kind: "command", label: "build", value: "pnpm build", ok: false, durationMs: 0, bolt: "Build", log: "/logs/2.log" },
+        { kind: "command", label: "web", value: "pnpm dev", ok: false, durationMs: 0 },
+      ],
+    };
+    const items = groupPanes([], [web], [postgres], [shop], [going]);
+    expect(titles(items)).toEqual(["group Work on shop", " step Services", "  container postgres", " step Build", " step web", " run web"]);
+    const states = items.flatMap((item) => (item.type === "step" ? [`${item.step.label} ${item.step.state ?? "done"}`] : []));
+    expect(states).toEqual(["Services done", "Build running", "web waiting"]);
+    const build = items.find((item) => item.type === "step" && item.step.label === "Build");
+    expect(build?.type === "step" && build.step.log).toBe("/logs/2.log");
+  });
+
   it("keeps a needed bolt in its own group once it has been run on its own since", () => {
     const servicesRun = entry("Services", [{ kind: "compose", label: "postgres", value: "compose.yaml", ok: true, durationMs: 9000 }], "2026-11-18T11:00:00Z");
     const items = groupPanes([], [web], [postgres], [shop], [servicesRun, workRun]);

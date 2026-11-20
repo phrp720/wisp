@@ -4,7 +4,7 @@ import { useStdout } from "ink";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { Container } from "../core/docker.js";
-import type { HistoryEntry, HistoryStep } from "../core/history.js";
+import type { HistoryEntry, HistoryStep, StepProgress } from "../core/history.js";
 import { tildify } from "../core/paths.js";
 import type { RunStatus } from "../core/processes.js";
 import type { StepKind, SwitchResult, SwitchTarget, TargetResult, WorkspaceRead } from "../core/types.js";
@@ -141,7 +141,7 @@ export type PaneItem =
    * A step of the bolt's last run that is not something running — a wait, a link, a build,
    * a bolt it needed — so the list reads as the pipeline it is, in order.
    */
-  | { type: "step"; step: HistoryStep; entry: HistoryEntry; index: number; group: string; depth?: number };
+  | { type: "step"; step: HistoryStep & { state?: StepProgress }; entry: HistoryEntry; index: number; group: string; depth?: number };
 
 /**
  * A bolt in the Running list, with what it started under it — the way Dockge shows a stack

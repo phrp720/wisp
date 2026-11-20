@@ -2,7 +2,7 @@ import { Box, type DOMElement, measureElement, Text, useInput } from "ink";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { cleanOutput } from "../core/ansi.js";
-import { baseLabel, type HistoryEntry, type HistoryStep } from "../core/history.js";
+import { allSteps, baseLabel, type HistoryEntry, type HistoryStep, type StepProgress } from "../core/history.js";
 import { ASK_KEYS, AskHere } from "./forms.js";
 import type { Glyphs } from "./glyphs.js";
 import { HelpPanel } from "./panels.js";
@@ -401,7 +401,9 @@ function RunDetail(props: {
   onHint?: (hint: string) => void;
 }) {
   const { entry, services, glyphs, height, columns, onBack, onRetry, onRerun, onHelp, onHint } = props;
-  const firstFailed = Math.max(0, entry.steps.findIndex((step) => !step.ok && !step.skipped));
+  const all = useMemo(() => allSteps(entry), [entry]);
+  const runningAt = all.findIndex((step) => step.state === "running");
+  const firstFailed = runningAt >= 0 ? runningAt : Math.max(0, entry.steps.findIndex((step) => !step.ok && !step.skipped));
   const [selected, setSelectedState] = useState(firstFailed);
   // Keys can arrive together ("↓⏎" typed fast): each must see the step the one before chose,
   // not the one on screen when they arrived.
@@ -412,6 +414,14 @@ function RunDetail(props: {
   };
   // The failed step opens with its log showing, as a CI opens the failing job.
   const [expanded, setExpanded] = useState<Set<number>>(() => new Set(entry.ok ? [] : [firstFailed]));
+  const followed = useRef(runningAt);
+  useEffect(() => {
+    if (runningAt < 0 || runningAt === followed.current) return;
+    const was = followed.current;
+    followed.current = runningAt;
+    setExpanded((prior) => (prior.has(was) ? new Set([...prior].filter((at) => at !== was)).add(runningAt) : prior));
+    if (selectedRef.current === was) setSelected(runningAt);
+  }, [runningAt]);
   const [logs, setLogs] = useState<Map<number, string[]>>(new Map());
   const [top, setTop] = useState(0);
   // Whether you scrolled yourself (u, d, or past the ends with ↑↓), so the view stays put.
@@ -445,8 +455,8 @@ function RunDetail(props: {
 
   useEffect(() => {
     // Filtering reads every step's log, not just the open ones.
-    for (const at of filtering ? entry.steps.keys() : expanded) {
-      const step = entry.steps[at];
+    for (const at of filtering ? all.keys() : expanded) {
+      const step = all[at];
       if (!step?.log || logs.has(at)) continue;
       void services
         .readLog(step.log)
@@ -455,18 +465,27 @@ function RunDetail(props: {
         })
         .catch(() => setLogs((prior) => new Map(prior).set(at, GONE)));
     }
-  }, [expanded, entry, services, logs, filtering]);
+  }, [expanded, all, services, logs, filtering]);
+
+  useEffect(() => {
+    const step = all[runningAt];
+    if (!step?.log || !(expanded.has(runningAt) || filtering)) return;
+    void services
+      .readLog(step.log)
+      .then((text) => setLogs((prior) => new Map(prior).set(runningAt, cleanOutput(text).split("\n").filter((line, index, lines) => line !== "" || index < lines.length - 1))))
+      .catch(() => undefined);
+  }, [entry, runningAt, expanded, filtering, services, all]);
 
   // The steps and their open logs, as one list of rows to scroll through. `lines`: how many
   // a row takes when it wraps, so a click below it still finds the right step.
   const rows: { key: string; step?: number; lines?: number; node: ReactNode }[] = [];
-  const longest = Math.max(1, ...entry.steps.map((step) => step.durationMs));
+  const longest = Math.max(1, ...all.map((step) => step.durationMs));
   // As wide as the longest step, so a step's time sits beside it rather than across the screen.
-  const labelWidth = Math.min(Math.max(24, columns - 34), Math.max(16, ...entry.steps.map((step) => describeHistoryStep(step, entry.job).length + 2)));
+  const labelWidth = Math.min(Math.max(24, columns - 34), Math.max(16, ...all.map((step) => describeHistoryStep(step, entry.job).length + 2)));
   let matches = 0;
   let matchingSteps = 0;
   let reading = false;
-  entry.steps.forEach((step, at) => {
+  all.forEach((step, at) => {
     const isSelected = at === selected;
     const isOpen = expanded.has(at);
     const read = logs.get(at);
@@ -482,10 +501,16 @@ function RunDetail(props: {
       step: at,
       node: (
         <Text wrap="truncate-end">
-          <Text color={TONE.accent}>{isSelected ? glyphs.pointer : " "}</Text> {isOpen ? "▾" : "▸"} <Mark ok={step.ok} skipped={step.skipped} glyphs={glyphs} />{" "}
-          <Text bold={isSelected} color={isSelected ? TONE.accent : undefined}>{fit(describeHistoryStep(step, entry.job), labelWidth)}</Text>
-          <Text dimColor>{` ${formatDuration(step.durationMs).padStart(6)}  `}</Text>
-          <Text color={step.ok ? TONE.accent : "red"}>{bar.padEnd(12)}</Text>
+          <Text color={TONE.accent}>{isSelected ? glyphs.pointer : " "}</Text> {isOpen ? "▾" : "▸"} <Mark ok={step.ok} skipped={step.skipped} running={step.state === "running"} waiting={step.state === "waiting"} glyphs={glyphs} />{" "}
+          <Text bold={isSelected} color={isSelected ? TONE.accent : undefined} dimColor={step.state === "waiting" && !isSelected}>{fit(describeHistoryStep(step, entry.job), labelWidth)}</Text>
+          {step.state ? (
+            <Text color={step.state === "running" ? "cyan" : undefined} dimColor={step.state === "waiting"}>{`  ${(step.state === "running" ? "running" : "waiting").padEnd(18)}  `}</Text>
+          ) : (
+            <>
+              <Text dimColor>{` ${formatDuration(step.durationMs).padStart(6)}  `}</Text>
+              <Text color={step.ok ? TONE.accent : "red"}>{bar.padEnd(12)}</Text>
+            </>
+          )}
           {"  "}
           {filtering ? (
             found && found.length > 0 ? <Text color="yellow">{`${found.length} match${found.length === 1 ? "" : "es"}`}</Text> : <Text dimColor>{step.log ? (read ? "no match" : "reading…") : "no output"}</Text>
@@ -615,10 +640,10 @@ function RunDetail(props: {
     }
     if (key.downArrow || input === "j") {
       // Past the last step, ↓ reads on down its log, a line at a time.
-      if (selectedRef.current >= entry.steps.length - 1) return scrollTo(first + 1);
+      if (selectedRef.current >= all.length - 1) return scrollTo(first + 1);
       setScrolled(false);
       setTop(first);
-      return setSelected((at) => Math.min(entry.steps.length - 1, at + 1));
+      return setSelected((at) => Math.min(all.length - 1, at + 1));
     }
     if (key.pageDown || input === "d") return scrollTo(first + room);
     if (key.pageUp || input === "u") return scrollTo(first - room);
@@ -642,9 +667,9 @@ function RunDetail(props: {
         {graph.map((node, at) => (
           <Box key={at} alignItems="center">
             {at > 0 ? <Text dimColor>{" ── "}</Text> : null}
-            <Box borderStyle="round" borderColor={node.skipped ? "gray" : node.ok ? "green" : "red"} paddingX={1}>
+            <Box borderStyle="round" borderColor={node.state === "running" ? "cyan" : node.state === "waiting" || node.skipped ? "gray" : node.ok ? "green" : "red"} paddingX={1}>
               <Text wrap="truncate-end">
-                <Mark ok={node.ok} skipped={node.skipped} glyphs={glyphs} /> {node.label}
+                <Mark ok={node.ok} skipped={node.skipped} running={node.state === "running"} waiting={node.state === "waiting"} glyphs={glyphs} /> {node.label}
                 {node.detail ? <Text dimColor>{` ${node.detail}`}</Text> : null}
               </Text>
             </Box>
@@ -708,6 +733,7 @@ export interface GraphNode {
   detail?: string;
   ok: boolean;
   skipped?: boolean;
+  state?: StepProgress;
 }
 
 /**
@@ -717,25 +743,33 @@ export interface GraphNode {
 export function pipeline(entry: HistoryEntry): GraphNode[] {
   // Like a CI's graph of jobs: one box per bolt the run went through — the ones it needed,
   // then its own — each with its steps counted inside. Steps themselves are the list below.
-  const nodes: (GraphNode & { key: string; steps: number; ms: number })[] = [];
-  for (const step of entry.steps) {
+  const nodes: (GraphNode & { key: string; steps: number; ms: number; done: number })[] = [];
+  for (const step of allSteps(entry)) {
     const owner = step.bolt ? (step.workspace ? `${step.workspace} › ${step.bolt}` : step.bolt) : baseLabel(entry.bolt);
     let node = nodes.find((candidate) => candidate.key === owner);
     if (!node) {
-      node = { key: owner, label: owner, ok: true, skipped: true, steps: 0, ms: 0 };
+      node = { key: owner, label: owner, ok: true, skipped: true, steps: 0, ms: 0, done: 0 };
       nodes.push(node);
     }
     node.steps += 1;
+    if (step.state === "running") node.state = "running";
+    if (step.state) continue;
+    node.done += 1;
     node.ms += step.durationMs;
     node.ok = node.ok && step.ok;
     node.skipped = Boolean(node.skipped && step.skipped);
   }
-  return nodes.map(({ label, ok, skipped, steps, ms }) => ({
-    label,
-    detail: `${steps} step${steps === 1 ? "" : "s"}${ms > 0 ? ` ${formatDuration(ms)}` : ""}`,
-    ok,
-    ...(skipped ? { skipped } : {}),
-  }));
+  return nodes.map(({ label, ok, skipped, steps, ms, done, state: running }) => {
+    const state = running ?? (done < steps ? "running" : undefined);
+    const waiting = done === 0 && !running;
+    return {
+      label,
+      detail: `${steps} step${steps === 1 ? "" : "s"}${ms > 0 ? ` ${formatDuration(ms)}` : ""}`,
+      ok,
+      ...(skipped && !state ? { skipped } : {}),
+      ...(waiting ? { state: "waiting" as const } : state ? { state } : {}),
+    };
+  });
 }
 
 function graphWidth(nodes: GraphNode[]): number {
@@ -778,9 +812,10 @@ function boltFilters(entries: HistoryEntry[]): BoltFilter[] {
   return [{ key: "all", count: entries.length }, ...bolts];
 }
 
-function Mark({ ok, skipped, running, interrupted, glyphs }: { ok: boolean; skipped?: boolean | undefined; running?: boolean | undefined; interrupted?: boolean | undefined; glyphs: Glyphs }) {
-  if (skipped) return <Text dimColor>{glyphs.skip}</Text>;
+function Mark({ ok, skipped, running, waiting, interrupted, glyphs }: { ok: boolean; skipped?: boolean | undefined; running?: boolean | undefined; waiting?: boolean | undefined; interrupted?: boolean | undefined; glyphs: Glyphs }) {
   if (running) return <Text color="cyan">{glyphs.dot}</Text>;
+  if (waiting) return <Text dimColor>{glyphs.pending}</Text>;
+  if (skipped) return <Text dimColor>{glyphs.skip}</Text>;
   if (interrupted) return <Text color="yellow">!</Text>;
   return ok ? <Text color="green">{glyphs.ok}</Text> : <Text color="red">{glyphs.fail}</Text>;
 }

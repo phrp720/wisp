@@ -67,8 +67,9 @@ Release:
 - Bolts it depends on that are not jobs (a database) start the way they always do, and
   stay up.
 - Every run is in \`wisp history\`, with each step's duration and output, from the moment
-  it starts (\`"running": true\` with \`total\` steps until it ends; \`"interrupted": true\`
-  if Wisp stopped before it did).
+  it starts. Until it ends it has \`"running": true\`, and \`pending\` lists the steps still
+  to come, the first being the one in progress (its \`log\` fills as it goes).
+  \`"interrupted": true\` means Wisp stopped before the run did.
 - \`wisp hook pre-push Check\` runs it before every push and blocks the push if it fails.
 
 ## Up and down

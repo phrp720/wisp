@@ -206,19 +206,24 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
   const filteringLog = view.kind === "processes" && Boolean(view.logQuery);
   // A finished step of the pipeline: what it printed in that run, as History keeps it.
   const selectedStepLog = selectedItem?.type === "step" ? selectedItem.step.log : undefined;
+  const selectedStepLive = selectedItem?.type === "step" && selectedItem.step.state === "running";
   useEffect(() => {
     if (selectedItem?.type !== "step") return;
     let alive = true;
-    if (!selectedStepLog) setLog("");
-    else
+    const read = () => {
+      if (!selectedStepLog) return setLog("");
       void services
         .readLog(selectedStepLog)
         .then((text) => alive && setLog(text))
         .catch(() => alive && setLog(""));
+    };
+    read();
+    const timer = selectedStepLive ? setInterval(read, 1000) : undefined;
     return () => {
       alive = false;
+      if (timer) clearInterval(timer);
     };
-  }, [selectedItem?.type, selectedStepLog, services]);
+  }, [selectedItem?.type, selectedStepLog, selectedStepLive, services]);
   useEffect(() => {
     if (!selectedContainer) return;
     let alive = true;
