@@ -1,11 +1,14 @@
 import type { Container, ContainerStats } from "../core/docker.js";
-import type { RawBolt, RawStep } from "../core/edit.js";
+import type { RawBolt, RawInput, RawStep } from "../core/edit.js";
 import type { Environment } from "../core/environment.js";
 import type { HistoryEntry } from "../core/history.js";
 import type { RunStatus, StartResult } from "../core/processes.js";
 import type { DownResult, PlannedStep } from "../core/switch.js";
-import type { Bolt, SwitchResult, SwitchTarget, TargetResult, WorkspaceRead } from "../core/types.js";
+import type { Bolt, InputSpec, NotifySettings, NotifyWhen, SwitchResult, SwitchTarget, TargetResult, WorkspaceRead } from "../core/types.js";
+
+export type NotifyChoice = NotifySettings & { when: NotifyWhen };
 import type { Unreadable } from "../core/workspaces.js";
+import type { Glyphs } from "./glyphs.js";
 
 /** Everything the TUI shows: the workspaces, in the order the list shows them. */
 export interface Library {
@@ -22,6 +25,7 @@ export interface RunCallbacks {
   onResult: (result: TargetResult) => void;
   onOutput?: (target: SwitchTarget, chunk: string) => void;
   signal?: AbortSignal;
+  inputs?: Record<string, string>;
 }
 
 /**
@@ -34,8 +38,10 @@ export interface Services {
   run(read: WorkspaceRead, bolt: string, callbacks: RunCallbacks): Promise<SwitchResult>;
   /** The failed part of a past run, planned against the bolt as it is now. */
   planRetry(read: WorkspaceRead, entry: HistoryEntry): Promise<PlannedStep[]>;
+  questions(read: WorkspaceRead, bolt: string, values?: Record<string, string>): Promise<string[]>;
+  inputs(read: WorkspaceRead, bolt: string): Promise<InputSpec[]>;
   /** Run part of a plan again — the steps that failed, and what they kept from running. */
-  retry(read: WorkspaceRead, steps: PlannedStep[], label: string, job: boolean, callbacks: RunCallbacks): Promise<SwitchResult>;
+  retry(read: WorkspaceRead, steps: PlannedStep[], label: string, callbacks: RunCallbacks): Promise<SwitchResult>;
   /** Stop what a bolt started and run its teardown; with `deps`, the bolts it needed too. */
   down(read: WorkspaceRead, bolt: Bolt, options?: { deps?: boolean }): Promise<DownResult>;
   history(): Promise<HistoryEntry[]>;
@@ -89,22 +95,28 @@ export interface SettingsService {
   /** Whether the dashboard takes clicks and the wheel: on unless turned off. */
   mouse(): Promise<boolean>;
   setMouse(on: boolean): Promise<boolean>;
+  notify(): Promise<NotifyChoice>;
+  setNotify(change: NotifySettings): Promise<NotifyChoice>;
 }
 
 /** The edits the TUI's forms make — the core's, passed in so a test can watch them. */
 export interface Editing {
   bolt(file: string, bolt: string): Promise<RawBolt>;
-  addBolt(file: string, label: string, options?: { job?: boolean }): Promise<void>;
+  addBolt(file: string, label: string): Promise<void>;
   renameBolt(file: string, bolt: string, label: string): Promise<void>;
   setBoltNotes(file: string, bolt: string, notes: string): Promise<void>;
   setWorkspaceDetails(file: string, details: { name: string; icon: string; notes: string }): Promise<void>;
   removeBolt(file: string, bolt: string): Promise<void>;
   moveBolt(file: string, bolt: string, by: -1 | 1): Promise<void>;
-  setJob(file: string, bolt: string, job: boolean): Promise<void>;
+  setKeepGoing(file: string, bolt: string, keepGoing: boolean): Promise<void>;
+  setConfirm(file: string, bolt: string, confirm: string | boolean): Promise<void>;
+  setInput(file: string, bolt: string, previous: string | undefined, name: string, input: RawInput): Promise<void>;
+  removeInput(file: string, bolt: string, name: string): Promise<void>;
   addStep(file: string, bolt: string, step: RawStep, at?: number): Promise<void>;
   replaceStep(file: string, bolt: string, index: number, step: RawStep): Promise<void>;
   removeStep(file: string, bolt: string, index: number): Promise<void>;
-  moveStep(file: string, bolt: string, index: number, by: -1 | 1): Promise<void>;
+  moveStep(file: string, bolt: string, index: number, by: -1 | 1): Promise<number>;
+  toggleTogether(file: string, bolt: string, index: number): Promise<number>;
   createPersonalWorkspace(name: string): Promise<string>;
   /** Delete one of your own workspaces' files. */
   removePersonalWorkspace(file: string): Promise<void>;
@@ -119,7 +131,7 @@ export interface SetupSuggestion {
   /** What it found, in words: "package.json — pnpm dev". */
   found: string[];
   /** What it would add: each bolt, and what it does step by step. */
-  bolts: { label: string; job: boolean; steps: string[] }[];
+  bolts: { label: string; steps: string[] }[];
   contents: string;
 }
 
@@ -201,11 +213,11 @@ export function windowed<T>(items: T[], selected: number, height: number): { ite
  * A step as a sentence — for people who would rather not read `wait port 5432`. `doing` is
  * how it reads while it is happening.
  */
-export function describeStep(target: SwitchTarget, doing = false, job = false): string {
+export function describeStep(target: SwitchTarget, doing = false): string {
   switch (target.kind) {
     case "command":
-      // A job's command runs to completion; anything else's is started and left running.
-      if (job) return doing ? `Running ${target.label}…` : `run ${target.label}`;
+      // A command that finishes is run; one that keeps running is started and left running.
+      if (target.finishes) return doing ? `Running ${target.label}…` : `run ${target.label}`;
       return doing ? `Starting ${target.label}…` : `start ${target.label}`;
     case "compose":
       return doing
@@ -268,4 +280,14 @@ export function matchesAll(query: string, ...texts: (string | undefined)[]): boo
   if (words.length === 0) return true;
   const haystack = texts.filter(Boolean).join(" ").toLowerCase();
   return words.every((word) => haystack.includes(word));
+}
+
+export function groupMarks(steps: { together?: number }[], glyphs: Glyphs): string[] {
+  const [top, middle, bottom] = glyphs.border === "round" ? ["┌ ", "│ ", "└ "] : ["+ ", "| ", "+ "];
+  return steps.map((step, at) => {
+    if (step.together === undefined) return "";
+    const before = steps[at - 1]?.together === step.together;
+    const after = steps[at + 1]?.together === step.together;
+    return !before ? top : after ? middle : bottom;
+  });
 }

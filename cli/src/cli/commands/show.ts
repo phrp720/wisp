@@ -1,17 +1,15 @@
-import { dirname } from "node:path";
-
 import { tildify } from "../../core/paths.js";
 import { listRuns } from "../../core/processes.js";
-import { collectTargets } from "../../core/switch.js";
+import { collectBoltTargets, collectDownTargets } from "../../core/switch.js";
 import { bold, counts, dim, title } from "../format.js";
 import { emitJson, maybeProject, workspaceFor } from "../lib/context.js";
 import type { CommandDef } from "../lib/define.js";
-import { diagnosticSummary, printBolts, shortest, targetLine, trustLine } from "../lib/render.js";
+import { diagnosticSummary, printBolts, shortest, trustLine } from "../lib/render.js";
 import { slugify } from "../../core/workspaces.js";
 
 export const show: CommandDef<{ json?: boolean }> = {
   name: "show",
-  summary: "Show a workspace: its bolts and what each does, then everything it holds",
+  summary: "Show a workspace: its bolts, and what each one does",
   args: [["[workspace]", "workspace name; omitted uses this directory's project"]],
   options: [["--json", "print the resolved workspace as JSON"]],
   examples: ["wisp show", "wisp show acme", "wisp show --json"],
@@ -21,9 +19,15 @@ export const show: CommandDef<{ json?: boolean }> = {
     const { workspace } = read;
 
     if (options.json) {
+      const { links: _links, folders: _folders, files: _files, apps: _apps, commands: _commands, bolts, ...rest } = workspace;
       return emitJson({
-        ...workspace,
-        bolts: workspace.bolts.map((bolt) => ({ ...bolt, slug: slugify(bolt.label) })),
+        ...rest,
+        bolts: bolts.map(({ steps: _steps, down, ...bolt }) => ({
+          ...bolt,
+          slug: slugify(bolt.label),
+          steps: collectBoltTargets(workspace, { ...bolt, steps: _steps }),
+          ...(down ? { down: collectDownTargets(workspace, { ...bolt, steps: _steps, down }) } : {}),
+        })),
         trust: read.trust,
         diagnostics: read.diagnostics,
         withheld: read.withheld,
@@ -37,17 +41,10 @@ export const show: CommandDef<{ json?: boolean }> = {
 
     console.log();
     if (workspace.bolts.length === 0) {
-      console.log(dim("No bolts yet. A bolt lists some of what is below and starts it together."));
+      console.log(dim("No bolts yet. `wisp` opens the dashboard, where `a` adds one."));
     } else {
       console.log(bold("Bolts"));
       printBolts(workspace, true, read.withheld, await listRuns());
-    }
-
-    const targets = collectTargets(workspace);
-    if (targets.length > 0) {
-      console.log();
-      console.log(bold("Holds"));
-      for (const target of targets) console.log(targetLine(target, "  ", dirname(workspace.file)));
     }
 
     const trust = trustLine(read);

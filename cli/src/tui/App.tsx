@@ -4,11 +4,12 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { type Container, containerMood, type ContainerStats } from "../core/docker.js";
 import { describe } from "../core/errors.js";
 import type { HistoryEntry } from "../core/history.js";
+import { checkValue } from "../core/inputs.js";
 import { tildify } from "../core/paths.js";
 import type { RunStatus } from "../core/processes.js";
 import { composeFiles, retryPlan } from "../core/switch.js";
 import type { Bolt, SwitchResult, WorkspaceRead } from "../core/types.js";
-import { BoltView, flow } from "./boltview.js";
+import { flow } from "./steps.js";
 import { Footer, Header, headerTabAt, runningStatus } from "./chrome.js";
 import { SetupPanel, TrustPanel } from "./dialogs.js";
 import { BoltEditor } from "./editor.js";
@@ -17,7 +18,7 @@ import { type Glyphs, glyphs as defaultGlyphs } from "./glyphs.js";
 import { HistoryScreen } from "./history.js";
 import { boltWindow, Empty, FIRST_BOLT_LINE, SearchPanel, WorkspaceList, workspaceListWidth, WorkspacePanel, workspaceRows } from "./home.js";
 import { type Library, ordered, search, type Services } from "./model.js";
-import { CheckPanel, HelpPanel, RunPanel } from "./panels.js";
+import { CheckPanel, HelpPanel, RunProgress } from "./panels.js";
 import { SettingsScreen } from "./settings.js";
 import { type MouseListener, MouseContext, type MouseSource } from "./mouse.js";
 import { filterPanes, groupPanes, logWindow, nextTab, nextWithLog, paneKey, PanesPanel, paneSpotAt, shownTab } from "./running.js";
@@ -35,7 +36,7 @@ export interface AppProps {
 }
 
 /** Screens the tabs along the top can be clicked from: not one with a form half filled in. */
-const TABS_CLICKABLE = new Set<View["kind"]>(["browse", "processes", "history", "help", "check", "run", "view", "search"]);
+const TABS_CLICKABLE = new Set<View["kind"]>(["browse", "processes", "history", "help", "check", "search"]);
 
 export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProps) {
   const { exit } = useApp();
@@ -55,6 +56,13 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
   const [log, setLog] = useState("");
   const busy = useRef(false);
   const [active, setActive, activeRef] = useLatest<RunState | undefined>(undefined);
+  const [detailScroll, setDetailScroll] = useState(0);
+  const detailLimit = useRef(0);
+  const [runPinned, setRunPinned] = useState(false);
+  useEffect(() => {
+    setDetailScroll(0);
+    if (activeRef.current?.done) setRunPinned(false);
+  }, [wsIndex, boltIndex, activeRef]);
   const abort = useRef<AbortController | undefined>(undefined);
   const [containers, setContainers] = useState<Container[]>([]);
   const [dockerError, setDockerError] = useState<string>();
@@ -119,7 +127,8 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
     }
     if (active.done && !(loggedRun.current === active || (loggedRun.current?.done && loggedRun.current.title === active.title && loggedRun.current.read === active.read))) {
       const failed = active.steps.find((step) => step.result && !step.result.ok && !step.result.skipped);
-      record(active.stopped ? `${active.bolt} stopped — ${active.stopped}` : failed || active.error ? `${active.bolt} failed${failed ? ` at ${failed.target.label}` : ""}` : `${active.bolt} ${active.job ? "passed" : "is up"}`, active.stopped || failed || active.error ? "bad" : "good");
+      const up = active.steps.some((step) => (step.target.kind === "command" && !step.target.finishes) || step.target.kind === "compose");
+      record(active.stopped ? `${active.bolt} stopped — ${active.stopped}` : failed || active.error ? `${active.bolt} failed${failed ? ` at ${failed.target.label}` : ""}` : `${active.bolt} ${up ? "is up" : "finished"}`, active.stopped || failed || active.error ? "bad" : "good");
     }
     loggedRun.current = active;
   }, [active, record]);
@@ -129,6 +138,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
   const current = reads[Math.min(wsIndex, Math.max(0, reads.length - 1))];
   const bolts = current?.workspace.bolts ?? [];
   const bolt = bolts[Math.min(boltIndex, Math.max(0, bolts.length - 1))];
+  const inBox = active && current && bolt && active.read.workspace.file === current.workspace.file && active.bolt === bolt.label && (!active.done || runPinned) ? active : undefined;
 
   const reload = useCallback(
     async (keep?: string) => {
@@ -383,14 +393,25 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
    * Run steps — a whole bolt, or a retry of part of one — showing each as it goes. The
    * progress is kept in `active`, whichever screen is showing.
    */
-  const launch = useCallback(
+  const selectBolt = useCallback(
+    (read: WorkspaceRead, label: string) => {
+      const workspaceAt = reads.findIndex((candidate) => candidate.workspace.file === read.workspace.file);
+      if (workspaceAt >= 0) setWsIndex(workspaceAt);
+      const boltAt = read.workspace.bolts.findIndex((entry) => entry.label === label);
+      if (boltAt >= 0) setBoltIndex(boltAt);
+      setFocus("bolts");
+    },
+    [reads, setWsIndex, setBoltIndex, setFocus],
+  );
+
+  const begin = useCallback(
     async (
       read: WorkspaceRead,
       label: string,
-      job: boolean,
       dryRun: boolean,
       start: (callbacks: Parameters<Services["run"]>[2]) => Promise<SwitchResult>,
       title: string,
+      inputs: Record<string, string> = {},
     ) => {
       // One run at a time on this screen. Say so, rather than let ⏎ do nothing.
       if (busy.current) {
@@ -401,14 +422,17 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
       busy.current = true;
       const controller = new AbortController();
       abort.current = controller;
-      setActive({ title, read, bolt: label, job, dryRun, steps: [], done: false, output: [], started: [] });
-      setView({ kind: "run" });
+      setActive({ title, read, bolt: label, dryRun, steps: [], done: false, output: [], started: [] });
+      selectBolt(read, label);
+      setRunPinned(true);
+      setView({ kind: "browse" });
       const update = (change: (state: RunState) => RunState) => setActive((prior) => (prior ? change(prior) : prior));
 
       try {
         const result = await start({
           dryRun,
           signal: controller.signal,
+          ...(Object.keys(inputs).length > 0 ? { inputs } : {}),
           onPlan: (targets) => update((state) => ({ ...state, steps: targets.map((target) => ({ target, state: "pending" })) })),
           onStep: (target, info) => {
             update((state) => ({ ...state, steps: markFirst(state.steps, target, (step) => ({ ...step, state: "running" })) }));
@@ -437,7 +461,37 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
         abort.current = undefined;
       }
     },
-    [setActive, setView],
+    [setActive, setView, selectBolt],
+  );
+
+  const pendingRun = useRef<(() => void) | undefined>(undefined);
+  const pendingInputs = useRef<((values: Record<string, string>) => void) | undefined>(undefined);
+  const launch = useCallback(
+    async (
+      read: WorkspaceRead,
+      label: string,
+      dryRun: boolean,
+      start: (callbacks: Parameters<Services["run"]>[2]) => Promise<SwitchResult>,
+      title: string,
+      recorded?: Record<string, string>,
+    ) => {
+      const showBolt = () => selectBolt(read, label);
+      const confirmThen = (values: Record<string, string>, questions: string[]) => {
+        if (questions.length === 0) return begin(read, label, dryRun, start, title, values);
+        pendingRun.current = () => void begin(read, label, dryRun, start, title, values);
+        showBolt();
+        setView({ kind: "confirm-run", file: read.workspace.file, bolt: label, question: questions.join(" ") });
+      };
+      const questionsWith = (values: Record<string, string>) => (dryRun ? Promise.resolve([]) : services.questions(read, label, values).catch(() => []));
+      const [specs, questions] = await Promise.all([recorded ? Promise.resolve([]) : services.inputs(read, label).catch(() => []), questionsWith(recorded ?? {})]);
+      if (specs.length === 0) return confirmThen(recorded ?? {}, questions);
+      const ask = async (values: Record<string, string>) => confirmThen(values, await questionsWith(values));
+      if (dryRun) return ask(Object.fromEntries(specs.flatMap((spec) => (spec.default ? [[spec.name, spec.default]] : []))));
+      pendingInputs.current = (values) => void ask(values);
+      showBolt();
+      setView({ kind: "run-inputs", file: read.workspace.file, workspace: read.workspace.name, bolt: label, specs });
+    },
+    [services, begin, selectBolt, setView],
   );
 
   const runBolt = useCallback(
@@ -445,8 +499,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
       // Not half a run: a bolt with steps waiting for trust asks first. A dry run still goes
       // ahead, since showing what would be skipped is its point.
       if (!dryRun && waitingForTrust(read, label).length > 0) return setView({ kind: "trust", read, then: label });
-      const job = read.workspace.bolts.find((entry) => entry.label === label)?.job ?? false;
-      await launch(read, label, job, dryRun, (callbacks) => services.run(read, label, callbacks), `${read.workspace.name} ${glyphs.arrow} ${label}`);
+      await launch(read, label, dryRun, (callbacks) => services.run(read, label, callbacks), `${read.workspace.name} ${glyphs.arrow} ${label}`);
     },
     [services, glyphs.arrow, launch],
   );
@@ -460,10 +513,10 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
     await launch(
       last.read,
       last.bolt,
-      last.job,
       false,
-      (callbacks) => services.retry(last.read, steps, last.bolt, last.job, callbacks),
+      (callbacks) => services.retry(last.read, steps, last.bolt, callbacks),
       `${last.read.workspace.name} ${glyphs.arrow} ${last.bolt} — retrying ${steps.length === 1 ? "1 step" : `${steps.length} steps`}`,
+      last.result.inputs ?? {},
     );
   }, [services, glyphs.arrow, launch]);
 
@@ -595,27 +648,6 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
       return exit();
     }
 
-    if (view.kind === "run") {
-      const run = activeRef.current;
-      // Watching is what you want while a bolt is still starting; the run carries on, and
-      // is the first pane there.
-      if (input === "p") return setView(activity("current"));
-      if (input === "h") return setView(history_());
-      if (jump(input)) return;
-      if (!run || !run.done) {
-        if (input === "x") stopActive("you stopped it");
-        if (key.escape) return setView({ kind: "browse" });
-        return;
-      }
-      if (input === "r" && run.result && retryPlan(run.result).length > 0) return void retryFailed();
-      // A bolt that started servers: ⏎ goes to watch them. Anything else goes back.
-      // The bolt's own server, not the database it needed: the last thing it started.
-      const started = [...run.steps].reverse().find((step) => step.result?.run && step.result.ok && !step.target.workspace)?.result?.run;
-      if (key.return && started) return setView(activity(started));
-      if (key.return || key.escape || input === "q" || input === " ") return setView({ kind: "browse" });
-      return;
-    }
-
     if (view.kind === "check") {
       if (key.upArrow || input === "k") return setView({ ...view, scroll: Math.max(0, view.scroll - 1) });
       if (key.downArrow || input === "j") return setView({ ...view, scroll: view.scroll + 1 });
@@ -687,7 +719,11 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
       // The run itself: open its steps, stop it, or retry what failed.
       if (item?.type === "current") {
         const run = activeRef.current;
-        if (key.return) return setView({ kind: "run" });
+        if (key.return && run) {
+          selectBolt(run.read, run.bolt);
+          setRunPinned(true);
+          return setView({ kind: "browse" });
+        }
         if (input === "x" && run && !run.done) return stopActive("you stopped it");
         if (input === "r" && run?.done && run.result && retryPlan(run.result).length > 0) return void retryFailed();
       }
@@ -761,7 +797,13 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
       return;
     }
 
-    // Browsing.
+    // Browsing. A run in the selected bolt's box takes the keys that act on it.
+    if (inBox) {
+      if (input === "x" && !inBox.done) return stopActive("you stopped it");
+      if (input === "r" && inBox.done && inBox.result && retryPlan(inBox.result).length > 0) return void retryFailed();
+      if (input === "p") return setView(activity(inBox.done ? (startedBy(inBox) ?? "current") : "current"));
+      if (key.escape && inBox.done) return setRunPinned(false);
+    }
     if (input === "?") return setView({ kind: "help" });
     if (input === "N") return setView({ kind: "new-workspace" });
     if (input.startsWith("/")) return setView({ kind: "search", query: input.slice(1), index: 0 });
@@ -808,7 +850,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
       return setView({ kind: "delete-workspace", file: current.workspace.file, name: current.workspace.name, personal: current.workspace.personal });
     }
     if (input === "D" && bolt) return setView({ kind: "delete-bolt", file: current.workspace.file, bolt: bolt.label });
-    if (input === "v" && bolt) return setView({ kind: "view", file: current.workspace.file, bolt: bolt.label });
+    if (input === "d" || input === "u") return setDetailScroll((top) => Math.max(0, Math.min(detailLimit.current, top + (input === "d" ? 5 : -5))));
     if (input === "s") return setView({ kind: "settings" });
     if ((input === "K" || input === "J") && bolt && focus === "bolts") {
       const by = input === "K" ? -1 : 1;
@@ -923,12 +965,16 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
       // The selected workspace's bolts. A click selects one; ⏎ runs it, as ever.
       const list = reads[Math.min(wsRef.current, reads.length - 1)]?.workspace.bolts ?? [];
       if (list.length === 0) return event.kind === "wheel";
+      const { items, offset, split, topHeight } = boltWindow(list, boltRef.current, bodyHeight);
       if (event.kind === "wheel") {
+        if (split && y >= topHeight) {
+          setDetailScroll((top) => Math.max(0, Math.min(detailLimit.current, top + event.by * 3)));
+          return true;
+        }
         setFocus("bolts");
         setBoltIndex(clamp(boltRef.current + event.by, list.length));
         return true;
       }
-      const { items, offset } = boltWindow(list, boltRef.current, bodyHeight);
       const at = y - FIRST_BOLT_LINE;
       if (at >= 0 && at < items.length) {
         setFocus("bolts");
@@ -1028,6 +1074,10 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
           onSaving={() => (savedAt.current = Date.now())}
           file={view.file}
           bolt={view.bolt}
+          workspace={(() => {
+            const owner = reads.find((read) => read.workspace.file === view.file)?.workspace;
+            return owner ? `${owner.icon && glyphs.border === "round" ? `${owner.icon} ` : ""}${owner.name}` : undefined;
+          })()}
           others={(reads.find((read) => read.workspace.file === view.file)?.workspace.bolts ?? []).map((entry) => entry.label).filter((label) => label !== view.bolt)}
           elsewhere={reads.filter((read) => read.workspace.file !== view.file).flatMap((read) => read.workspace.bolts.map((entry) => ({ workspace: read.workspace.name, bolt: entry.label })))}
           adding={Boolean(view.adding)}
@@ -1051,20 +1101,9 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
       ) : view.kind === "new-bolt" ? (
         <Form
           title={`A new bolt in ${view.workspace}`}
-          intro="A bolt is one thing you do — 'Work on the API', 'Run the tests'. You'll add its steps next."
-          fields={[
-            { key: "label", label: "Name", hint: "what you're doing — any word of it runs it: wisp api", placeholder: "Work on the API", required: true },
-            {
-              key: "kind",
-              label: "Kind",
-              hint: "a job is for tests, builds and releases",
-              choices: [
-                { value: "start", label: "Starter — starts things and leaves them running" },
-                { value: "job", label: "Job — runs to the end, stops at the first failure" },
-              ],
-            },
-          ]}
-          preview={(values) => (values["label"]?.trim() ? `make ⚡ ${values["label"].trim()}${values["kind"] === "job" ? ", a job" : ""}, then ask for its first step` : undefined)}
+          intro="A bolt is one thing you do — 'Work on the API', 'Run the tests', 'Back up the database'. You'll add its steps next."
+          fields={[{ key: "label", label: "Name", hint: "short, since you type it: any whole word of it runs it, like wisp api", placeholder: "Work on the API", required: true }]}
+          preview={(values) => (values["label"]?.trim() ? `make ⚡ ${values["label"].trim()}, then ask for its first step` : undefined)}
           submitLabel="Create bolt"
           glyphs={glyphs}
           height={bodyHeight}
@@ -1073,7 +1112,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
             const label = values["label"]?.trim() ?? "";
             try {
               savedAt.current = Date.now();
-              await services.editing.addBolt(view.file, label, { job: values["kind"] === "job" });
+              await services.editing.addBolt(view.file, label);
             } catch (error) {
               return { label: describe(error) };
             }
@@ -1143,23 +1182,6 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
             return undefined;
           }}
         />
-      ) : view.kind === "view" && reads.some((candidate) => candidate.workspace.file === view.file) ? (
-        <BoltView
-          read={reads.find((candidate) => candidate.workspace.file === view.file) as WorkspaceRead}
-          bolt={view.bolt}
-          reads={reads}
-          runs={runs}
-          containers={containers}
-          history={recent}
-          glyphs={glyphs}
-          height={bodyHeight}
-          onClose={() => setView({ kind: "browse" })}
-          onRun={() => {
-            const target = reads.find((candidate) => candidate.workspace.file === view.file);
-            if (target) void runBolt(target, view.bolt, false);
-          }}
-          onEdit={() => setView({ kind: "editor", file: view.file, bolt: view.bolt })}
-        />
       ) : view.kind === "settings" ? (
         <SettingsScreen services={services} glyphs={glyphs} height={bodyHeight} onMouse={setMouseOn} onClose={() => setView({ kind: "browse" })} onSaved={(text) => {
           say(text);
@@ -1204,11 +1226,10 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
             const read = reads.find((candidate) => candidate.workspace.file === entry.workspace);
             if (!read) return setMessage(`${entry.workspaceName} is not in the list any more`);
             const label = entry.bolt.replace(/ \((retry|down)\)$/, "");
-            const job = read.workspace.bolts.find((bolt) => bolt.label === label)?.job ?? entry.job;
             void services
               .planRetry(read, entry)
               .then((steps) =>
-                launch(read, label, job, false, (callbacks) => services.retry(read, steps, label, job, callbacks), `${entry.workspaceName} ${glyphs.arrow} ${label} — retrying ${steps.length === 1 ? "1 step" : `${steps.length} steps`}`),
+                launch(read, label, false, (callbacks) => services.retry(read, steps, label, callbacks), `${entry.workspaceName} ${glyphs.arrow} ${label} — retrying ${steps.length === 1 ? "1 step" : `${steps.length} steps`}`, entry.inputs ?? {}),
               )
               .catch((error: unknown) => setMessage(describe(error)));
           }}
@@ -1218,8 +1239,6 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
             void runBolt(read, entry.bolt.replace(/ \((retry|down)\)$/, ""), false);
           }}
         />
-      ) : view.kind === "run" ? (
-        active ? <RunPanel view={active} glyphs={glyphs} height={bodyHeight} tick={tick} /> : null
       ) : view.kind === "check" ? (
         <CheckPanel view={view} glyphs={glyphs} height={bodyHeight} />
       ) : view.kind === "trust" ? (
@@ -1269,8 +1288,71 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
           />
           {current ? (
             <WorkspacePanel
-              confirming={view.kind === "delete-bolt" ? { question: `Delete "${view.bolt}"?`, yes: "Delete", onAnswer: (yes) => deleteBolt(view, yes) } : undefined}
+              confirming={
+                view.kind === "delete-bolt"
+                  ? { question: `Delete "${view.bolt}"?`, yes: "Delete", onAnswer: (yes) => deleteBolt(view, yes) }
+                  : view.kind === "confirm-run"
+                    ? {
+                        question: view.question,
+                        yes: "Run",
+                        no: "Cancel",
+                        onAnswer: (yes) => {
+                          const go = pendingRun.current;
+                          pendingRun.current = undefined;
+                          setView({ kind: "browse" });
+                          if (yes) go?.();
+                        },
+                      }
+                    : undefined
+              }
               read={current}
+              reads={reads}
+              instead={
+                view.kind === "run-inputs"
+                  ? (room: number) => (
+                      <Form
+                              title={`Run "${view.bolt}" in ${view.workspace}`}
+                              intro="It needs these before it runs."
+                              fields={view.specs.map((spec) =>
+                                spec.choices
+                                  ? { key: spec.name, label: spec.ask, choices: spec.choices.map((value) => ({ value, label: value })) }
+                                  : spec.default
+                                    ? { key: spec.name, label: spec.ask, placeholder: spec.default, hint: `plain words; empty keeps ${spec.default}` }
+                                    : { key: spec.name, label: spec.ask, required: true, hint: "plain words, like staging or v1.2.3" },
+                              )}
+                              initial={Object.fromEntries(view.specs.flatMap((spec) => (spec.choices && spec.default ? [[spec.name, spec.default]] : [])))}
+                              submitLabel="Run"
+                              glyphs={glyphs}
+                              height={room}
+                              onCancel={() => {
+                                pendingInputs.current = undefined;
+                                setView({ kind: "browse" });
+                              }}
+                              onSubmit={async (values) => {
+                                const chosen = Object.fromEntries(view.specs.map((spec) => [spec.name, values[spec.name]?.trim() || spec.default || ""]));
+                                const problems = Object.fromEntries(view.specs.flatMap((spec) => {
+                                  const problem = checkValue(spec, chosen[spec.name] ?? "");
+                                  return problem ? [[spec.name, problem]] : [];
+                                }));
+                                if (Object.keys(problems).length > 0) return problems;
+                                const go = pendingInputs.current;
+                                pendingInputs.current = undefined;
+                                setView({ kind: "browse" });
+                                go?.(chosen);
+                                return undefined;
+                              }}
+                            />
+                    )
+                  : inBox
+                    ? (room: number) => (
+                        <Box flexDirection="column" height={room} borderStyle={glyphs.border} borderColor={inBox.done ? (inBox.error || inBox.steps.some((step) => step.result && !step.result.ok && !step.result.skipped) ? "red" : "green") : TONE.accent} paddingX={1} overflow="hidden">
+                          <RunProgress view={inBox} glyphs={glyphs} height={Math.max(1, room - 2)} tick={tick} />
+                        </Box>
+                      )
+                    : undefined
+              }
+              scroll={detailScroll}
+              scrollLimit={detailLimit}
               here={current.workspace.file === library.here}
               width={columns - workspaceListWidth(columns) - 4}
               boltIndex={boltIndex}
@@ -1289,4 +1371,8 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
     </Box>
     </MouseContext.Provider>
   );
+}
+
+function startedBy(run: RunState): string | undefined {
+  return [...run.steps].reverse().find((step) => step.result?.run && step.result.ok && !step.target.workspace)?.result?.run;
 }

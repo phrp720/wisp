@@ -1,121 +1,28 @@
-import { Box, Text, useInput } from "ink";
-import { useState, type ReactNode } from "react";
+import { Box, Text } from "ink";
+import type { ReactNode } from "react";
 
 import { containerMood, type Container } from "../core/docker.js";
-import type { HistoryEntry } from "../core/history.js";
 import { tildify } from "../core/paths.js";
 import type { RunStatus } from "../core/processes.js";
 import { collectBoltTargets } from "../core/switch.js";
 import type { Bolt, SwitchTarget, WorkspaceRead } from "../core/types.js";
 import type { Glyphs } from "./glyphs.js";
-import { since } from "./state.js";
 import { TONE } from "./tones.js";
-import { describeStep, shortUrl } from "./model.js";
+import { describeStep, groupMarks, shortUrl } from "./model.js";
 
-/**
- * A bolt, read-only and whole: every step in the order it happens, the bolts it needs
- * opened up in place with their own steps, what each step runs and where, what is already
- * up, and which bolts need this one. Looking, not changing — e edits, ⏎ runs.
- */
-export interface BoltViewProps {
-  read: WorkspaceRead;
-  bolt: string;
-  reads: WorkspaceRead[];
-  runs: RunStatus[];
-  containers: Container[];
-  history: HistoryEntry[];
-  glyphs: Glyphs;
-  height: number;
-  onClose: () => void;
-  onRun: () => void;
-  onEdit: () => void;
-}
-
-/** One line of the view, already laid out. */
-interface Line {
+/** One line of a bolt's steps, already laid out. */
+export interface Line {
   key: string;
   node: ReactNode;
 }
 
 type Status = { text: string; color: string } | undefined;
 
-export function BoltView(props: BoltViewProps) {
-  const { read, reads, runs, containers, history, glyphs, height, onClose, onRun, onEdit } = props;
-  const [scroll, setScroll] = useState(0);
-  const bolt = read.workspace.bolts.find((entry) => entry.label === props.bolt);
-
-  const lines = bolt ? layout({ read, bolt, reads, runs, containers, glyphs }) : [];
-  const room = Math.max(3, height - 9 - (bolt?.notes ? 1 : 0));
-  const top = Math.max(0, Math.min(scroll, lines.length - room));
-
-  useInput((input, key) => {
-    if (key.escape || input === "q" || input === "v") return onClose();
-    if (key.return) return onRun();
-    if (input === "e") return onEdit();
-    if (key.upArrow || input === "k") return setScroll(Math.max(0, top - 1));
-    if (key.downArrow || input === "j") return setScroll(Math.min(Math.max(0, lines.length - room), top + 1));
-    if (key.pageUp || input === "u") return setScroll(Math.max(0, top - room));
-    if (key.pageDown || input === "d") return setScroll(Math.min(Math.max(0, lines.length - room), top + room));
-  });
-
-  if (!bolt) {
-    return (
-      <Box height={height} borderStyle={glyphs.border} paddingX={1}>
-        <Text dimColor>{`"${props.bolt}" is not in ${read.workspace.name} any more · esc back`}</Text>
-      </Box>
-    );
-  }
-
-  const last = history.find((entry) => entry.workspace === read.workspace.file && entry.bolt.replace(/ \((retry|down)\)$/, "") === bolt.label);
-  const usedBy = reads.flatMap((other) =>
+export function usedBy(read: WorkspaceRead, bolt: Bolt, reads: WorkspaceRead[]): string[] {
+  return reads.flatMap((other) =>
     other.workspace.bolts
       .filter((candidate) => candidate.steps.some((step) => step.kind === "bolt" && step.bolt.toLowerCase() === bolt.label.toLowerCase() && (step.workspace ? sameWorkspace(other, step.workspace, read) : other === read)))
       .map((candidate) => (other === read ? candidate.label : `${other.workspace.name} › ${candidate.label}`)),
-  );
-  const needs = flow(read, bolt, reads);
-
-  return (
-    <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor={bolt.color ?? TONE.accent} paddingX={1} overflow="hidden">
-      <Text wrap="truncate-end">
-        <Text color={TONE.accent}>{glyphs.bolt}</Text>
-        <Text bold color={bolt.color}>{bolt.label}</Text>
-        <Text dimColor>{`  ${read.workspace.name} · `}</Text>
-        {bolt.job ? <Text color="cyan">job — runs to the end, stops at the first failure</Text> : <Text dimColor>starter — starts things and leaves them running</Text>}
-      </Text>
-      {bolt.notes ? <Text wrap="truncate-end">{bolt.notes}</Text> : null}
-      <Text wrap="truncate-end" dimColor>
-        {[
-          last ? (last.running ? `running now #${last.number ?? ""}` : `last run ${last.interrupted ? "!" : last.ok ? glyphs.ok : glyphs.fail} #${last.number ?? ""} ${since(last.startedAt)}`) : "never run yet",
-          usedBy.length > 0 ? `needed by ${usedBy.join(", ")}` : "",
-          bolt.down && bolt.down.length > 0 ? `${bolt.down.length} step${bolt.down.length === 1 ? "" : "s"} when taken down` : "",
-        ]
-          .filter(Boolean)
-          .join(" · ")}
-      </Text>
-      {needs.length > 1 ? (
-        <Text wrap="truncate-end">
-          <Text dimColor>order  </Text>
-          {needs.map((name, at) => (
-            <Text key={name}>
-              {at > 0 ? <Text dimColor>{` ${glyphs.border === "round" ? "──▶" : "->"} `}</Text> : null}
-              <Text bold={at === needs.length - 1}>{name}</Text>
-            </Text>
-          ))}
-        </Text>
-      ) : null}
-      <Box>
-        <Box flexGrow={1}>
-          <Text dimColor>steps, in order</Text>
-        </Box>
-        <Text dimColor>now</Text>
-      </Box>
-      {lines.slice(top, top + room).map((line) => (
-        <Box key={line.key}>{line.node}</Box>
-      ))}
-      <Box flexGrow={1} />
-      {lines.length > room ? <Text dimColor>{`${top + 1}–${Math.min(lines.length, top + room)} of ${lines.length} lines`}</Text> : null}
-      <Text dimColor>{`read-only · ⏎ run it · e edit it · ↑↓ or u d scroll · esc back`}</Text>
-    </Box>
   );
 }
 
@@ -136,7 +43,7 @@ export function flow(read: WorkspaceRead, bolt: Bolt, reads: WorkspaceRead[], se
 }
 
 /** Every step, numbered, each needed bolt opened up beneath its own number. */
-function layout(context: { read: WorkspaceRead; bolt: Bolt; reads: WorkspaceRead[]; runs: RunStatus[]; containers: Container[]; glyphs: Glyphs }): Line[] {
+export function stepLines(context: { read: WorkspaceRead; bolt: Bolt; reads: WorkspaceRead[]; runs: RunStatus[]; containers: Container[]; glyphs: Glyphs }): Line[] {
   const { glyphs } = context;
   const lines: Line[] = [];
   const done = new Set<string>();
@@ -150,9 +57,11 @@ function layout(context: { read: WorkspaceRead; bolt: Bolt; reads: WorkspaceRead
     const held = read.withheld.filter((item) => bolt.steps.some((step) => step.kind === "asset" && step.id === item.id));
     const all: (SwitchTarget & { held?: boolean })[] = [...targets, ...held.filter((item) => !targets.some((target) => target.id === item.id)).map((item) => ({ kind: item.kind, label: item.label, id: item.id, value: item.value, ...(item.cwd ? { cwd: item.cwd } : {}), held: true }))];
 
+    const marks = groupMarks(all, glyphs);
     all.forEach((target, index) => {
       const number = `${prefix}${index + 1}`;
       const key = `${read.workspace.file}#${bolt.label}#${number}`;
+      const shown = `${indent}${depth === 0 ? `${number}.`.padStart(3) : number} `;
       if (target.kind === "bolt") {
         const found = findBolt(read, target.label, target.workspace, context.reads);
         const where = found && found.read !== context.read ? ` (${found.read.workspace.name})` : "";
@@ -161,10 +70,10 @@ function layout(context: { read: WorkspaceRead; bolt: Bolt; reads: WorkspaceRead
           key,
           node: (
             <Text wrap="truncate-end">
-              <Text dimColor>{`${indent}${number.padEnd(5)}`}</Text>
+              <Text dimColor>{shown}</Text>
               <Text color={found?.bolt.color ?? TONE.accent} bold>{`${glyphs.bolt}${target.label}`}</Text>
               <Text dimColor>{where}</Text>
-              <Text dimColor>{!found ? "  — no bolt by that name" : twice ? "  — already run above, not again" : found.bolt.job ? " first — a job" : " first"}</Text>
+              <Text dimColor>{!found ? "  — no bolt by that name" : twice ? "  — already run above, not again" : " first"}</Text>
             </Text>
           ),
         });
@@ -181,8 +90,9 @@ function layout(context: { read: WorkspaceRead; bolt: Bolt; reads: WorkspaceRead
           <Box flexGrow={1}>
             <Box flexGrow={1} minWidth={0}>
               <Text wrap="truncate-end">
-                <Text dimColor>{`${indent}${number.padEnd(5)}`}</Text>
-                <Text>{describeStep(target, false, bolt.job ?? false)}</Text>
+                <Text dimColor>{shown}</Text>
+                <Text>{`${marks[index]}${describeStep(target)}`}</Text>
+                {marks[index] && all[index - 1]?.together !== target.together ? <Text dimColor>  together</Text> : null}
               </Text>
             </Box>
             {status ? <Text color={status.color}>{`  ${status.text}`}</Text> : null}
@@ -195,7 +105,7 @@ function layout(context: { read: WorkspaceRead; bolt: Bolt; reads: WorkspaceRead
           key: `${key}:detail`,
           node: (
             <Text wrap="truncate-end" dimColor>
-              {`${indent}     ${detail}`}
+              {`${" ".repeat(shown.length)}${detail}`}
             </Text>
           ),
         });

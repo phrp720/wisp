@@ -44,20 +44,7 @@ export function title(workspace: Workspace): string {
 }
 
 export function counts(workspace: Workspace): string {
-  const parts = (
-    [
-      [workspace.links.length, "link"],
-      [workspace.folders.length, "folder"],
-      [workspace.files.length, "file"],
-      [workspace.apps.length, "app"],
-      [workspace.commands.length, "command"],
-      [workspace.bolts.length, "bolt"],
-    ] as const
-  )
-    .filter(([count]) => count > 0)
-    .map(([count, noun]) => plural(count, noun));
-
-  return dim(parts.length > 0 ? parts.join(" · ") : "empty");
+  return dim(workspace.bolts.length > 0 ? plural(workspace.bolts.length, "bolt") : "no bolts yet");
 }
 
 export function plural(count: number, noun: string): string {

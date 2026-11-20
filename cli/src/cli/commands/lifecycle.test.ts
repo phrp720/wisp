@@ -1,11 +1,12 @@
-import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { listHistory, recordHistory, type HistoryEntry } from "../../core/history.js";
-import { history } from "./lifecycle.js";
+import { history, hook } from "./lifecycle.js";
 
 let dir: string;
 let file: string;
@@ -16,7 +17,6 @@ const run = (id: string, bolt: string, workspace: string, running = false): Hist
   workspace,
   workspaceName: "Shop",
   bolt,
-  job: true,
   startedAt: "2026-01-01T00:00:00.000Z",
   finishedAt: "2026-01-01T00:00:01.000Z",
   ok: true,
@@ -28,7 +28,7 @@ beforeEach(async () => {
   dir = await realpath(await mkdtemp(join(tmpdir(), "wisp-lifecycle-")));
   process.env["WISP_HOME"] = join(dir, "home");
   file = join(dir, ".wisp.json");
-  await writeFile(file, JSON.stringify({ name: "Shop", bolts: [{ label: "Check", job: true, targets: [] }, { label: "Build", job: true, targets: [] }] }));
+  await writeFile(file, JSON.stringify({ name: "Shop", bolts: [{ label: "Check", targets: [] }, { label: "Build", targets: [] }] }));
   for (const entry of [run("aaa111aaa111", "Check", file), run("aaa222aaa222", "Build", file), run("bbb111bbb111", "Check", "/elsewhere/.wisp.json"), run("aaa333aaa333", "Check", file, true)]) {
     await recordHistory(entry);
   }
@@ -57,6 +57,12 @@ describe("wisp history", () => {
     expect(names).toContain("ccc111ccc111 Shop");
     expect(names).toContain("ddd111ddd111 Gone");
   });
+  it("shows the values a run was given", async () => {
+    await recordHistory({ ...run("eee111eee111", "Check", file), inputs: { env: "staging", tag: "v2" } });
+    vi.spyOn(process, "cwd").mockReturnValue(dir);
+    await history.run(["eee111"], {});
+    expect(printed.join("\n")).toContain("with env=staging tag=v2");
+  });
 });
 
 describe("wisp history --clear", () => {
@@ -84,5 +90,22 @@ describe("wisp history --clear", () => {
   it("outside a project, asks for a run or --all rather than guess", async () => {
     vi.spyOn(process, "cwd").mockReturnValue(tmpdir());
     await expect(history.run([], { clear: true })).rejects.toMatchObject({ code: "NO_TARGET" });
+  });
+});
+
+describe("wisp hook", () => {
+  it("runs a bolt that asks first without asking, and says so", async () => {
+    const before = process.cwd();
+    execFileSync("git", ["init", "-q", dir]);
+    await writeFile(file, JSON.stringify({ name: "Shop", bolts: [{ label: "Ship", confirm: "Ship it?", inputs: { env: {}, tag: { default: "latest" } }, targets: [{ run: "true {{env}} {{tag}}", finishes: true }] }] }));
+    process.chdir(dir);
+    try {
+      await hook.run(["pre-push", "ship"], {});
+    } finally {
+      process.chdir(before);
+    }
+    expect(await readFile(join(dir, ".git", "hooks", "pre-push"), "utf8")).toMatch(/wisp use '.*' 'Ship' --yes\n/);
+    expect(printed.join("\n")).toContain("it asks before it runs (Ship it?); from the hook it runs without asking");
+    expect(printed.join("\n")).toContain("a hook can't answer env: give it a default, or the pre-push stops");
   });
 });

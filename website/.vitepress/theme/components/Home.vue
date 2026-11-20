@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ComputerTerminal01Icon, ContainerIcon, Copy01Icon, FlashIcon, GitBranchIcon, LaptopIcon, ReloadIcon, Tick02Icon } from "@hugeicons/core-free-icons";
+import { ComputerTerminal01Icon, ContainerIcon, Copy01Icon, FlashIcon, LaptopIcon, Notification01Icon, ReloadIcon, Tick02Icon } from "@hugeicons/core-free-icons";
 import { onMounted, onBeforeUnmount, ref } from "vue";
 
 /** The demo at the top: `wisp api` typed, then each step of the bolt coming up in turn. */
@@ -56,7 +56,7 @@ const icons: Record<string, IconData> = {
   needs: FlashIcon as IconData,
   docker: ContainerIcon as IconData,
   restart: ReloadIcon as IconData,
-  git: GitBranchIcon as IconData,
+  notify: Notification01Icon as IconData,
   laptop: LaptopIcon as IconData,
   tmux: ComputerTerminal01Icon as IconData,
 };
@@ -68,7 +68,7 @@ const more = [
   { icon: "needs", title: "Projects that need each other", text: "Your API needs the shared database? Wisp starts the database first, then the API." },
   { icon: "docker", title: "Docker, without the waiting", text: "Starts your compose services and waits until they're healthy before the next step." },
   { icon: "restart", title: "Servers that come back", text: "Your dev server crashed? It restarts on its own, and you see that it did." },
-  { icon: "git", title: "Checks before you push", text: "Tests run on every <code>git push</code> and stop it if they fail. Or every night." },
+  { icon: "notify", title: "Told when it fails", text: "The nightly backup broke? A notification on your screen, or a message in Slack, Discord or ntfy." },
   { icon: "laptop", title: "Same file, every laptop", text: "Your teammate on Windows types the same <code>wisp api</code> you do." },
   { icon: "tmux", title: "On your servers too", text: "SSH in, type <code>wisp restart shop</code>, done. No hunting for where the app lives." },
 ];
@@ -114,7 +114,7 @@ const more = [
       <div>
         <p class="eyebrow">One file</p>
         <h2>Write it once.<br />Or let Wisp write it.</h2>
-        <p class="lead">A <b>bolt</b> lists what to start, in order. <code>wisp init</code> drafts it from what your project already has. Keep it wherever it's useful:</p>
+        <p class="lead">A <b>bolt</b> lists the steps of one task, in order. <code>wisp init</code> drafts bolts from what your project already has. Keep them wherever they're useful:</p>
         <ul class="places">
           <li><b>In the repo</b>, as <code>.wisp.json</code>: your whole team gets the same bolts.</li>
           <li><b>On your machine</b>, just for you: your own workspaces, like your morning links or side scripts.</li>
@@ -150,12 +150,12 @@ const more = [
     <!-- History: a recording of real Wisp -->
     <section class="wrap showcase">
       <div class="showcase-text">
-        <p class="eyebrow">Workflows</p>
+        <p class="eyebrow">Checks, builds, deploys</p>
         <h2>A small CI, on your laptop.</h2>
-        <p class="lead">Checks, builds and releases run step by step and stop at the first failure. Every run is kept with its output. Retry only what failed.</p>
-        <a class="more" href="/docs/jobs">Jobs and history →</a>
+        <p class="lead">Steps run in order and stop at the first failure; checks can run side by side. A deploy can ask where to, and ask before it goes. Run one before every <code>git push</code>, or every night. Every run is kept with its output, and a retry runs only what failed.</p>
+        <a class="more" href="/docs/recipes">Recipes →</a>
       </div>
-      <img class="recording" src="/demo/jobs.gif" width="1400" height="760" loading="lazy" alt="A Check job fails at its test; History shows the run like CI, with the test's output; after the fix, --retry runs only the test, and it passes" />
+      <img class="recording" src="/demo/jobs.gif" width="1400" height="760" loading="lazy" alt="A Check bolt fails at its test; History shows the run like CI, with the test's output; after the fix, --retry runs only the test, and it passes" />
     </section>
 
     <!-- Safe by default -->

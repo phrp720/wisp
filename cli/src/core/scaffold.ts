@@ -97,7 +97,7 @@ export function chooseBolts(all: DraftBolt[], only?: string[]): DraftBolt[] {
   const wanted = new Set(only.map((name) => name.trim().toLowerCase()));
   const kept = all.filter((bolt) => wanted.has(bolt.label.toLowerCase()));
   const names = new Set(kept.map((bolt) => bolt.label));
-  return kept.map((bolt) => ({ ...bolt, targets: bolt.targets.filter((step) => typeof step === "string" || typeof step["bolt"] !== "string" || names.has(step["bolt"])) }));
+  return kept.map((bolt) => ({ ...bolt, targets: bolt.targets.filter((step) => typeof step["bolt"] !== "string" || names.has(step["bolt"])) }));
 }
 
 /**
@@ -525,8 +525,7 @@ type Step = Record<string, unknown>;
 export interface DraftBolt {
   label: string;
   color?: string;
-  job?: boolean;
-  targets: (Step | string)[];
+  targets: Step[];
   down?: Step[];
 }
 
@@ -563,27 +562,28 @@ export function bolts(detected: Detected, random: () => number = Math.random): D
   }
 
   if (detected.checks.length > 0) {
-    out.push({ label: "Check", job: true, targets: detected.checks.map((check) => ({ run: check.run, ...(check.cwd ? { cwd: check.cwd } : {}), label: check.cwd ? `${check.label} (${check.cwd})` : check.label })) });
+    out.push({ label: "Check", targets: detected.checks.map((check) => ({ run: check.run, ...(check.cwd ? { cwd: check.cwd } : {}), label: check.cwd ? `${check.label} (${check.cwd})` : check.label, finishes: true })) });
   }
 
   // Nothing to run at all: the old, plain draft — a bolt per area, opening it with the repo.
+  const links = detected.links.map((link) => ({ url: link.url, label: link.label }));
   if (out.length === 0) {
-    const repo = detected.links[0]?.label;
+    const repo = links[0];
     if (detected.folders.length === 0) {
-      out.push({ label: `Open ${detected.name}`, targets: detected.links.map((link) => link.label) });
+      out.push({ label: `Open ${detected.name}`, targets: links });
     } else {
       for (const folder of detected.folders) {
         out.push({ label: `Work on ${folder.label}`, targets: [{ folder: folder.path }, ...(repo ? [repo] : [])] });
       }
     }
-  } else if (detected.links.length > 0) {
-    out.push({ label: "Open the repo", targets: detected.links.map((link) => link.label) });
+  } else if (links.length > 0) {
+    out.push({ label: "Open the repo", targets: links });
   }
 
   // A colour each, none the same, so the list reads at a glance.
   const kept = out.filter((bolt) => bolt.targets.length > 0);
   const colors = pickColors(kept.length, [], random);
-  return kept.map((bolt, at) => ({ label: bolt.label, color: colors[at] as string, ...(bolt.job ? { job: true } : {}), targets: bolt.targets, ...(bolt.down ? { down: bolt.down } : {}) }));
+  return kept.map((bolt, at) => ({ label: bolt.label, color: colors[at] as string, targets: bolt.targets, ...(bolt.down ? { down: bolt.down } : {}) }));
 }
 
 function composeFileName(detected: Detected): string {
@@ -596,7 +596,6 @@ function format(detected: Detected, only?: string[]): string {
     // in any editor that reads JSON Schema.
     ["$schema", PROJECT_SCHEMA_URL],
     ["name", detected.name],
-    ["links", detected.links],
     ["bolts", chooseBolts(bolts(detected), only)],
   ]);
 }

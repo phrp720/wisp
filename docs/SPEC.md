@@ -8,7 +8,7 @@ links, apps and shell commands, with optional waits and dependencies between the
 
 - `.wisp.json`: committed in a project. Wisp finds it by walking up from the
   current directory, like git finds `.git`. Paths in it are relative to the file.
-- `.wisp.local.json`: optional, beside it, usually gitignored. Same format. Its lists
+- `.wisp.local.json`: optional, beside it, usually gitignored. Same format. Its bolts
   are added to the project's, its name/icon/color win, and a bolt with the same label
   replaces the project's bolt.
 - Personal workspaces: the same format, in the `workspaces` directory that
@@ -43,29 +43,67 @@ bolt in `wisp show`, `wisp pick`, tab completion and the TUI.
 | wait | `{ "wait": 3 }`, `{ "wait": "localhost:5432" }`, `{ "wait": "http://localhost:3000" }` | pauses until seconds pass, a port accepts, or a url answers (60s timeout; object form `{ "wait": { "port": 5432, "timeout": 120 } }`) |
 | dependency | `{ "bolt": "Database" }`, `{ "bolt": "Database", "workspace": "infra" }` | runs another bolt first, once per run; skips commands already running |
 | docker | `{ "compose": "compose.yaml", "services": ["postgres"] }` | `docker compose up --wait`: done when the services are healthy; `wisp down` stops them; shown with state, health and logs |
-| shared asset | `"Repository"` | names an asset from a top-level section by its label |
+| together | `{ "together": [{ "run": "pnpm lint", "finishes": true }, { "run": "pnpm test", "finishes": true }] }` | starts its steps at the same time; the next step waits for all of them. Any step but a bolt. If one fails, the run stops once they have all finished. Their output is printed line by line, each line prefixed with the step's label; each step's log stays its own |
 
 Any inline step may also carry `"label"` and `"os"`.
 
-## Jobs
+## Commands that finish, and failures
 
-A bolt with `"job": true` runs to completion instead of starting things: Test, Build,
-Release:
+A command keeps running by default: a server, a watcher. Wisp starts it and moves on. A
+command with `"finishes": true` is waited for, attached, with its output kept: a test, a
+build, a backup, a deploy. One bolt can mix both:
 
 ```json
-{ "label": "Check", "job": true, "targets": [{ "bolt": "Database" }, { "run": "pnpm lint" }, { "run": "pnpm test" }] }
+{ "label": "Check", "targets": [{ "bolt": "Database" }, { "run": "pnpm lint", "finishes": true }, { "run": "pnpm test", "finishes": true }] }
 ```
 
-- Its commands run attached, one after another, and their output is kept.
-- The first failure stops it: nothing after a failed step runs. A failed job it depends
-  on stops it too.
-- Bolts it depends on that are not jobs (a database) start the way they always do, and
-  stay up.
+- A failed step stops the run: nothing after it runs, and a failed bolt it depends on stops
+  it too. `"keepGoing": true` on a bolt reports a failure and runs the rest anyway.
+- A command that keeps running is never started twice; one that finishes runs every time.
 - Every run is in `wisp history`, with each step's duration and output, from the moment
   it starts. Until it ends it has `"running": true`, and `pending` lists the steps still
   to come, the first being the one in progress (its `log` fills as it goes).
   `"interrupted": true` means Wisp stopped before the run did.
 - `wisp hook pre-push Check` runs it before every push and blocks the push if it fails.
+  Its commands should finish: one that keeps running cannot block a push.
+
+## Asking first
+
+`"confirm": "Deploy to production?"` on a bolt makes Wisp ask before it runs it, or any
+bolt that runs it (`true` asks `Run "<label>"?`). At a terminal it asks; without one, or
+with `--json`, it runs nothing and exits 1 with `CONFIRM_NEEDED`. `--yes` runs it
+without asking. Dry runs and git hooks never ask.
+
+**Agents: ask the user the question yourself, and pass `--yes` only once they agree.**
+
+## Inputs
+
+A bolt can ask for values each time it runs; its steps use one as `{{name}}`:
+
+```json
+{ "label": "Deploy", "inputs": { "env": { "ask": "Deploy where?", "choices": ["staging", "production"], "default": "staging" } }, "confirm": "Deploy to {{env}}?", "targets": [{ "run": "./deploy.sh {{env}}", "finishes": true }] }
+```
+
+- `ask` is the question (the name when left out), `choices` limits the value to a list,
+  `default` is used when none is given. Each input is optional except its name.
+- A value is plain words: letters, digits, spaces and `. _ - / : @ + = , ~`, with no word
+  starting with `-`. Anything else (quotes, `$ ; | & < > * ? ! # %`, backticks, tabs, line
+  breaks) is refused with `INVALID_INPUT` before anything runs, so a value can't inject
+  commands or options, even through `ssh` or `sh -c`. It goes into the command as typed;
+  write `"{{note}}"` to keep one with spaces as a single argument.
+- `{{name}}` works in a command, its `cwd` and `env`, a link, a folder or file, a wait for a
+  website, and `confirm`. A bolt uses only the inputs it declares; one it runs that declares
+  the same name gets the same value.
+- `--input env=production` gives a value (once per input). Without a terminal, or with
+  `--json`, a value not given takes its default; one with no default exits 1 with
+  `INPUT_NEEDED`, naming the flag. `--yes` takes the defaults at a terminal too.
+- The values are kept with the run: `inputs` in `wisp history <id> --json` and in the
+  run's JSON result. `--retry` reuses them. Never for secrets: a step fetches its own from
+  where it is kept, like `TOKEN=$(op read op://ops/deploy/token) ./deploy.sh`, so it is never
+  written in the file, shown, or kept in history.
+
+**Agents: pass every value with `--input`. If you don't know one, ask the user; never guess
+where to deploy.**
 
 ## Up and down
 
@@ -75,35 +113,24 @@ command, and can stop them: `wisp down <bolt>` stops the bolt's own commands (`-
 for the bolts it depends on too), then runs its `down` steps:
 
 ```json
-{ "label": "Services", "job": true, "targets": [{ "run": "docker compose up -d" }], "down": [{ "run": "docker compose stop" }] }
+{ "label": "Services", "targets": [{ "run": "docker compose up -d", "finishes": true }], "down": [{ "run": "docker compose stop" }] }
 ```
 
-## Shared assets (optional)
-
-Top-level `links`, `folders`, `files`, `apps` and `commands` declare things once so
-several bolts can name them by `label`:
-
-```json
-{
-  "links": [{ "label": "Repository", "url": "https://github.com/acme/acme" }],
-  "commands": [{ "label": "db", "run": "docker compose up db" }],
-  "bolts": [{ "label": "Database", "targets": ["db", { "wait": "localhost:5432" }] }]
-}
-```
-
-A label is unique within its kind. Where a folder and a file share one, `"folder:spec"`
-names the folder.
+A file holds bolts and nothing else: every step is written inside the bolt that takes it.
+To reuse steps, put them in a bolt of their own and run it from others with
+`{ "bolt": "Database" }`.
 
 ## Commands
 
-`{ "run": "…", "cwd": "…", "env": {…}, "shell": "sh" | "pwsh" | "cmd", "background": true, "restart": "on-failure" | "always" }`
+`{ "run": "…", "finishes": true, "cwd": "…", "env": {…}, "shell": "sh" | "pwsh" | "cmd", "background": true, "restart": "on-failure" | "always" }`
 
 - `run` goes to the user's own shell (`$SHELL -ilc`) on macOS/Linux and PowerShell on
   Windows, unless `shell` says otherwise. Pipes and `&&` work.
 - Commands run in the background, under a pseudo-terminal so their output keeps its
   colours, with that output kept: `wisp logs <name>`, `wisp ps`, and a pane each in
   the TUI. They outlive Wisp. `--window`, or `wisp open-with terminal <app|tmux>`,
-  puts them in terminal or tmux windows instead. A job's commands always run attached.
+  puts them in terminal or tmux windows instead. A command that finishes always runs
+  attached.
 - `restart` brings a command back when it stops: `"on-failure"` after a crash, `"always"`
   whenever it exits. It waits 1s, 2s, 4s… up to 30s, and gives up after 10 in a row. It
   keeps working after Wisp is closed.
@@ -139,12 +166,11 @@ under "Runs code" and ask them to approve it.**
 | `wisp status` | what this project can run, as text, even at a terminal |
 | `wisp <bolt>` | run a bolt of this project, and only this project, by its label, slug or a whole word of it. Not a bolt here: exit 1, `NO_BOLT`, and the message names what to type. Ambiguous: exit 1, `AMBIGUOUS` |
 | `wisp <workspace> <bolt>` | run a bolt of any known workspace, from any folder |
-| `wisp <workspace> --all` | open everything a workspace holds |
 | `wisp use <file> <bolt>` | run a bolt of a workspace file by path, for cron and scripts. `use` is implied above; say it for a bolt named like a command (`wisp use list`) |
 | `wisp pick [workspace]` | at a terminal, choose a bolt from a list and run it; without one (or with `--json`) it asks nothing and prints what `wisp show` would |
 | `wisp init [--print] [--yes] [--only <bolts>]` | write a `.wisp.json` from what the project has, at its root and one folder down: package.json and Deno; Python (Django, FastAPI, Flask, pytest, ruff, uv, poetry); Gradle and Maven (Spring Boot); Go; Rust; Rails; PHP and Laravel; .NET; Elixir and Phoenix; docker compose, Makefile, justfile, mise, Taskfile, Procfile. `--only "Check,Work on api"` keeps just those of the suggested bolts |
 | `wisp check [path] [--json]` | validate a file, or the one in a folder: errors, warnings, what would run |
-| `wisp show [workspace] [--json]` | a workspace's bolts (label, slug, notes, what is up), then everything it holds |
+| `wisp show [workspace] [--json]` | a workspace's bolts: label, slug, notes, what is up, and each one's steps |
 | `wisp list [--json]` | every known workspace |
 | `wisp trust` | approve a file's commands (for the user, not an agent) |
 | `wisp down <bolt> [--deps]` · `wisp restart <bolt>` | stop what a bolt started · stop it and run it again |
@@ -153,20 +179,21 @@ under "Runs code" and ask them to approve it.**
 | `wisp hook <git-hook> <bolt>` · `--list` · `--remove` | run a bolt from a git hook |
 | `wisp ps [--all] [--json]` · `wisp logs <run> [-f]` · `wisp stop <run> \| --all` | what Wisp has running |
 | `wisp scan <dir>` | find project files under a directory |
+| `wisp notify [failures\|all\|off] [--webhook <url>] [--test] [--json]` | when Wisp tells the user about a run they might have missed (nobody watched it, or it took over 30s): a desktop notification, and a webhook if set (https only, or http to localhost). The user's own setting: don't change it for them. `WISP_NOTIFY=off` silences one command |
 | `wisp doctor [--json]` | what works here, and where files live |
 | `wisp completion [zsh\|bash\|fish] [--install]` | tab completion for workspaces, bolts and commands (for the user to set up) |
 | `wisp help agents` · `wisp spec` | this reference |
 
 Run flags: `--dry-run` (show what would happen and where, change nothing), `--inline`
 (run commands attached, output here), `--detach` (run commands in the background),
-`--all` (everything, not one bolt), `--json`.
+`--input name=value` (a value the bolt asks for), `--yes` (answer yes to its question and
+take input defaults), `--json`.
 
 ## Working with Wisp as an agent
 
 1. `wisp spec` (this), then `wisp show --json` to see what exists. In a project
    without a file, `wisp init --yes` writes one from its scripts.
-2. Edit `.wisp.json`. Give each bolt a short label and a `notes` line. Prefer inline
-   steps; add shared assets only when several bolts need the same thing. Keep paths
+2. Edit `.wisp.json`. Give each bolt a short label and a `notes` line. Keep paths
    relative.
 3. `wisp check --json`: exit code 1 means errors. Fix them until `errors` is 0.
 4. `wisp <bolt> --dry-run --json`: confirm the plan and where each command would run.
@@ -174,15 +201,16 @@ Run flags: `--dry-run` (show what would happen and where, change nothing), `--in
 5. If `check` shows commands waiting for trust, ask the user to run `wisp trust`.
 6. `wisp <bolt> --inline` to run and read the output directly, or `--detach` for
    servers and then `wisp logs <name>` / `wisp ps --json` / `wisp down <bolt>`.
-7. For checks, write a job (`"job": true`): `wisp Check --json` gives `ok` and a
-   `history` id; `wisp history <id> --log <n>` prints the failing step's output.
+7. For checks, mark each command `"finishes": true`: `wisp Check --json` gives `ok` and
+   a `history` id; `wisp history <id> --log <n>` prints the failing step's output.
 
 ## The TUI
 
 `wisp` at a terminal opens it. Everything above can be done there without writing JSON:
 a folder with no file is offered a setup; `e` edits the selected bolt through forms
-(add, change, move, remove steps; its name and notes; make it a job), or, on the workspace
-list, the workspace's name, icon and notes; `a` adds a bolt, `N` a personal workspace; `v` shows a bolt whole and read-only, its dependencies opened up;
+(add, change, move, remove steps, and `t` runs one together with the one before; its name,
+notes, what a failure does, its question and its inputs), or, on the workspace
+list, the workspace's name, icon and notes; `a` adds a bolt, `N` a personal workspace; the selected bolt is shown whole below the list, its dependencies opened up, and `⏎` runs it in that same box, step by step;
 `p` (or `2`) shows what is running, grouped by the bolt that started it, with live
 output (`[` and `]` switch to a command's details and past runs); `h` (or `3`) the
 history of every run, `D` there deleting runs; `/` filters, and in a log full screen (`f`) or an open run of
@@ -198,4 +226,5 @@ CLI instead.
   Without `--json`, errors go to stderr.
 - Exit 0: everything ran. Exit 1: a step failed, `check` found errors, or the command
   was refused (the message says why, and usually what to run instead).
-- Without a terminal Wisp never prompts: `wisp` with no bolt lists the bolts.
+- Without a terminal Wisp never prompts: `wisp` with no bolt lists the bolts, and a bolt
+  that asks first stops with `CONFIRM_NEEDED` unless given `--yes`.

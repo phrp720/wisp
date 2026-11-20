@@ -14,17 +14,18 @@ const site = "https://willowisp.dev";
  */
 const LLMS = `# Wisp
 
-> Wisp starts any project from anywhere with one word: the database, the server, the editor and the page a task needs, opened and running in order. A \`.wisp.json\` next to the code describes it; \`wisp <bolt>\` runs it. Free and open source, for macOS, Linux and Windows.
+> Wisp runs everyday tasks with one word each: start a project's database, server and page; run the checks; back up; redeploy. A \`.wisp.json\` next to the code, or a workspace of your own, lists each task's steps; \`wisp <bolt>\` runs them from any terminal, on a laptop or a server. Free and open source, for macOS, Linux and Windows.
 
 The complete reference for agents, the file format, every command, JSON output and exit codes, is [llms-full.txt](${site}/llms-full.txt). The installed CLI prints the same text with \`wisp help agents\`.
 
 ## Docs
 
 - [Getting started](${site}/docs/getting-started): install, write the first bolt, run it
+- [Recipes](${site}/docs/recipes): the dev stack, checks before a push, a deploy that asks first, a nightly backup that tells you if it fails
 - [The .wisp.json file](${site}/docs/file): every kind of step, dependencies, several operating systems
-- [Jobs and history](${site}/docs/jobs): runs that stop at the first failure, kept like CI runs
+- [Runs and history](${site}/docs/runs): commands that finish, failures, and every run kept like a CI run
 - [What's running](${site}/docs/running): background commands, logs, stopping, restart on crash
-- [Settings](${site}/docs/settings): which editor opens folders and files, where commands run
+- [Settings](${site}/docs/settings): which editor opens folders and files, where commands run, notifications
 - [Trust](${site}/docs/trust): why a cloned repository's commands wait for approval
 - [Commands](${site}/docs/commands): every command, option and environment variable
 - [File reference](${site}/docs/reference): every field of a .wisp.json
@@ -35,7 +36,7 @@ The complete reference for agents, the file format, every command, JSON output a
 - [The dashboard](${site}/docs/dashboard): the screen \`wisp\` opens in your terminal
 `;
 
-const description = "Start any project from anywhere, with one word: the database, the server and the page, without hunting for the folder or remembering the commands. Free and open source.";
+const description = "Your everyday tasks, one word each: start the dev stack, run the checks, back up, redeploy. Written once, run from any terminal, on your laptop or a server. Free and open source.";
 
 export default defineConfig({
   async buildEnd(config) {
@@ -72,6 +73,7 @@ export default defineConfig({
           text: "Start here",
           items: [
             { text: "Getting started", link: "/docs/getting-started" },
+            { text: "Recipes", link: "/docs/recipes" },
             { text: "Questions", link: "/docs/questions" },
           ],
         },
@@ -80,7 +82,7 @@ export default defineConfig({
           items: [
             { text: "The dashboard", link: "/docs/dashboard" },
             { text: "What's running", link: "/docs/running" },
-            { text: "Jobs and history", link: "/docs/jobs" },
+            { text: "Runs and history", link: "/docs/runs" },
           ],
         },
         {

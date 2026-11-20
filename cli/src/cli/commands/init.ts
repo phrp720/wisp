@@ -62,7 +62,7 @@ export const init: CommandDef<{ force?: boolean; yes?: boolean; print?: boolean;
       const chosen = wanted
         ? await checklist(
             "Which bolts should Wisp set up?",
-            suggestion.bolts.map((bolt) => ({ label: bolt.label, ...(bolt.job ? { tag: "job" } : {}), hint: bolt.steps.join(", then ") })),
+            suggestion.bolts.map((bolt) => ({ label: bolt.label, hint: bolt.steps.join(", then ") })),
           )
         : [];
       if (!chosen) {

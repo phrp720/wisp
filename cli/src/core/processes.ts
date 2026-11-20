@@ -1,10 +1,10 @@
 import { spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { closeSync, openSync, readFileSync, readSync, statSync } from "node:fs";
-import { mkdir, open, readdir, rm, stat } from "node:fs/promises";
+import { open, readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 
-import { currentOS, readJson, stateDir, withLock, writeJson } from "./paths.js";
+import { currentOS, privateDir, readJson, stateDir, withLock, writeJson } from "./paths.js";
 import { cleanOutput, stripAnsi } from "./ansi.js";
 import { listHistory } from "./history.js";
 import { exitFileFor, recordExit, underTerminal } from "./shell.js";
@@ -128,16 +128,15 @@ export function newRunId(): string {
 
 /** Where a window run's shell writes its PID. */
 export async function pidFileFor(id: string): Promise<string> {
-  await mkdir(logsDir(), { recursive: true });
+  await privateDir(logsDir());
   return join(logsDir(), `${id}.pid`);
 }
 
 export async function listRuns(): Promise<RunStatus[]> {
   const runs = await loadRuns();
-  // One look for zombies across every run, rather than one per run.
-  const pids = runs.map(pidOf).filter((pid) => signalable(pid));
-  const dead = zombies(pids);
-  const listed = runs.map((run) => withStatus(run, dead)).sort((left, right) => right.startedAt.localeCompare(left.startedAt));
+  // One look at the process table across every run, rather than one per run.
+  const facts = processFacts(runs.map(pidOf).filter((pid) => signalable(pid)));
+  const listed = runs.map((run) => withStatus(run, facts)).sort((left, right) => right.startedAt.localeCompare(left.startedAt));
   // A running command's log is only ever appended to: held to its cap here, since Wisp is
   // asked about runs often (the dashboard every second or two, any `wisp` command).
   await Promise.all(listed.map((run) => (run.alive && run.log ? trimLog(run.log).catch(() => false) : false)));
@@ -312,10 +311,10 @@ export interface StartResult {
  * and is left to run; one that exits non-zero inside it failed, and says why.
  */
 export async function startRun(request: StartRequest): Promise<StartResult> {
-  await mkdir(logsDir(), { recursive: true });
+  await privateDir(logsDir());
   const id = newRunId();
   const log = join(logsDir(), `${id}.log`);
-  const handle = await open(log, "a");
+  const handle = await open(log, "a", 0o600);
 
   // Under a terminal, so it writes what you would see in one: colours and all. And with
   // its exit code kept, so "it finished" and "it crashed" can be told apart afterwards.
@@ -402,7 +401,7 @@ function info(request: RunInfo): RunInfo {
  */
 export function stopRun(run: Run): boolean {
   const pid = pidOf(run);
-  if (!pid || !isAlive(pid)) return false;
+  if (!pid || !withStatus(run).alive) return false;
   return stopTree(pid, run.shim ?? false);
 }
 
@@ -541,7 +540,7 @@ export async function logSize(file: string): Promise<number> {
 
 export function isAlive(pid: number): boolean {
   if (!signalable(pid)) return false;
-  return !zombies([pid]).has(pid);
+  return !processFacts([pid]).get(pid)?.zombie;
 }
 
 function signalable(pid: number): boolean {
@@ -555,39 +554,71 @@ function signalable(pid: number): boolean {
   }
 }
 
+export interface ProcessFacts {
+  zombie: boolean;
+  startedMs?: number;
+}
+
 /**
  * Which of these processes have exited but not been collected by their parent — zombies.
  * They still answer a signal, so without this a server that died under a parent that is
  * suspended, or busy, looks like it is running for as long as that parent lives.
  */
-export function zombies(pids: number[]): Set<number> {
-  const found = new Set<number>();
-  if (pids.length === 0 || currentOS() === "win32") return found;
+export function processFacts(pids: number[], now = Date.now()): Map<number, ProcessFacts> {
+  const facts = new Map<number, ProcessFacts>();
+  if (pids.length === 0 || currentOS() === "win32") return facts;
 
   if (currentOS() === "linux") {
+    const boot = bootTimeMs();
     for (const pid of pids) {
       try {
         // The state is the field after the parenthesised name, which may itself hold spaces.
         const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
-        if (stat.slice(stat.lastIndexOf(")") + 2, stat.lastIndexOf(")") + 3) === "Z") found.add(pid);
+        const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+        const ticks = Number(fields[19]);
+        facts.set(pid, { zombie: fields[0] === "Z", ...(boot !== undefined && Number.isFinite(ticks) ? { startedMs: boot + ticks * 10 } : {}) });
       } catch {
         // Gone between the signal and the read: not a zombie, just gone.
       }
     }
-    return found;
+    return facts;
   }
 
-  const result = spawnSync("ps", ["-o", "pid=,stat=", "-p", pids.join(",")], { encoding: "utf8" });
-  for (const [pid, stat] of parsePsStates(result.stdout ?? "")) if (stat.startsWith("Z")) found.add(pid);
-  return found;
+  const result = spawnSync("ps", ["-o", "pid=,stat=,etime=", "-p", pids.join(",")], { encoding: "utf8" });
+  for (const entry of parsePs(result.stdout ?? "")) {
+    facts.set(entry.pid, { zombie: entry.stat.startsWith("Z"), ...(entry.elapsed !== undefined ? { startedMs: now - entry.elapsed * 1000 } : {}) });
+  }
+  return facts;
 }
 
-/** `ps -o pid=,stat=` output as pid and state. */
-export function parsePsStates(output: string): [number, string][] {
+let bootTime: number | undefined;
+function bootTimeMs(): number | undefined {
+  if (bootTime !== undefined) return bootTime;
+  try {
+    const line = /^btime (\d+)$/m.exec(readFileSync("/proc/stat", "utf8"));
+    bootTime = line ? Number(line[1]) * 1000 : undefined;
+  } catch {
+    bootTime = undefined;
+  }
+  return bootTime;
+}
+
+export function parsePs(output: string): { pid: number; stat: string; elapsed?: number }[] {
   return output.split(/\r?\n/).flatMap((line) => {
-    const match = /^\s*(\d+)\s+(\S+)/.exec(line);
-    return match ? [[Number(match[1]), match[2] as string] as [number, string]] : [];
+    const match = /^\s*(\d+)\s+(\S+)(?:\s+(?:(\d+)-)?(?:(\d+):)?(\d+):(\d+))?\s*$/.exec(line);
+    if (!match) return [];
+    const [, pid, stat, days, hours, minutes, seconds] = match;
+    const elapsed = seconds === undefined ? undefined : Number(days ?? 0) * 86400 + Number(hours ?? 0) * 3600 + Number(minutes) * 60 + Number(seconds);
+    return [{ pid: Number(pid), stat: stat as string, ...(elapsed === undefined ? {} : { elapsed }) }];
   });
+}
+
+const SAME_START_MS = 60_000;
+
+function sameProcess(run: Run, facts: ProcessFacts | undefined): boolean {
+  const recorded = Date.parse(run.startedAt);
+  if (facts?.startedMs === undefined || !Number.isFinite(recorded)) return true;
+  return Math.abs(facts.startedMs - recorded) <= SAME_START_MS;
 }
 
 /** A run's PID: recorded, or — for a window — read from the file its shell wrote. */
@@ -613,10 +644,11 @@ function exitCodeOf(run: Run): number | undefined {
   }
 }
 
-function withStatus(run: Run, dead?: Set<number>): RunStatus {
+function withStatus(run: Run, facts?: Map<number, ProcessFacts>): RunStatus {
   const pid = pidOf(run);
   if (pid) {
-    const alive = dead ? signalable(pid) && !dead.has(pid) : isAlive(pid);
+    const known = signalable(pid) ? (facts ?? processFacts([pid])).get(pid) : undefined;
+    const alive = signalable(pid) && !known?.zombie && sameProcess(run, known);
     const exitCode = alive ? undefined : exitCodeOf(run);
     const waiting = alive ? waitingOn(run) : undefined;
     return { ...run, pid, alive, ...(exitCode === undefined ? {} : { exitCode }), ...(waiting ? { waiting } : {}) };

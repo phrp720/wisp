@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -8,6 +8,7 @@ import { forgetProject, knownProjects, recordProject, setOpenWithDefaults, getOp
 import { detectEnvironment } from "./environment.js";
 import { listRuns, matchRun, questionIn, startRun, stopRun, type RunStatus } from "./processes.js";
 import { loginShell, posixQuote, shellInvocation, windowsQuote } from "./shell.js";
+import { configDir, securePrivateFolders, stateDir } from "./paths.js";
 import { sameUrl } from "./url.js";
 import { matchWorkspace } from "./workspaces.js";
 import type { Workspace } from "./types.js";
@@ -116,6 +117,22 @@ describe("background runs", () => {
     expect((await listRuns())[0]!.alive).toBe(false);
   });
 
+  it.skipIf(process.platform === "win32")("never take a process that got their number later for their own, nor stop it", async () => {
+    const started = await startRun({ label: "server", command: "sleep 30", workspace: "/w/.wisp.json", workspaceName: "w", asset: "command:server", invocation: { file: "/bin/sh", args: ["-c", "sleep 30"] }, graceMs: 300 });
+    const file = join(stateDir(), "runs.json");
+    const runs = JSON.parse(await readFile(file, "utf8")) as { runs?: { id: string; startedAt: string }[] } | { id: string; startedAt: string }[];
+    const list = Array.isArray(runs) ? runs : (runs.runs ?? []);
+    const recorded = list.find((run) => run.id === started.run.id)!;
+    recorded.startedAt = new Date(Date.now() - 10 * 60_000).toISOString();
+    await writeFile(file, JSON.stringify(runs));
+
+    const [run] = await listRuns();
+    expect(run).toMatchObject({ id: started.run.id, alive: false });
+    expect(stopRun(run!)).toBe(false);
+    expect(() => process.kill(started.run.pid, 0)).not.toThrow();
+    process.kill(started.run.pid, "SIGKILL");
+  });
+
   it("know a question when their output ends on one, and not otherwise", () => {
     const asks = ["Ok to proceed? (y) ", "? Port 3000 is in use. Use 3001 instead? › (Y/n)", "Apply 3 migrations? [y/N]: ", "Password:", "Enter your GitHub token:", "Continue? (yes/no)", "\u001b[1mDelete all?\u001b[0m ", "line one\nWhat is your name? "];
     const says = ["Server ready on http://localhost:3000", "GET /api?x=1 200", "  ➜  Local:   http://localhost:5173/", "compiled successfully", "Tests 21 passed", "token refreshed", ""];
@@ -182,6 +199,28 @@ describe("background runs", () => {
     expect(matchRun("3f9", runs).match?.label).toBe("api");
     // Too short to tell apart: not a guess.
     expect(matchRun("3f", runs).match).toBeUndefined();
+  });
+});
+
+describe("on a machine others use too", () => {
+  it.skipIf(process.platform === "win32")("keeps Wisp's folders to you, an old open one included, and its files owner-only", async () => {
+    await mkdir(configDir(), { recursive: true, mode: 0o755 });
+    await chmod(configDir(), 0o755);
+    await setOpenWithDefaults({ folder: "Zed" });
+    const mode = async (path: string) => (await stat(path)).mode & 0o777;
+    expect(await mode(configDir())).toBe(0o700);
+    expect(await mode(join(configDir(), "config.json"))).toBe(0o600);
+
+    const started = await startRun({ label: "server", command: "echo secret", workspace: "/w/.wisp.json", workspaceName: "w", asset: "command:server", invocation: { file: "/bin/sh", args: ["-c", "echo secret"] }, graceMs: 200 });
+    expect(await mode(stateDir())).toBe(0o700);
+    expect(await mode(started.run.log!)).toBe(0o600);
+  });
+
+  it.skipIf(process.platform === "win32")("closes an open folder on any command, even one that only reads", async () => {
+    await mkdir(stateDir(), { recursive: true, mode: 0o755 });
+    await chmod(stateDir(), 0o755);
+    await securePrivateFolders();
+    expect((await stat(stateDir())).mode & 0o777).toBe(0o700);
   });
 });
 
@@ -261,11 +300,12 @@ describe("what a pane shows", () => {
     expect(cleanOutput("2026-11-17 17:11:06\tINFO\tServer listening on port: 5050\r\n")).not.toContain("\t");
   });
 
-  it("counts a zombie — exited, not yet collected — as stopped", async () => {
-    const { parsePsStates } = await import("./processes.js");
-    expect(parsePsStates("18189 Z\n25443 Ss\n")).toEqual([
-      [18189, "Z"],
-      [25443, "Ss"],
+  it("counts a zombie — exited, not yet collected — as stopped, and reads how long each has run", async () => {
+    const { parsePs } = await import("./processes.js");
+    expect(parsePs("18189 Z       00:07\n25443 Ss   01:02:03\n  301 S  2-00:00:10\n")).toEqual([
+      { pid: 18189, stat: "Z", elapsed: 7 },
+      { pid: 25443, stat: "Ss", elapsed: 3723 },
+      { pid: 301, stat: "S", elapsed: 172810 },
     ]);
   });
 });

@@ -7,7 +7,7 @@ import type { Container } from "../core/docker.js";
 import type { HistoryEntry, HistoryStep, StepProgress } from "../core/history.js";
 import { tildify } from "../core/paths.js";
 import type { RunStatus } from "../core/processes.js";
-import type { StepKind, SwitchResult, SwitchTarget, TargetResult, WorkspaceRead } from "../core/types.js";
+import type { InputSpec, StepKind, SwitchResult, SwitchTarget, TargetResult, WorkspaceRead } from "../core/types.js";
 import { describeWait } from "../core/wait.js";
 import { type SetupSuggestion } from "./model.js";
 
@@ -22,7 +22,6 @@ export interface StepState {
 export type View =
   | { kind: "browse" }
   | { kind: "search"; query: string; index: number }
-  | { kind: "run" }
   | { kind: "check"; read?: WorkspaceRead; scroll: number }
   /** `then`: the bolt you pressed ⏎ on, run as soon as you say yes. */
   | { kind: "trust"; read: WorkspaceRead; then?: string }
@@ -53,8 +52,9 @@ export type View =
   | { kind: "new-workspace" }
   | { kind: "edit-workspace"; file: string; name: string; icon: string; notes: string; personal: boolean; local: boolean }
   | { kind: "delete-bolt"; file: string; bolt: string }
+  | { kind: "confirm-run"; file: string; bolt: string; question: string }
+  | { kind: "run-inputs"; file: string; workspace: string; bolt: string; specs: InputSpec[] }
   | { kind: "delete-workspace"; file: string; name: string; personal: boolean }
-  | { kind: "view"; file: string; bolt: string }
   /** Your own settings: the app for folders and files, where commands run. */
   | { kind: "settings" }
   /** Stopping a bolt that needed others: those too, or only it? */
@@ -70,7 +70,6 @@ export type View =
 const TAKES_ITS_OWN_KEYS: Record<View["kind"], boolean> = {
   browse: false,
   search: false,
-  run: false,
   check: false,
   trust: false, // the dashboard hands its keys to the trust dialog itself
   processes: false,
@@ -80,8 +79,9 @@ const TAKES_ITS_OWN_KEYS: Record<View["kind"], boolean> = {
   "new-workspace": true,
   "edit-workspace": true,
   "delete-bolt": true,
+  "confirm-run": true,
+  "run-inputs": true,
   "delete-workspace": true,
-  view: true,
   "stop-bolt": true,
   settings: true,
   setup: true,
@@ -99,7 +99,6 @@ export interface RunState {
   /** The workspace and bolt, so a retry knows what it is retrying. */
   read: WorkspaceRead;
   bolt: string;
-  job: boolean;
   dryRun: boolean;
   steps: StepState[];
   done: boolean;

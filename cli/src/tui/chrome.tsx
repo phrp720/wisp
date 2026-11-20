@@ -85,21 +85,21 @@ function TabLabel({ number, title, on }: { number: string; title: string; on: bo
 
 export function Footer({ view, message, notice, hint, columns = 0 }: { view: View; message?: string | undefined; notice?: Notice | undefined; hint?: string | undefined; columns?: number }) {
   const keys: Record<View["kind"], string> = {
-    browse: "⏎ run · v view · e edit · a add · x stop · / search · ? keys · q quit",
+    browse: "⏎ run · e edit · a add · x stop · / search · ? keys · q quit",
     editor: "",
     "new-bolt": "",
     "new-workspace": "",
     "edit-workspace": "",
     "delete-bolt": `Its steps go too; what it started keeps running · ${ASK_KEYS}`,
+    "confirm-run": `y or ← ⏎ runs it · esc cancels`,
+    "run-inputs": "",
     "delete-workspace": view.kind === "delete-workspace" && view.personal
       ? `Its file and bolts go; what it started keeps running · ${ASK_KEYS}`
       : `Only from this list; its .wisp.json stays in the repository · ${ASK_KEYS}`,
-    view: "",
     "stop-bolt": "",
     settings: "",
     setup: "",
     search: "type to search · ↑↓ choose · ⏎ run · esc back",
-    run: "",
     check: "↑↓ scroll · t trust · esc back",
     trust: "",
     processes: "↑↓ choose · [ ] tabs · f full log · x stop · r restart · ? keys · esc",

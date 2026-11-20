@@ -5,11 +5,12 @@ import { isAbsolute, join, resolve } from "node:path";
 import { WispError } from "../../core/errors.js";
 import { forgetHistory, getHistory, listHistory, withWorkspaceNames, type HistoryEntry } from "../../core/history.js";
 import { tildify } from "../../core/paths.js";
-import { downBolt, matchBolt, resolveBolt, switchToWorkspace } from "../../core/switch.js";
+import { downBolt, inputsFor, keepsRunning, matchBolt, questionsFor, resolveBolt, switchToWorkspace } from "../../core/switch.js";
 import type { Bolt, WorkspaceRead } from "../../core/types.js";
 import { ago, bold, cyan, dim, green, kindLabel, plural, red, title, yellow } from "../format.js";
 import { emitJson, everything, findWorkspaceForDependency, maybeProject, resolveRun } from "../lib/context.js";
 import type { CommandDef } from "../lib/define.js";
+import { beforeRun } from "../lib/ask.js";
 import { named, resultLine } from "../lib/render.js";
 
 /** The bolt a lifecycle command means, by the same rules as running one. */
@@ -54,18 +55,28 @@ export const down: CommandDef<{ deps?: boolean; dryRun?: boolean; json?: boolean
   },
 };
 
-export const restart: CommandDef<{ deps?: boolean }> = {
+export const restart: CommandDef<{ deps?: boolean; yes?: boolean; input?: string[] }> = {
   name: "restart",
   summary: "Take a bolt down and run it again",
   args: [
     ["[workspace]", "workspace name or file; omitted uses this directory's project"],
     ["[bolt]", "which bolt"],
   ],
-  options: [["--deps", "restart the bolts it depends on too"]],
+  options: [
+    ["--deps", "restart the bolts it depends on too"],
+    ["--input <name=value>", "a value the bolt asks for, like --input env=staging; once for each", []],
+    ["-y, --yes", "don't ask: answer yes, and take each input's default"],
+  ],
   examples: ["wisp restart api"],
 
   async run([first, second], options) {
     const { read, bolt } = await target(first, second);
+    const inputs = await beforeRun(read.workspace, bolt, options);
+    if (!inputs) {
+      console.log(dim("Nothing ran."));
+      process.exitCode = 1;
+      return;
+    }
     const find = { findWorkspace: findWorkspaceForDependency };
     const stopped = await downBolt(read.workspace, bolt, { deps: options.deps ?? false, echo: true }, find);
     console.log(`${green("down")} ${title(read.workspace)} ${dim("·")} ${bold(bolt.label)} ${dim(`— ${plural(stopped.stopped.length, "command")} stopped`)}`);
@@ -74,7 +85,7 @@ export const restart: CommandDef<{ deps?: boolean }> = {
     if (stopped.stopped.length > 0) await new Promise((done) => setTimeout(done, 500));
 
     console.log(`${green("running")} ${title(read.workspace)} ${dim("·")} ${bold(bolt.label)}`);
-    const result = await switchToWorkspace(read.workspace, { bolt: bolt.id, echo: true, onResult: (step) => console.log(resultLine(step)) }, find);
+    const result = await switchToWorkspace(read.workspace, { bolt: bolt.id, inputs, echo: true, watched: process.stdout.isTTY === true || process.stderr.isTTY === true, onResult: (step) => console.log(resultLine(step)) }, find);
     if (!result.ok) process.exitCode = 1;
   },
 };
@@ -107,12 +118,11 @@ export const history: CommandDef<{ all?: boolean; log?: string; clear?: boolean;
     for (const run of entries.slice(0, 30)) {
       const mark = run.running ? cyan("●") : run.interrupted ? yellow("!") : run.ok ? green("✓") : red("✗");
       const where = here ? "" : dim(` · ${run.workspaceName}`);
-      const tag = run.job ? dim(" job") : "";
       const context = [TRIGGERS[run.trigger ?? ""], run.git ? `${run.git.branch} @ ${run.git.commit}` : ""].filter(Boolean).join(" · ");
       const number = run.number ? dim(` #${run.number}`) : "";
       const state = run.running ? ` · running, step ${Math.min(run.steps.length + 1, run.total ?? run.steps.length + 1)} of ${run.total ?? "?"}` : run.interrupted ? " · interrupted" : "";
       const took = run.interrupted ? "" : ` · ${duration(run)}`;
-      console.log(`${mark} ${bold(run.id)}  ${run.bolt}${number}${tag}${where} ${dim(`· ${ago(run.startedAt)} ago${took}${state}${context ? ` · ${context}` : ""}`)}`);
+      console.log(`${mark} ${bold(run.id)}  ${run.bolt}${number}${where} ${dim(`· ${ago(run.startedAt)} ago${took}${state}${context ? ` · ${context}` : ""}`)}`);
     }
     if (entries.length > 30) console.log(dim(`… ${entries.length - 30} older`));
   },
@@ -131,11 +141,12 @@ async function showEntry(entry: HistoryEntry, options: { log?: string; json?: bo
   const mark = entry.running ? cyan("running") : entry.interrupted ? yellow("interrupted") : entry.ok ? green("passed") : red("failed");
   const context = [TRIGGERS[entry.trigger ?? ""] ? `from ${TRIGGERS[entry.trigger ?? ""]}` : "", entry.git ? `${entry.git.branch} @ ${entry.git.commit}` : ""].filter(Boolean).join(" · ");
   console.log(`${mark} ${bold(entry.bolt)} ${dim(`· ${entry.workspaceName} · ${new Date(entry.startedAt).toLocaleString()}${entry.interrupted ? "" : ` · ${duration(entry)}`}${context ? ` · ${context}` : ""}`)}`);
+  if (entry.inputs) console.log(dim(`  with ${Object.entries(entry.inputs).map(([name, value]) => `${name}=${value}`).join(" ")}`));
   entry.steps.forEach((step, index) => {
     const markStep = !step.ok ? (step.skipped ? dim("–") : red("✗")) : step.skipped ? dim("–") : green("✓");
     const time = step.durationMs >= 1000 ? dim(` ${(step.durationMs / 1000).toFixed(1)}s`) : "";
     const detail = step.error ? ` ${red(step.error)}` : step.note ? ` ${dim(step.note)}` : "";
-    const log = step.log ? dim(`  [--log ${index + 1}]`) : "";
+    const log = `${step.together !== undefined ? dim(" · together") : ""}${step.log ? dim(`  [--log ${index + 1}]`) : ""}`;
     console.log(`  ${dim(String(index + 1).padStart(2))} ${markStep} ${dim(kindLabel(step.kind))} ${named(step.label, step.value)}${time}${detail}${log}`);
   });
   (entry.pending ?? []).forEach((step, offset) => {
@@ -188,7 +199,7 @@ const MARKER = "# Added by wisp";
 
 export const hook: CommandDef<{ remove?: boolean; list?: boolean; force?: boolean }> = {
   name: "hook",
-  summary: "Run a bolt from a git hook — a job before every push, say",
+  summary: "Run a bolt from a git hook — the checks before every push, say",
   args: [
     ["[hook]", `which hook: ${HOOKS.join(", ")}`],
     ["[bolt]", "the bolt it runs"],
@@ -243,14 +254,19 @@ export const hook: CommandDef<{ remove?: boolean; list?: boolean; force?: boolea
     const script = `#!/bin/sh
 ${MARKER} — \`wisp hook ${name} --remove\` takes it out.
 command -v wisp >/dev/null 2>&1 || { echo "wisp is not on PATH — install it, or remove this hook: .git/hooks/${name}" >&2; exit 1; }
-WISP_TRIGGER=hook exec wisp use '${here.workspace.file.replace(/'/g, `'\\''`)}' '${bolt.label.replace(/'/g, `'\\''`)}'
+WISP_TRIGGER=hook exec wisp use '${here.workspace.file.replace(/'/g, `'\\''`)}' '${bolt.label.replace(/'/g, `'\\''`)}' --yes
 `;
     await mkdir(dir, { recursive: true });
     await writeFile(path, script, "utf8");
     await chmod(path, 0o755);
 
     console.log(`${green("✓")} ${name} runs ${bold(bolt.label)} ${dim(`— ${tildify(path)}`)}`);
-    if (!bolt.job) console.log(yellow(`! "${bolt.label}" is not a job, so a failure would not stop the ${name}. Add "job": true to it.`));
+    const running = keepsRunning(here, bolt);
+    if (running.length > 0) console.log(yellow(`! ${running.map((label) => `"${label}"`).join(", ")} ${running.length === 1 ? "keeps" : "keep"} running, so ${running.length === 1 ? "its" : "their"} result can't stop the ${name}. Mark ${running.length === 1 ? "it" : "them"} "finishes": true.`));
+    const questions = await questionsFor(here.workspace, bolt, { findWorkspace: findWorkspaceForDependency });
+    if (questions.length > 0) console.log(yellow(`! it asks before it runs (${questions.join(" ")}); from the hook it runs without asking`));
+    const unanswerable = (await inputsFor(here.workspace, bolt, { findWorkspace: findWorkspaceForDependency })).filter((spec) => spec.default === undefined);
+    if (unanswerable.length > 0) console.log(yellow(`! a hook can't answer ${unanswerable.map((spec) => spec.name).join(", ")}: give ${unanswerable.length === 1 ? "it a default" : "them defaults"}, or the ${name} stops`));
     if (!here.workspace.trusted && here.withheld.length > 0) console.log(yellow("! its commands wait for `wisp trust` — until then the hook stops, rather than pass without checking"));
   },
 };

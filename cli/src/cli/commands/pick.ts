@@ -63,7 +63,6 @@ export const pick: CommandDef<PickOptions> = {
       workspace.bolts.map((bolt) => ({
         label: bolt.label,
         ...(upMark(workspace, bolt, runs) ? { mark: upMark(workspace, bolt, runs) } : {}),
-        ...(bolt.job ? { tag: "job" } : {}),
         slug: slugify(bolt.label),
         ...(bolt.notes ? { hint: bolt.notes } : {}),
       })),

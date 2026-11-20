@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 
 import { configPath, expandHome, readJson, withLock, writeJson } from "./paths.js";
-import type { Config, KnownProject, OpenWithDefaults } from "./types.js";
+import type { Config, KnownProject, NotifySettings, OpenWithDefaults } from "./types.js";
 
 export const CONFIG_VERSION = 1;
 
@@ -71,6 +71,23 @@ export async function setMouse(on: boolean): Promise<boolean> {
     return on ? rest : { ...rest, mouse: false };
   });
   return config.mouse ?? true;
+}
+
+export async function getNotify(): Promise<Required<Pick<NotifySettings, "when">> & NotifySettings> {
+  const config = await loadConfig().catch(() => undefined);
+  return { ...config?.notify, when: config?.notify?.when ?? "failures" };
+}
+
+export async function setNotify(change: NotifySettings): Promise<Required<Pick<NotifySettings, "when">> & NotifySettings> {
+  const config = await updateConfig((current) => {
+    const next: NotifySettings = { ...current.notify, ...change };
+    if (next.when === "failures") delete next.when;
+    if (!next.webhook?.trim()) delete next.webhook;
+    else next.webhook = next.webhook.trim();
+    const { notify: _previous, ...rest } = current;
+    return Object.keys(next).length > 0 ? { ...rest, notify: next } : rest;
+  });
+  return { ...config.notify, when: config.notify?.when ?? "failures" };
 }
 
 /**
@@ -153,6 +170,14 @@ function normalizeConfig(value: unknown): Config {
   }
 
   if (typeof value["mouse"] === "boolean") config.mouse = value["mouse"];
+
+  const notify = value["notify"];
+  if (isRecord(notify)) {
+    const settings: NotifySettings = {};
+    if (notify["when"] === "all" || notify["when"] === "off") settings.when = notify["when"];
+    if (typeof notify["webhook"] === "string" && notify["webhook"].trim()) settings.webhook = notify["webhook"].trim();
+    if (Object.keys(settings).length > 0) config.notify = settings;
+  }
 
   const projects = value["projects"];
   if (Array.isArray(projects)) {

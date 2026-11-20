@@ -100,18 +100,18 @@ too. `wisp stop --all` stops every command Wisp started.
 → [Up and down](./running#up-and-down)
 :::
 
-::: details What's the difference between a job and a starter?
-A starter starts things and leaves them running: servers, databases. A job runs each
-command to the end, in front of you, stops at the first failure, and ends with ✓ or ✗:
-tests, builds, cleanups. If it finishes, make it a job.
+::: details Why does Wisp wait for some commands and not others?
+A command keeps running by default, like a server: Wisp starts it and moves on. One marked
+`"finishes": true`, like a test, a build or a backup, is waited for, in front of you, and ends
+with ✓ or ✗. If it finishes, mark it so.
 
-→ [A job, or a starter?](./jobs#a-job-or-a-starter)
+→ [Keeps running, or finishes?](./runs#keeps-running-or-finishes)
 :::
 
 ::: details A check failed. Do I have to run it all again?
 No: `wisp Check --retry`, or `r` in the dashboard, runs from the step that failed.
 
-→ [Jobs and history](./jobs)
+→ [Runs and history](./runs)
 :::
 
 ## Your setup
@@ -126,6 +126,10 @@ Yes: press `s` in the dashboard, or use `wisp open-with`.
 Yes, and it's handy there: SSH in and `wisp restart shop` (or `down`, `logs shop -f`) from
 wherever you land, without finding the app or remembering how it starts. Install Wisp on
 the server and run the bolt once, or `wisp scan /srv`, so it knows where things are.
+
+It's built to be safe there: nothing listens on the network, its folders (logs, history,
+settings) are readable by your account only, a changed `.wisp.json` runs nothing until it's
+trusted again, and `wisp notify` can tell you when a cron run fails.
 :::
 
 ::: details Does it work on Windows, over SSH, in tmux?

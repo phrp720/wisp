@@ -11,6 +11,8 @@ import { getOpenWithDefaults } from "./config.js";
 import { composeStopArgs, composeUpArgs, type Container } from "./docker.js";
 import { detectEnvironment, type Environment } from "./environment.js";
 import { WispError, describe } from "./errors.js";
+import { fillTarget, fillText, type InputValues } from "./inputs.js";
+import { notifyRunEnd } from "./notify.js";
 import { gitState, newHistoryId, recordHistory, stepLogFile, stepLogPath, type HistoryEntry, type HistoryStep } from "./history.js";
 import { currentOS, expandHome, stateDir, withLock } from "./paths.js";
 import { listRuns, newRunId, pidFileFor, recordWindowRun, runningFor, startRun, stopRun, tidyState, trimLog, type RunStatus } from "./processes.js";
@@ -22,6 +24,7 @@ import type {
   AssetBase,
   Bolt,
   BoltStep,
+  InputSpec,
   Invocation,
   OpenWithDefaults,
   SwitchOptions,
@@ -30,6 +33,7 @@ import type {
   TargetKind,
   TargetResult,
   Workspace,
+  WorkspaceRead,
 } from "./types.js";
 
 /**
@@ -53,18 +57,17 @@ export interface RunDeps {
 export interface PlannedStep {
   target: SwitchTarget;
   workspace: Workspace;
-  /** The bolt it comes from is a job: its commands run attached, and a failure stops the run. */
-  job: boolean;
+  /** The bolt it comes from carries on after one of its steps fails. */
+  keepGoing: boolean;
   bolt: string;
 }
 
 /**
- * Run a bolt — or with `all`, everything — and report what happened to each step.
+ * Run a bolt and report what happened to each step.
  *
- * Steps run one after another, so the order written is the order things appear. What a
- * failure does depends on what failed: a wait, or anything in a job, stops the run — the
- * tests failing must not be followed by the deploy — while a link that would not open in
- * an ordinary bolt is reported and the rest carries on.
+ * Steps run one after another, so the order written is the order things appear. A failure
+ * stops the run — the tests failing must not be followed by the deploy — unless the bolt
+ * the failed step belongs to says to keep going.
  */
 export async function switchToWorkspace(
   workspace: Workspace,
@@ -73,14 +76,9 @@ export async function switchToWorkspace(
 ): Promise<SwitchResult> {
   const bolt = options.bolt ? resolveBolt(workspace, options.bolt) : undefined;
 
-  const steps: PlannedStep[] = options.all
-    ? collectTargets(workspace, options.only).map((target) => ({ target, workspace, job: false, bolt: "everything" }))
-    : bolt
-      ? await planBolt(workspace, bolt, { ...(options.only ? { only: options.only } : {}), ...deps })
-      : [];
-
-  const result = await runPlan(workspace, steps, { ...options, label: bolt?.label ?? "everything", job: bolt?.job ?? false }, deps);
-  return { ...result, ...(bolt && !options.all ? { bolt } : {}) };
+  const steps: PlannedStep[] = bolt ? fillPlan(await planBolt(workspace, bolt, deps), options.inputs ?? {}) : [];
+  const result = await runPlan(workspace, steps, { ...options, label: bolt?.label ?? "" }, deps);
+  return { ...result, ...(bolt ? { bolt } : {}) };
 }
 
 /**
@@ -95,7 +93,7 @@ export async function planRetry(
 ): Promise<PlannedStep[]> {
   if (entry.ok) throw new WispError(`That run of "${entry.bolt}" passed — there is nothing to retry`, "NOTHING_TO_RETRY");
   const label = entry.bolt.replace(/ \((retry|down)\)$/, "");
-  const plan = await planBolt(workspace, resolveBolt(workspace, label), deps.findWorkspace ? { findWorkspace: deps.findWorkspace } : {});
+  const plan = fillPlan(await planBolt(workspace, resolveBolt(workspace, label), deps.findWorkspace ? { findWorkspace: deps.findWorkspace } : {}), entry.inputs ?? {});
   // A retry's own history holds only the steps it retried: match those by label instead.
   const steps = entry.steps;
   const byOrder = plan.length === steps.length && plan.every((step, at) => step.target.label === steps[at]?.label);
@@ -127,10 +125,11 @@ export function retryPlan(result: { plan?: PlannedStep[]; targets: TargetResult[
 export async function runPlan(
   workspace: Workspace,
   steps: PlannedStep[],
-  options: SwitchOptions & { label: string; job: boolean },
+  options: SwitchOptions & { label: string },
   deps: RunDeps = {},
 ): Promise<SwitchResult> {
   const dryRun = options.dryRun ?? false;
+  const inputs = options.inputs && Object.keys(options.inputs).length > 0 ? options.inputs : undefined;
   const record = (options.record ?? true) && !dryRun && steps.length > 0;
   const historyId = record ? newHistoryId() : undefined;
   const startedAt = new Date();
@@ -159,8 +158,8 @@ export async function runPlan(
     workspace: workspace.file,
     workspaceName: workspace.name,
     bolt: options.label,
-    job: options.job,
     ...(options.trigger ? { trigger: options.trigger } : {}),
+    ...(inputs ? { inputs } : {}),
     startedAt: startedAt.toISOString(),
     finishedAt: new Date().toISOString(),
     ok: done.ok,
@@ -180,35 +179,55 @@ export async function runPlan(
   let saving: Promise<void> = Promise.resolve();
   const save = (next: HistoryEntry) => (saving = saving.then(() => recordHistory(next)).catch(() => undefined));
 
+  const runOne = async (step: PlannedStep, index: number, alongside: PlannedStep[]): Promise<TargetResult> => {
+    const inline = !dryRun && attached(step, context);
+    options.onStep?.(step.target, { attached: inline });
+    const began = Date.now();
+    const shared = alongside.length > 1 && inline ? sideBySide(context, step.target, alongside) : { context, flush: () => undefined };
+    const outcome = dryRun ? preview(step, context) : await execute(step, index, shared.context);
+    shared.flush();
+    const result: TargetResult = { ...outcome, durationMs: Date.now() - began };
+    // Cut short by a stop, not broken: say so, rather than a signal's exit code.
+    if (options.signal?.aborted && !result.ok && !result.skipped) {
+      result.error = "stopped";
+      halted = "the run was stopped";
+    }
+    if (result.run && !result.note?.startsWith("already running")) context.started.push({ id: result.run });
+    options.onResult?.(result);
+    return result;
+  };
+
   try {
-    for (const [index, step] of steps.entries()) {
+    let index = 0;
+    while (index < steps.length) {
+      const first = steps[index] as PlannedStep;
+      let end = index + 1;
+      if (first.target.together !== undefined) while (end < steps.length && steps[end]?.target.together === first.target.together) end += 1;
+      const batch = steps.slice(index, end);
+
       if (options.signal?.aborted && !halted) halted = "the run was stopped";
       if (halted) {
-        const result: TargetResult = { ...step.target, ok: false, skipped: true, note: `not reached — ${halted}` };
-        results.push(result);
-        options.onResult?.(result);
+        for (const step of batch) {
+          const result: TargetResult = { ...step.target, ok: false, skipped: true, note: `not reached — ${halted}` };
+          results.push(result);
+          options.onResult?.(result);
+        }
+        index = end;
         continue;
       }
 
-      const inline = !dryRun && attached(step, context);
+      const inline = !dryRun && attached(first, context);
       if (record && historyId) await save(entry({ ok: false, running: true, log: inline ? stepLogFile(historyId, index) : undefined }));
-      options.onStep?.(step.target, { attached: inline });
-      const began = Date.now();
-      const outcome = dryRun ? preview(step, context) : await execute(step, index, context);
-      const result: TargetResult = { ...outcome, durationMs: Date.now() - began };
-      // Cut short by a stop, not broken: say so, rather than a signal's exit code.
-      if (options.signal?.aborted && !result.ok && !result.skipped) {
-        result.error = "stopped";
-        halted = "the run was stopped";
-      }
-      if (result.run && !result.note?.startsWith("already running")) context.started.push({ id: result.run });
-      results.push(result);
-      options.onResult?.(result);
+      const outcomes = batch.length === 1 ? [await runOne(first, index, batch)] : await Promise.all(batch.map((step, offset) => runOne(step, index + offset, batch)));
+      results.push(...outcomes);
 
-      if (!result.ok && !result.skipped && !halted) {
-        if (step.target.kind === "wait") halted = "an earlier wait gave up";
-        else if (step.job || options.job) halted = `"${step.target.label}" failed`;
+      for (const [offset, result] of outcomes.entries()) {
+        const step = batch[offset] as PlannedStep;
+        if (!result.ok && !result.skipped && !halted && !step.keepGoing) {
+          halted = step.target.kind === "wait" ? "an earlier wait gave up" : `"${step.target.label}" failed`;
+        }
       }
+      index = end;
     }
   } catch (error) {
     if (record && historyId) await save(entry({ ok: false, running: false }));
@@ -224,7 +243,46 @@ export async function runPlan(
     await tidyState().catch(() => undefined);
   }
 
-  return { workspace, targets: results, dryRun, ok, plan: steps, ...(historyId ? { historyId } : {}) };
+  if (!dryRun && steps.length > 0) {
+    const failed = results.find((result) => !result.ok && !result.skipped);
+    await notifyRunEnd(
+      {
+        ok,
+        bolt: options.label,
+        workspace: workspace.name,
+        ...(failed ? { failedStep: failed.label } : {}),
+        ...(historyId ? { historyId } : {}),
+        durationMs: Date.now() - startedAt.getTime(),
+        watched: options.watched ?? true,
+      },
+      { platform: platformOf(context), environment: context.environment },
+    ).catch(() => undefined);
+  }
+
+  return { workspace, targets: results, dryRun, ok, plan: steps, ...(historyId ? { historyId } : {}), ...(inputs ? { inputs } : {}) };
+}
+
+function sideBySide(context: Context, target: SwitchTarget, alongside: PlannedStep[]): { context: Context; flush: () => void } {
+  const width = Math.max(...alongside.map((step) => step.target.label.length));
+  const prefix = `${target.label.padEnd(width)} │ `;
+  const echo = context.options.echo ?? false;
+  let open = "";
+  const emit = (line: string) => {
+    if (echo) process.stdout.write(`${prefix}${line}\n`);
+    context.options.onOutput?.(target, `${prefix}${line}\n`);
+  };
+  const onOutput = (_target: SwitchTarget, chunk: string) => {
+    const lines = (open + chunk.replace(/\r(?!\n)/g, "\n")).split(/\r?\n/);
+    open = lines.pop() ?? "";
+    for (const line of lines) emit(line);
+  };
+  return {
+    context: { ...context, options: { ...context.options, echo: false, onOutput } },
+    flush: () => {
+      if (open) emit(open);
+      open = "";
+    },
+  };
 }
 
 function toHistoryStep(result: TargetResult): HistoryStep {
@@ -235,6 +293,8 @@ function toHistoryStep(result: TargetResult): HistoryStep {
     ...(result.workspace ? { workspace: result.workspace } : {}),
     ok: result.ok,
     ...(result.skipped ? { skipped: true } : {}),
+    ...(result.finishes ? { finishes: true } : {}),
+    ...(result.together !== undefined ? { together: result.together } : {}),
     ...(result.error ? { error: result.error } : {}),
     ...(result.note ? { note: result.note } : {}),
     durationMs: result.durationMs ?? 0,
@@ -284,18 +344,17 @@ function platformOf(context: Context): Platform {
  * A dependency runs where it is listed, once: a bolt needing "Database" twice over — or
  * two bolts both needing it — starts it a single time. A dependency that leads back to a
  * bolt already being expanded is a cycle, and is refused before anything has opened.
- * Each step remembers whether its own bolt is a job, since a service a job depends on
- * still starts the way services start.
+ * Each step remembers whether its own bolt keeps going after a failure.
  */
 export async function planBolt(
   workspace: Workspace,
   bolt: Bolt,
-  options: { only?: TargetKind[]; findWorkspace?: (ref: string) => Promise<Workspace> } = {},
+  options: { findWorkspace?: (ref: string) => Promise<Workspace> } = {},
 ): Promise<PlannedStep[]> {
-  const wanted = new Set<string>(options.only?.length ? options.only : DEFAULT_ORDER);
   const seenAssets = new Set<string>();
   const expanded = new Set<string>();
   const plan: PlannedStep[] = [];
+  const groups = new Map<string, number>();
 
   const expand = async (owner: Workspace, current: Bolt, stack: string[]): Promise<void> => {
     const key = `${owner.file}#${current.id}`;
@@ -307,15 +366,25 @@ export async function planBolt(
     expanded.add(key);
 
     const byId = new Map(collectTargets(owner).map((target) => [target.id, target]));
-    const push = (target: SwitchTarget) =>
+    let group: number | undefined;
+    const push = (target: SwitchTarget) => {
+      const placed = owner === workspace ? target : { ...target, workspace: owner.name };
       plan.push({
-        target: owner === workspace ? target : { ...target, workspace: owner.name },
+        target: group === undefined ? placed : { ...placed, together: group },
         workspace: owner,
-        job: current.job ?? false,
+        keepGoing: current.keepGoing ?? false,
         bolt: current.label,
       });
+    };
 
     for (const step of current.steps) {
+      if (step.together === undefined) group = undefined;
+      else {
+        const groupKey = `${key}#${step.together}`;
+        if (!groups.has(groupKey)) groups.set(groupKey, groups.size);
+        group = groups.get(groupKey);
+      }
+
       if (step.kind === "wait") {
         const label = describeWait(step.wait);
         push({ kind: "wait", id: `wait:${plan.length}`, label, value: label, wait: step.wait });
@@ -342,7 +411,7 @@ export async function planBolt(
 
       // Absent: withheld for want of trust, or for another OS. Either way, not opened.
       const target = byId.get(step.id);
-      if (!target || !wanted.has(target.kind)) continue;
+      if (!target) continue;
       const assetKey = `${owner.file}#${target.id}`;
       if (seenAssets.has(assetKey)) continue;
       seenAssets.add(assetKey);
@@ -482,11 +551,10 @@ type Route =
 export function routeFor(
   target: SwitchTarget,
   context: Pick<Context, "environment" | "defaults" | "options" | "lazyPlatform">,
-  job = false,
 ): Route {
-  // A job runs to completion where you can see it, and its result is the point: it is
-  // attached however Wisp was asked to run, unless the command itself says background.
-  const mode = target.background ? "background" : job ? "inline" : (context.options.mode ?? "auto");
+  // A command that finishes is waited for where you can see it, and its result is the
+  // point: it is attached however Wisp was asked to run.
+  const mode = target.finishes ? "inline" : target.background ? "background" : (context.options.mode ?? "auto");
   if (mode === "background") return { kind: "background" };
   if (mode === "inline") return { kind: "inline" };
 
@@ -532,7 +600,7 @@ function attached(step: PlannedStep, context: Context): boolean {
   if (step.target.kind === "compose") return true;
   if (step.target.kind !== "command") return false;
   try {
-    return routeFor(step.target, context, step.job).kind === "inline";
+    return routeFor(step.target, context).kind === "inline";
   } catch {
     return false;
   }
@@ -540,10 +608,10 @@ function attached(step: PlannedStep, context: Context): boolean {
 
 function describeRoute(target: SwitchTarget, step: PlannedStep, context: Context): string {
   try {
-    const route = routeFor(target, context, step.job);
+    const route = routeFor(target, context);
     if (route.kind === "terminal") return `in ${route.terminal}`;
     if (route.kind === "background") return route.reason ?? "in the background";
-    if (route.kind === "inline") return step.job ? "attached — a failure stops the run" : "here, attached";
+    if (route.kind === "inline") return target.finishes ? "here, and waited for" : "here, attached";
     return `in a new ${route.kind} window`;
   } catch (error) {
     return describe(error);
@@ -552,7 +620,7 @@ function describeRoute(target: SwitchTarget, step: PlannedStep, context: Context
 
 async function runCommand(step: PlannedStep, index: number, context: Context): Promise<TargetResult> {
   const { target, workspace } = step;
-  const route = routeFor(target, context, step.job);
+  const route = routeFor(target, context);
 
   // Check, then start, as one step: two runs of the same bolt at once (two terminals, a
   // double ⏎) would otherwise both see nothing running and both start the server. The
@@ -563,8 +631,8 @@ async function runCommand(step: PlannedStep, index: number, context: Context): P
   }
 
   // A service that is already up stays up: starting "Database" again while Wisp's own
-  // run of it is going would start a second one fighting the first for its port. A job's
-  // commands always run — running them is the whole point.
+  // run of it is going would start a second one fighting the first for its port. A command
+  // that finishes always runs — running it is the whole point.
   if (route.kind !== "inline") {
     const running = await runningFor(workspace.file, target.id);
     if (running) return { ...target, ok: true, run: running.id, note: `already running (${running.id})` };
@@ -699,7 +767,7 @@ function runAttached(invocation: Invocation, target: SwitchTarget, context: Cont
   const echo = context.options.echo ?? false;
   if (context.options.signal?.aborted) return Promise.resolve(130);
   return new Promise((resolvePromise, reject) => {
-    const file = log ? createWriteStream(log, { flags: "a" }) : undefined;
+    const file = log ? createWriteStream(log, { flags: "a", mode: 0o600 }) : undefined;
     const child = spawn(invocation.file, invocation.args, {
       stdio: [echo ? "inherit" : "ignore", "pipe", "pipe"],
       // Not echoing means something else owns this terminal — the TUI. The command is
@@ -798,12 +866,12 @@ export async function downBolt(
   const owners = options.deps ? uniqueBolts(plan) : [{ workspace, bolt: bolt.label }];
   const teardownSteps: PlannedStep[] = plan
     .filter((step) => step.target.kind === "compose" && step.target.compose)
-    .map((step) => ({ ...step, job: true, target: composeTarget(step.target.compose!, "stop") }));
+    .map((step) => ({ ...step, keepGoing: false, target: composeTarget(step.target.compose!, "stop") }));
   for (const owner of owners) {
     const source = owner.workspace.bolts.find((entry) => entry.label === owner.bolt);
     if (!source?.down?.length) continue;
-    const steps = await planBolt(owner.workspace, { ...source, steps: source.down, job: true });
-    teardownSteps.push(...steps.map((step) => ({ ...step, job: true })));
+    const steps = await planBolt(owner.workspace, { ...source, steps: source.down, keepGoing: false });
+    teardownSteps.push(...steps.map((step) => ({ ...step, target: step.target.kind === "command" ? { ...step.target, finishes: true } : step.target })));
   }
 
   if (teardownSteps.length === 0) return { stopped };
@@ -812,7 +880,6 @@ export async function downBolt(
     teardownSteps,
     {
       label: `${bolt.label} (down)`,
-      job: true,
       ...(options.dryRun ? { dryRun: true } : {}),
       ...(options.echo ? { echo: true } : {}),
       ...(options.onResult ? { onResult: options.onResult } : {}),
@@ -820,6 +887,34 @@ export async function downBolt(
     deps,
   );
   return { stopped, teardown };
+}
+
+export function fillPlan(plan: PlannedStep[], values: InputValues): PlannedStep[] {
+  if (Object.keys(values).length === 0) return plan;
+  return plan.map((step) => ({ ...step, target: fillTarget(step.target, values) }));
+}
+
+async function boltsOf(workspace: Workspace, bolt: Bolt, deps: Pick<RunDeps, "findWorkspace">): Promise<Bolt[]> {
+  const plan = await planBolt(workspace, bolt, deps.findWorkspace ? { findWorkspace: deps.findWorkspace } : {});
+  const found = [bolt, ...uniqueBolts(plan).map((owner) => owner.workspace.bolts.find((entry) => entry.label === owner.bolt))];
+  return [...new Set(found.filter((entry): entry is Bolt => entry !== undefined))];
+}
+
+export async function questionsFor(workspace: Workspace, bolt: Bolt, deps: Pick<RunDeps, "findWorkspace"> = {}, values: InputValues = {}): Promise<string[]> {
+  const questions: string[] = [];
+  for (const owner of await boltsOf(workspace, bolt, deps)) {
+    const question = owner.confirm ? fillText(owner.confirm, values) : undefined;
+    if (question && !questions.includes(question)) questions.push(question);
+  }
+  return questions;
+}
+
+export async function inputsFor(workspace: Workspace, bolt: Bolt, deps: Pick<RunDeps, "findWorkspace"> = {}): Promise<InputSpec[]> {
+  const specs: InputSpec[] = [];
+  for (const owner of await boltsOf(workspace, bolt, deps)) {
+    for (const spec of owner.inputs ?? []) if (!specs.some((known) => known.name === spec.name)) specs.push(spec);
+  }
+  return specs;
 }
 
 function uniqueBolts(plan: PlannedStep[]): { workspace: Workspace; bolt: string }[] {
@@ -835,11 +930,10 @@ export function boltStatus(
   runs: RunStatus[],
   containers: Container[] = [],
 ): { commands: number; running: number; failing: number } {
-  if (bolt.job) return { commands: 0, running: 0, failing: 0 };
   const ids = new Set(
     bolt.steps.flatMap((step) => (step.kind === "asset" && step.id.startsWith("command:") ? [step.id] : [])),
   );
-  const available = workspace.commands.filter((command) => ids.has(command.id));
+  const available = workspace.commands.filter((command) => ids.has(command.id) && !command.finishes);
   let commands = available.length;
   let running = available.filter((command) =>
     runs.some((run) => run.alive && run.workspace === workspace.file && run.asset === command.id),
@@ -856,6 +950,11 @@ export function boltStatus(
     failing += mine.filter((container) => container.health === "unhealthy" || (container.state === "exited" && container.exitCode !== 0)).length;
   }
   return { commands, running, failing };
+}
+
+export function keepsRunning(read: WorkspaceRead, bolt: Bolt): string[] {
+  const ids = new Set(bolt.steps.flatMap((step) => (step.kind === "asset" && step.id.startsWith("command:") ? [step.id] : [])));
+  return read.declaredCommands.filter((command) => ids.has(command.id) && !command.finishes).map((command) => command.label);
 }
 
 /** Every compose file a workspace's bolts start — what the TUI watches containers for. */
@@ -921,8 +1020,8 @@ export function resolveBolt(workspace: Workspace, ref: string): Bolt {
  * The steps a bolt lists, without expanding dependencies — for showing a bolt rather than
  * running it. A dependency appears as one step naming the bolt it runs.
  */
-export function collectBoltTargets(workspace: Workspace, bolt: Bolt, only?: TargetKind[]): SwitchTarget[] {
-  return listSteps(workspace, bolt.steps, only);
+export function collectBoltTargets(workspace: Workspace, bolt: Bolt): SwitchTarget[] {
+  return listSteps(workspace, bolt.steps);
 }
 
 /** The same, for a bolt's `down` steps. */
@@ -930,11 +1029,13 @@ export function collectDownTargets(workspace: Workspace, bolt: Bolt): SwitchTarg
   return listSteps(workspace, bolt.down ?? []);
 }
 
-function listSteps(workspace: Workspace, steps: BoltStep[], only?: TargetKind[]): SwitchTarget[] {
-  const wanted = new Set<string>(only?.length ? only : DEFAULT_ORDER);
+function listSteps(workspace: Workspace, steps: BoltStep[]): SwitchTarget[] {
   const byId = new Map(collectTargets(workspace).map((target) => [target.id, target]));
+  return steps.flatMap((step) => listStep(step, byId, workspace).map((target) => (step.together === undefined ? target : { ...target, together: step.together })));
+}
 
-  return steps.flatMap((step): SwitchTarget[] => {
+function listStep(step: BoltStep, byId: Map<string, SwitchTarget>, workspace: Workspace): SwitchTarget[] {
+  return [step].flatMap((step): SwitchTarget[] => {
     if (step.kind === "wait") {
       return [{ kind: "wait", id: "wait", label: describeWait(step.wait), value: describeWait(step.wait), wait: step.wait }];
     }
@@ -944,18 +1045,15 @@ function listSteps(workspace: Workspace, steps: BoltStep[], only?: TargetKind[])
     }
     if (step.kind === "compose") return workspace.trusted ? [composeTarget(step, "up")] : [];
     const target = byId.get(step.id);
-    return target && wanted.has(target.kind) ? [target] : [];
+    return target ? [target] : [];
   });
 }
 
-/** Every asset a workspace holds, in launch order — apps first, links last. */
-export function collectTargets(workspace: Workspace, only?: TargetKind[]): SwitchTarget[] {
-  const wanted = new Set(only?.length ? only : DEFAULT_ORDER);
+/** Every step's target a workspace holds, by kind: what a bolt's steps are looked up in. */
+export function collectTargets(workspace: Workspace): SwitchTarget[] {
   const targets: SwitchTarget[] = [];
 
   for (const kind of DEFAULT_ORDER) {
-    if (!wanted.has(kind)) continue;
-
     if (kind === "app") for (const app of workspace.apps) targets.push(toTarget(kind, app, app.app));
     else if (kind === "folder") for (const folder of workspace.folders) targets.push(toTarget(kind, folder, folder.path));
     else if (kind === "file") for (const file of workspace.files) targets.push(toTarget(kind, file, file.path));
@@ -965,6 +1063,7 @@ export function collectTargets(workspace: Workspace, only?: TargetKind[]): Switc
         const target = toTarget(kind, command, command.run);
         if (command.cwd) target.cwd = command.cwd;
         if (command.background) target.background = true;
+        if (command.finishes) target.finishes = true;
         if (command.restart) target.restart = command.restart;
         if (command.shell) target.shell = command.shell;
         if (command.env) target.env = command.env;

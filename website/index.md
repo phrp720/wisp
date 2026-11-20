@@ -1,12 +1,12 @@
 ---
 layout: home
 title: Wisp
-titleTemplate: Start any project with one word
+titleTemplate: Your everyday tasks, one word each
 
 hero:
   name: Wisp
-  text: Start any project with one word.
-  tagline: One word brings up the database, the server and the page, from any terminal. Your checks and builds run like a local CI.
+  text: Your everyday tasks, one word each.
+  tagline: Start the dev stack, run the checks, back up the database, redeploy. Write the steps once, then run them from any terminal, on your laptop or a server.
   actions:
     - theme: brand
       text: Get started

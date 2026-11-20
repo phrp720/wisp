@@ -69,7 +69,7 @@ describe("init reads what the project already has", () => {
       { url: "http://localhost:4000" },
     ]);
     expect(parsed.bolts[2]!.targets).toContainEqual({ url: "http://localhost:3000" });
-    expect(parsed.bolts[4]).toEqual({ label: "Check", job: true, targets: [{ run: "pnpm lint", label: "lint" }, { run: "pnpm test", label: "test" }] });
+    expect(parsed.bolts[4]).toEqual({ label: "Check", targets: [{ run: "pnpm lint", label: "lint", finishes: true }, { run: "pnpm test", label: "test", finishes: true }] });
     expect(detected.sources).toContain("2 Docker services: db, cache");
   });
 
@@ -89,7 +89,7 @@ describe("init reads what the project already has", () => {
     const { parsed } = await draft();
     expect(parsed.bolts.map((bolt) => [bolt.label, bolt.targets])).toEqual([
       [`Work on ${parsed.name}`, [{ run: "make dev", label: `${parsed.name} dev` }]],
-      ["Check", [{ run: "make test", label: "test" }]],
+      ["Check", [{ run: "make test", label: "test", finishes: true }]],
     ]);
   });
 
@@ -244,11 +244,11 @@ describe("more than package.json", () => {
     const all = [
       { label: "Services", targets: [{ compose: "compose.yaml" }] },
       { label: "Work on api", targets: [{ bolt: "Services" }, { run: "pnpm dev" }] },
-      { label: "Check", job: true, targets: [{ run: "pnpm test" }] },
+      { label: "Check", targets: [{ run: "pnpm test", finishes: true }] },
     ];
     expect(chooseBolts(all, ["work on api", "Check"])).toEqual([
       { label: "Work on api", targets: [{ run: "pnpm dev" }] },
-      { label: "Check", job: true, targets: [{ run: "pnpm test" }] },
+      { label: "Check", targets: [{ run: "pnpm test", finishes: true }] },
     ]);
     expect(chooseBolts(all)).toBe(all);
   });

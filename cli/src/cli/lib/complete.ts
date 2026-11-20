@@ -128,7 +128,7 @@ async function herebolts(sources: CompletionSources): Promise<Candidate[]> {
 
 function boltsOf(workspace: Workspace | undefined): Candidate[] {
   if (!workspace) return [];
-  return workspace.bolts.map((bolt) => ({ value: slugify(bolt.label), description: [bolt.job ? "job" : "bolt", bolt.label, bolt.notes].filter(Boolean).join(" · ") }));
+  return workspace.bolts.map((bolt) => ({ value: slugify(bolt.label), description: ["bolt", bolt.label, bolt.notes].filter(Boolean).join(" · ") }));
 }
 
 async function workspaceSlugs(sources: CompletionSources): Promise<Candidate[]> {

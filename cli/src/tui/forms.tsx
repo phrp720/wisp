@@ -15,6 +15,8 @@ export interface FieldSpec {
   placeholder?: string;
   /** A choice rather than text: ←/→ or space to change it. */
   choices?: { value: string; label: string }[];
+  when?: (values: Record<string, string>) => boolean;
+  guess?: (values: Record<string, string>) => string | undefined;
 }
 
 export interface FormProps {
@@ -45,10 +47,21 @@ export interface FormProps {
 export function Form({ title, intro, fields, initial = {}, submitLabel = "Save", preview, glyphs, height, onSubmit, onCancel, active: editing = true, keys = true }: FormProps) {
   // Kept in refs as well as state: keys arrive faster than React redraws — typing fast, or
   // pasting — and each must build on the one before, not on the last frame drawn.
+  const touched = useRef(new Set(Object.keys(initial)));
+  const guessed = (values: Record<string, string>) => {
+    let next = values;
+    for (const field of fields) {
+      if (!field.guess || touched.current.has(field.key)) continue;
+      const guess = field.guess(next);
+      if (guess !== undefined && next[field.key] !== guess) next = { ...next, [field.key]: guess };
+    }
+    return next;
+  };
+  const visible = (values: Record<string, string>) => fields.filter((field) => !field.when || field.when(values));
   const start = () => {
     const values: Record<string, string> = {};
     for (const field of fields) values[field.key] = initial[field.key] ?? field.choices?.[0]?.value ?? "";
-    return values;
+    return guessed(values);
   };
   const valuesRef = useRef<Record<string, string>>(start());
   const indexRef = useRef(0);
@@ -75,45 +88,53 @@ export function Form({ title, intro, fields, initial = {}, submitLabel = "Save",
 
   const submit = async () => {
     const values = valuesRef.current;
+    const shown = visible(values);
     const missing: Record<string, string> = {};
-    for (const entry of fields) if (entry.required && !values[entry.key]?.trim()) missing[entry.key] = `${entry.label} is needed`;
+    for (const entry of shown) if (entry.required && !values[entry.key]?.trim()) missing[entry.key] = `${entry.label} is needed`;
     if (Object.keys(missing).length > 0) {
       setErrors(missing);
-      setIndex(fields.findIndex((entry) => missing[entry.key]));
+      setIndex(shown.findIndex((entry) => missing[entry.key]));
       return;
     }
     setSaving(true);
-    const last = fields[fields.length - 1] as FieldSpec;
+    const last = shown[shown.length - 1] as FieldSpec;
     const problems = await onSubmit(values).catch((error: unknown) => ({ [last.key]: error instanceof Error ? error.message : String(error) }));
     setSaving(false);
     if (problems && Object.keys(problems).length > 0) {
       setErrors(problems);
-      const first = fields.findIndex((entry) => problems[entry.key]);
+      const first = shown.findIndex((entry) => problems[entry.key]);
       if (first >= 0) setIndex(first);
     }
+  };
+  const change = (field: FieldSpec, next: Record<string, string>) => {
+    touched.current.add(field.key);
+    const settled = guessed(next);
+    setValues(settled);
+    setIndex((at) => Math.min(at, visible(settled).length));
   };
 
   useInput((input, key) => {
     if (saving) return;
     const values = valuesRef.current;
     const index = indexRef.current;
+    const shown = visible(values);
     if (key.escape) return onCancel();
     if (key.upArrow || (key.shift && key.tab)) return setIndex((at) => Math.max(0, at - 1));
-    if (key.downArrow || key.tab) return setIndex((at) => Math.min(fields.length, at + 1));
+    if (key.downArrow || key.tab) return setIndex((at) => Math.min(shown.length, at + 1));
     if (key.ctrl && input === "s") return void submit();
-    if (index === fields.length) {
+    if (index >= shown.length) {
       if (key.return || input === " ") return void submit();
       return;
     }
     if (key.return) return setIndex(index + 1);
-    const field = fields[index] as FieldSpec;
+    const field = shown[index] as FieldSpec;
 
     if (field.choices) {
       const at = field.choices.findIndex((choice) => choice.value === values[field.key]);
       if (key.leftArrow || key.rightArrow || input === " ") {
         const step = key.leftArrow ? -1 : 1;
         const next = field.choices[(at + step + field.choices.length) % field.choices.length];
-        if (next) setValues({ ...values, [field.key]: next.value });
+        if (next) change(field, { ...values, [field.key]: next.value });
       }
       return;
     }
@@ -122,7 +143,7 @@ export function Form({ title, intro, fields, initial = {}, submitLabel = "Save",
     const next = editAt(value, Math.min(cursorsRef.current[field.key] ?? value.length, value.length), input, key);
     if (next !== undefined) {
       if (next.value !== value) {
-        setValues({ ...values, [field.key]: next.value });
+        change(field, { ...values, [field.key]: next.value });
         if (errors[field.key]) setErrors({ ...errors, [field.key]: "" });
       }
       setCursor(field.key, next.cursor);
@@ -135,12 +156,13 @@ export function Form({ title, intro, fields, initial = {}, submitLabel = "Save",
   const button = useRef<DOMElement>(null);
   useMouse((event, at) => {
     if (event.kind !== "click" || saving) return false;
+    const shown = visible(valuesRef.current);
     if (at(button.current)) {
-      setIndex(fields.length);
+      setIndex(shown.length);
       void submit();
       return true;
     }
-    for (const [position, field] of fields.entries()) {
+    for (const [position, field] of shown.entries()) {
       const spot = at(fieldNodes.get(field.key));
       if (!spot) continue;
       setIndex(position);
@@ -149,7 +171,7 @@ export function Form({ title, intro, fields, initial = {}, submitLabel = "Save",
       // Line 0 is the label, then the value (one line), or the options (one a line).
       if (field.choices) {
         const chosen = field.choices[spot.y - 1];
-        if (chosen) setValues({ ...values, [field.key]: chosen.value });
+        if (chosen) change(field, { ...values, [field.key]: chosen.value });
       } else {
         // On the value: where you clicked, after its "› ". Anywhere else: the end.
         setCursor(field.key, spot.y === 1 ? Math.max(0, Math.min(value.length, spot.x - 4)) : value.length);
@@ -161,14 +183,15 @@ export function Form({ title, intro, fields, initial = {}, submitLabel = "Save",
 
   const bar = glyphs.border === "round" ? "┃" : "|";
   const said = preview?.(values);
-  const onButton = index === fields.length;
-  const needed = 3 + (intro ? 1 : 0) + fields.reduce((sum, entry) => sum + 2 + (entry.choices ? entry.choices.length : 1) + 1, 0) + (said ? 1 : 0) + (editing ? 2 : 0);
+  const shown = visible(values);
+  const onButton = index >= shown.length;
+  const needed = 3 + (intro ? 1 : 0) + shown.reduce((sum, entry) => sum + 2 + (entry.choices ? entry.choices.length : 1) + 1, 0) + (said ? 1 : 0) + (editing ? 2 : 0);
   const compact = needed > height;
   return (
     <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor={editing ? TONE.accent : "gray"} paddingX={1} overflow="hidden">
       <Text bold color={editing ? TONE.accent : undefined}>{title}</Text>
       {intro ? <Text dimColor wrap="wrap">{intro}</Text> : null}
-      {fields.map((entry, at) => {
+      {shown.map((entry, at) => {
         const active = editing && at === index;
         const value = values[entry.key] ?? "";
         const edge = <Text color={TONE.accent}>{active ? `${bar} ` : "  "}</Text>;
@@ -227,7 +250,7 @@ export function Form({ title, intro, fields, initial = {}, submitLabel = "Save",
               {saving ? " saving… " : onButton ? ` ▸ ${submitLabel} ` : ` [ ${submitLabel} ] `}
             </Text>
           </Box>
-          {keys ? <Text dimColor>{"   ↑↓ fields · ⏎ next · ctrl+s or ⏎ on the button to save · esc cancel"}</Text> : null}
+          {keys ? <Text dimColor>{`   ↑↓ fields · ⏎ next · ctrl+s ${submitLabel.toLowerCase()} · esc cancel`}</Text> : null}
         </Box>
       ) : null}
     </Box>

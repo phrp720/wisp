@@ -3,6 +3,7 @@ import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } 
 
 import { getOpenWithDefaults } from "./config.js";
 import { WispError, describe } from "./errors.js";
+import { INPUT_NAME, INPUT_VALUE, notPlain, placeholders } from "./inputs.js";
 import { currentOS, expandHome, workspacesDir } from "./paths.js";
 import { hashContents, localFileFor, readTrustedBytes, trustStateOf } from "./trust.js";
 import type {
@@ -13,6 +14,7 @@ import type {
   Diagnostic,
   FileRef,
   Folder,
+  InputSpec,
   Link,
   OS,
   OpenWithDefaults,
@@ -75,13 +77,11 @@ const KNOWN_KEYS = new Set([
   "icon",
   "color",
   "notes",
-  "links",
-  "folders",
-  "files",
-  "apps",
-  "commands",
   "bolts",
 ]);
+
+const BOLT_KEYS = new Set(["label", "notes", "color", "keepGoing", "confirm", "inputs", "targets", "down"]);
+const INPUT_KEYS = new Set(["ask", "choices", "default"]);
 
 const SHELLS: readonly ShellKind[] = ["sh", "pwsh", "cmd"];
 
@@ -253,16 +253,14 @@ export function interpret(
   const scalar = (key: string) => optionalString(sources.local?.[key]) ?? optionalString(sources.main[key]);
   const section = (key: string) => sectionEntries(sources, key, ctx);
 
-  // Assets written inside a bolt are declared like any other, after the shared ones, so a
-  // bolt can list what it opens directly and a shared section is only for sharing.
   const boltEntries = section("bolts");
   const inline = inlineEntries(boltEntries);
 
-  const links = assets<Link>([...section("links"), ...inline.links], LINKS, ctx);
-  const folders = assets<Folder>([...section("folders"), ...inline.folders], FOLDERS, ctx);
-  const files = assets<FileRef>([...section("files"), ...inline.files], FILES, ctx);
-  const apps = assets<AppRef>([...section("apps"), ...inline.apps], APPS, ctx);
-  const declaredCommands = commands([...section("commands"), ...inline.commands], ctx);
+  const links = assets<Link>(inline.links, LINKS, ctx);
+  const folders = assets<Folder>(inline.folders, FOLDERS, ctx);
+  const files = assets<FileRef>(inline.files, FILES, ctx);
+  const apps = assets<AppRef>(inline.apps, APPS, ctx);
+  const declaredCommands = commands(inline.commands, ctx);
 
   const workspace: Workspace = {
     id: input.file,
@@ -300,10 +298,7 @@ export function interpret(
   const notes = scalar("notes");
   if (notes) workspace.notes = notes;
 
-  // Everything declared for this OS is nameable by a bolt, withheld or not: a withheld
-  // asset is "not yet", not "no such thing".
-  const declared = [...links, ...folders, ...files, ...apps, ...declaredCommands];
-  workspace.bolts = bolts(boltEntries, declared, ctx);
+  workspace.bolts = bolts(boltEntries, ctx);
 
   if (!trusted && ctx.withheld.length > 0) {
     const commandCount = ctx.withheld.filter((item) => item.kind === "command").length;
@@ -390,14 +385,15 @@ function inlineEntries(boltEntries: Entry[]): Record<InlineSection, Entry[]> {
         if (!isRecord(target)) return;
         const section = inlineKind(target);
         if (section) found[section].push({ value: target, at: `${at}.${list}[${index}]` });
+        if (!Array.isArray(target["together"])) return;
+        (target["together"] as unknown[]).forEach((member, position) => {
+          const kind = isRecord(member) ? inlineKind(member) : undefined;
+          if (kind) found[kind].push({ value: member, at: `${at}.${list}[${index}].together[${position}]` });
+        });
       });
     }
   }
   return found;
-}
-
-function isInline(at: string): boolean {
-  return at.includes(".targets[") || at.includes(".down[");
 }
 
 function sectionEntries(sources: Sources, key: string, ctx: Context): Entry[] {
@@ -436,7 +432,7 @@ const LINKS: AssetSpec<Link> = {
 
 const FOLDERS: AssetSpec<Folder> = {
   kind: "folder",
-  keys: ["path", "folder"],
+  keys: ["folder"],
   perOS: false,
   build: (base, path, ctx) => ({
     ...base,
@@ -447,7 +443,7 @@ const FOLDERS: AssetSpec<Folder> = {
 
 const FILES: AssetSpec<FileRef> = {
   kind: "file",
-  keys: ["path", "file"],
+  keys: ["file"],
   perOS: false,
   build: (base, path, ctx) => ({
     ...base,
@@ -458,8 +454,7 @@ const FILES: AssetSpec<FileRef> = {
 
 const APPS: AssetSpec<AppRef> = {
   kind: "app",
-  // `bundleIdOrAppName` is what the macOS-only format called it.
-  keys: ["app", "bundleIdOrAppName"],
+  keys: ["app"],
   perOS: true,
   build: (base, app) => ({ ...base, app }),
 };
@@ -478,7 +473,7 @@ function assets<T>(entries: Entry[], spec: AssetSpec<T>, ctx: Context): T[] {
   for (const { value: entry, at } of entries) {
     const record = isRecord(entry) ? entry : undefined;
 
-    let written: unknown = typeof entry === "string" ? entry : undefined;
+    let written: unknown;
     let key = spec.keys[0] as string;
     if (record) {
       const present = spec.keys.find((candidate) => record[candidate] !== undefined);
@@ -510,12 +505,12 @@ function assets<T>(entries: Entry[], spec: AssetSpec<T>, ctx: Context): T[] {
     const base = `${spec.kind}:${label.toLowerCase()}`;
     const fingerprint = JSON.stringify(written);
     // The same thing listed inline in two bolts is one asset, not a duplicate to warn about.
-    if (isInline(at) && taken.has(base) && ctx.valueById.get(base) === fingerprint) {
+    if (taken.has(base) && ctx.valueById.get(base) === fingerprint) {
       ctx.idsByAt.set(at, base);
       continue;
     }
 
-    const id = uniqueId(base, taken, `${at}.label`, spec.kind, label, ctx);
+    const id = uniqueId(base, taken);
     ctx.idsByAt.set(at, id);
     ctx.valueById.set(id, fingerprint);
 
@@ -554,13 +549,13 @@ function commands(entries: Entry[], ctx: Context): Command[] {
 
     const label = optionalString(entry["label"]) ?? script.label;
     const base = `command:${label.toLowerCase()}`;
-    const fingerprint = JSON.stringify([entry["run"], entry["cwd"], entry["shell"], entry["env"], entry["background"]]);
-    if (isInline(at) && taken.has(base) && ctx.valueById.get(base) === fingerprint) {
+    const fingerprint = JSON.stringify([entry["run"], entry["cwd"], entry["shell"], entry["env"], entry["background"], entry["finishes"]]);
+    if (taken.has(base) && ctx.valueById.get(base) === fingerprint) {
       ctx.idsByAt.set(at, base);
       continue;
     }
 
-    const id = uniqueId(base, taken, `${at}.label`, "command", label, ctx);
+    const id = uniqueId(base, taken);
     ctx.idsByAt.set(at, id);
     ctx.valueById.set(id, fingerprint);
 
@@ -581,6 +576,16 @@ function commands(entries: Entry[], ctx: Context): Command[] {
     if (cwd) command.cwd = absolute(cwd, ctx.root);
     else if (!ctx.personal) command.cwd = ctx.root;
     if (entry["background"] === true) command.background = true;
+    if (entry["finishes"] !== undefined) {
+      if (typeof entry["finishes"] === "boolean") {
+        if (entry["finishes"]) command.finishes = true;
+        if (entry["finishes"] && entry["background"] === true) {
+          ctx.found.push({ level: "warning", at: `${at}.background`, message: '"background" does nothing on a command that finishes: Wisp waits for it here' });
+        }
+      } else {
+        ctx.found.push({ level: "warning", at: `${at}.finishes`, message: '"finishes" must be true or false — it is ignored' });
+      }
+    }
 
     const restart = entry["restart"];
     if (restart !== undefined && restart !== "no" && restart !== false) {
@@ -642,26 +647,11 @@ function environment(value: unknown, at: string, ctx: Context): Record<string, s
 }
 
 /**
- * Bolts, with their steps resolved against what the file declared.
- *
- * A step is an asset's label (or its id — `folder:spec` — when a folder and a file share
- * one), a wait, or another bolt to run first. A bolt in the override replaces the
- * project's bolt of the same name, which is how you make a shared bolt your own.
+ * Bolts, with their steps: something to open or run, a wait, or another bolt to run first.
+ * A bolt in the override replaces the project's bolt of the same name, which is how you
+ * make a shared bolt your own.
  */
-function bolts(entries: Entry[], declared: { id: string; label: string }[], ctx: Context): Bolt[] {
-  const byName = new Map<string, string>();
-  for (const asset of declared) {
-    byName.set(asset.id, asset.id);
-    const key = asset.label.toLowerCase();
-    if (!byName.has(key)) byName.set(key, asset.id);
-  }
-  // Declared for another OS: a bolt naming one is right, it is just not here.
-  for (const id of ctx.elsewhere) {
-    byName.set(id, id);
-    const key = id.slice(id.indexOf(":") + 1).replace(/~\d+$/, "");
-    if (!byName.has(key)) byName.set(key, id);
-  }
-
+function bolts(entries: Entry[], ctx: Context): Bolt[] {
   const result: Bolt[] = [];
   const index = new Map<string, number>();
   const skippedSteps = new Map<string, number>();
@@ -691,7 +681,7 @@ function bolts(entries: Entry[], declared: { id: string; label: string }[], ctx:
       ctx.found.push({ level: "warning", at: `${at}.targets`, message: `"${label}" names nothing to open` });
     }
 
-    const { steps, skipped } = parseSteps(listed, `${at}.targets`, label, byName, declared, ctx);
+    const { steps, skipped } = parseSteps(listed, `${at}.targets`, ctx);
 
     if (steps.length === 0 && listed.length > 0 && skipped === 0) {
       ctx.found.push({ level: "error", at, message: `"${label}" resolved to nothing — running it would open nothing` });
@@ -707,11 +697,41 @@ function bolts(entries: Entry[], declared: { id: string; label: string }[], ctx:
     const color = optionalString(entry["color"]);
     if (color) bolt.color = color;
 
-    if (entry["job"] !== undefined) {
-      if (typeof entry["job"] === "boolean") {
-        if (entry["job"]) bolt.job = true;
+    for (const key of Object.keys(entry)) {
+      if (BOLT_KEYS.has(key)) continue;
+      ctx.found.push({ level: "warning", at: `${at}.${key}`, message: `"${key}" is not something a bolt can set — it is ignored`, hint: `Known keys: ${[...BOLT_KEYS].join(", ")}` });
+    }
+
+    if (entry["confirm"] !== undefined) {
+      if (entry["confirm"] === true) bolt.confirm = `Run "${label}"?`;
+      else if (typeof entry["confirm"] === "string" && entry["confirm"].trim()) bolt.confirm = entry["confirm"].trim();
+      else if (entry["confirm"] !== false) {
+        ctx.found.push({ level: "warning", at: `${at}.confirm`, message: '"confirm" is the question to ask before it runs, or true — it is ignored' });
+      }
+    }
+
+    if (entry["inputs"] !== undefined) {
+      const inputs = parseInputs(entry["inputs"], `${at}.inputs`, ctx);
+      if (inputs.length > 0) bolt.inputs = inputs;
+    }
+    const declared = new Set((bolt.inputs ?? []).map((input) => input.name));
+    const undeclared = (text: string, where: string) => {
+      for (const name of new Set(placeholders(text))) {
+        if (declared.has(name)) continue;
+        ctx.found.push({ level: "warning", at: where, message: `{{${name}}} is not one of "${label}"'s inputs — it is left as written`, hint: `Add it to the bolt: "inputs": { "${name}": { "ask": "…" } }` });
+      }
+    };
+    if (bolt.confirm) undeclared(bolt.confirm, `${at}.confirm`);
+    for (const key of ["targets", "down"]) {
+      const list = Array.isArray(entry[key]) ? (entry[key] as unknown[]) : [];
+      list.forEach((step, position) => undeclared(JSON.stringify(step), `${at}.${key}[${position}]`));
+    }
+
+    if (entry["keepGoing"] !== undefined) {
+      if (typeof entry["keepGoing"] === "boolean") {
+        if (entry["keepGoing"]) bolt.keepGoing = true;
       } else {
-        ctx.found.push({ level: "warning", at: `${at}.job`, message: '"job" must be true or false — it is ignored' });
+        ctx.found.push({ level: "warning", at: `${at}.keepGoing`, message: '"keepGoing" must be true or false — it is ignored' });
       }
     }
 
@@ -719,7 +739,7 @@ function bolts(entries: Entry[], declared: { id: string; label: string }[], ctx:
     // not a process Wisp can stop, like `docker compose stop`.
     if (entry["down"] !== undefined) {
       if (Array.isArray(entry["down"])) {
-        const down = parseSteps(entry["down"] as unknown[], `${at}.down`, label, byName, declared, ctx).steps;
+        const down = parseSteps(entry["down"] as unknown[], `${at}.down`, ctx).steps;
         if (down.length > 0) bolt.down = down;
       } else {
         ctx.found.push({ level: "error", at: `${at}.down`, message: '"down" must be a list of steps — it was ignored' });
@@ -738,15 +758,49 @@ function bolts(entries: Entry[], declared: { id: string; label: string }[], ctx:
   return result;
 }
 
-/** One list of steps — a bolt's `targets` or its `down` — resolved against what was declared. */
-function parseSteps(
-  listed: unknown[],
-  at: string,
-  label: string,
-  byName: Map<string, string>,
-  declared: { id: string; label: string }[],
-  ctx: Context,
-): { steps: BoltStep[]; skipped: number } {
+function parseInputs(value: unknown, at: string, ctx: Context): InputSpec[] {
+  const warn = (where: string, message: string) => ctx.found.push({ level: "warning", at: where, message });
+  if (!isRecord(value)) {
+    warn(at, '"inputs" names each value the bolt asks for, like { "env": { "ask": "Deploy where?" } } — it is ignored');
+    return [];
+  }
+  const word = (item: unknown) => (typeof item === "string" || typeof item === "number" ? String(item).trim() : "");
+  const specs: InputSpec[] = [];
+  for (const [name, raw] of Object.entries(value)) {
+    const where = `${at}.${name}`;
+    if (!INPUT_NAME.test(name)) {
+      warn(where, `"${name}" can't name an input: use letters, digits, - and _, starting with a letter — it is ignored`);
+      continue;
+    }
+    if (!isRecord(raw)) {
+      warn(where, `${name} is described by an object, like { "ask": "Deploy where?" } — it is ignored`);
+      continue;
+    }
+    const spec: InputSpec = { name, ask: optionalString(raw["ask"]) ?? name };
+    if (raw["choices"] !== undefined) {
+      const listed = Array.isArray(raw["choices"]) ? [...new Set(raw["choices"].map(word).filter(Boolean))] : [];
+      const choices = listed.filter((choice) => INPUT_VALUE.test(choice));
+      for (const choice of listed.filter((entry) => !choices.includes(entry))) warn(`${where}.choices`, `${notPlain(name, choice)} — it is left out`);
+      if (choices.length > 0) spec.choices = choices;
+      else if (listed.length === 0) warn(`${where}.choices`, `"choices" is a list of the values to pick from — it is ignored`);
+    }
+    if (raw["default"] !== undefined) {
+      const fallback = word(raw["default"]);
+      if (!fallback) warn(`${where}.default`, `"default" is the value used when none is given — it is ignored`);
+      else if (!INPUT_VALUE.test(fallback)) warn(`${where}.default`, `${notPlain(name, fallback)} — it is ignored`);
+      else if (spec.choices && !spec.choices.includes(fallback)) warn(`${where}.default`, `"${fallback}" is not one of its choices — it is ignored`);
+      else spec.default = fallback;
+    }
+    for (const key of Object.keys(raw)) {
+      if (!INPUT_KEYS.has(key)) warn(`${where}.${key}`, `"${key}" is not something an input can set — it is ignored`);
+    }
+    specs.push(spec);
+  }
+  return specs;
+}
+
+/** One list of steps: a bolt's `targets` or its `down`. */
+function parseSteps(listed: unknown[], at: string, ctx: Context): { steps: BoltStep[]; skipped: number } {
   const steps: BoltStep[] = [];
   let skipped = 0;
 
@@ -754,7 +808,6 @@ function parseSteps(
     const where = `${at}[${position}]`;
 
     if (isRecord(target) && inlineKind(target)) {
-      // Declared already, with the shared sections; dropped there if it was malformed.
       const inlineId = ctx.idsByAt.get(where);
       if (!inlineId) continue;
       if (ctx.elsewhere.has(inlineId)) {
@@ -765,36 +818,30 @@ function parseSteps(
       continue;
     }
 
+    if (isRecord(target) && target["together"] !== undefined) {
+      if (!Array.isArray(target["together"]) || target["together"].length === 0) {
+        ctx.found.push({ level: "error", at: `${where}.together`, message: 'dropped: "together" lists the steps to run at the same time' });
+        continue;
+      }
+      const inner = parseSteps(target["together"] as unknown[], `${where}.together`, ctx);
+      skipped += inner.skipped;
+      const members = inner.steps.filter((step) => {
+        if (step.kind !== "bolt") return true;
+        ctx.found.push({ level: "error", at: `${where}.together`, message: `dropped "${step.bolt}": a bolt can't run inside together, so list it before or after` });
+        return false;
+      });
+      if (members.length === 1) steps.push(members[0] as BoltStep);
+      else for (const member of members) steps.push({ ...member, together: position });
+      continue;
+    }
+
     if (isRecord(target)) {
       const step = specialStep(target, where, ctx);
       if (step) steps.push(step);
       continue;
     }
 
-    if (typeof target !== "string" || !target.trim()) {
-      ctx.found.push({ level: "error", at: where, message: "dropped: not the name of an asset, a wait or a bolt" });
-      continue;
-    }
-
-    const resolved = byName.get(target.trim().toLowerCase());
-    if (!resolved) {
-      ctx.found.push({
-        level: "error",
-        at: where,
-        message: `"${label}" names "${target}", which this file does not declare`,
-        ...hintFor(target, declared),
-      });
-      continue;
-    }
-    if (ctx.elsewhere.has(resolved)) {
-      skipped += 1;
-      continue;
-    }
-    if (steps.some((step) => step.kind === "asset" && step.id === resolved)) {
-      ctx.found.push({ level: "warning", at: where, message: `"${target}" is already in "${label}" — it opens once` });
-      continue;
-    }
-    steps.push({ kind: "asset", id: resolved });
+    ctx.found.push({ level: "error", at: where, message: 'dropped: a step is an object, like { "run": "pnpm dev" } or { "url": "localhost:3000" }' });
   }
 
   return { steps, skipped };
@@ -960,12 +1007,13 @@ export async function checkProject(file: string, options: ReadOptions = {}): Pro
     valueById: new Map(),
   };
 
-  for (const [section, kind] of [
-    ["folders", "folder"],
-    ["files", "file"],
+  const inline = inlineEntries(sectionEntries(sources, "bolts", scratch));
+  for (const [entries, kind] of [
+    [inline.folders, "folder"],
+    [inline.files, "file"],
   ] as const) {
-    for (const { value: entry, at } of sectionEntries(sources, section, scratch)) {
-      const written = writtenPath(entry);
+    for (const { value: entry, at } of entries) {
+      const written = writtenPath(entry, kind);
       if (!written) continue;
       // Only what applies here: a Linux-only folder is not missing on a Mac.
       if (isRecord(entry) && entry["os"] !== undefined && !osListIncludes(entry["os"], os)) continue;
@@ -979,7 +1027,7 @@ export async function checkProject(file: string, options: ReadOptions = {}): Pro
         const inside = relative(root, path);
         found.push({
           level: "warning",
-          at: `${at}.path`,
+          at: `${at}.${kind}`,
           message: `"${written}" is a path on your machine, not this project's`,
           ...(inside && !inside.startsWith("..")
             ? { hint: `Relative to the file is what travels: "${inside}"` }
@@ -989,13 +1037,13 @@ export async function checkProject(file: string, options: ReadOptions = {}): Pro
 
       const stats = await stat(path).catch(() => undefined);
       if (!stats) {
-        found.push({ level: "error", at: `${at}.path`, message: `no such ${kind}: ${path}` });
+        found.push({ level: "error", at: `${at}.${kind}`, message: `no such ${kind}: ${path}` });
         continue;
       }
       if (stats.isDirectory() !== (kind === "folder") && !(kind === "folder" && path.endsWith(".app"))) {
         found.push({
           level: "error",
-          at: `${at}.path`,
+          at: `${at}.${kind}`,
           message: `${path} is a ${kind === "folder" ? "file" : "folder"}, not a ${kind}`,
         });
       }
@@ -1004,7 +1052,7 @@ export async function checkProject(file: string, options: ReadOptions = {}): Pro
 
   for (const link of read.workspace.links) {
     if (!isUrlish(link.url)) {
-      found.push({ level: "error", at: `links`, message: `"${link.url}" is not a url Wisp can open` });
+      found.push({ level: "error", at: "bolts", message: `"${link.url}" is not a url Wisp can open` });
     }
   }
 
@@ -1087,29 +1135,15 @@ function osListIncludes(value: unknown, os: OS): boolean {
   return known.length === 0 || known.includes(os);
 }
 
-/**
- * Two assets of one kind sharing a label is a mistake, but not one worth losing an asset
- * over: both are kept with distinct ids, and a bolt naming that label gets the first.
- */
-function uniqueId(base: string, taken: Set<string>, at: string, kind: string, label: string, ctx: Context): string {
+function uniqueId(base: string, taken: Set<string>): string {
   let id = base;
   for (let n = 2; taken.has(id); n += 1) id = `${base}~${n}`;
-  if (id !== base) {
-    ctx.found.push({
-      level: "warning",
-      at,
-      message: `a second ${kind} called "${label}" — a bolt naming it gets the first`,
-      hint: `Rename it, or say "${id}" in a bolt to mean this one`,
-    });
-  }
   taken.add(id);
   return id;
 }
 
-function writtenPath(entry: unknown): string | undefined {
-  if (typeof entry === "string") return entry.trim() || undefined;
-  if (isRecord(entry) && typeof entry["path"] === "string") return entry["path"].trim() || undefined;
-  return undefined;
+function writtenPath(entry: unknown, key: string): string | undefined {
+  return isRecord(entry) && typeof entry[key] === "string" ? entry[key].trim() || undefined : undefined;
 }
 
 function isUrlish(value: string): boolean {
@@ -1119,36 +1153,6 @@ function isUrlish(value: string): boolean {
   } catch {
     return false;
   }
-}
-
-/** The asset a mistyped target probably meant, when one is close enough to name. */
-function hintFor(target: string, assets: { label: string }[]): { hint?: string } {
-  const needle = target.trim().toLowerCase();
-  const near = assets
-    .map((asset) => ({ label: asset.label, distance: distance(needle, asset.label.toLowerCase()) }))
-    .filter((candidate) => candidate.distance <= Math.max(2, Math.floor(needle.length / 3)))
-    .sort((left, right) => left.distance - right.distance);
-
-  if (near[0]) return { hint: `Did you mean "${near[0].label}"?` };
-  if (assets.length > 0) return { hint: `Declared: ${assets.map((asset) => asset.label).join(", ")}` };
-  return {};
-}
-
-/** Levenshtein, kept small and local — it exists to improve one error message. */
-function distance(left: string, right: string): number {
-  if (left === right) return 0;
-  let previous = Array.from({ length: right.length + 1 }, (_, index) => index);
-
-  for (let i = 1; i <= left.length; i += 1) {
-    const current = [i];
-    for (let j = 1; j <= right.length; j += 1) {
-      const cost = left[i - 1] === right[j - 1] ? 0 : 1;
-      current[j] = Math.min((current[j - 1] ?? 0) + 1, (previous[j] ?? 0) + 1, (previous[j - 1] ?? 0) + cost);
-    }
-    previous = current;
-  }
-
-  return previous[right.length] ?? Math.max(left.length, right.length);
 }
 
 /**

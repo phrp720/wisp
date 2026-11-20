@@ -49,7 +49,7 @@ You rarely write it by hand. `wisp init` reads the project, at its root and one 
 
 | Step | Example | |
 |---|---|---|
-| Command | `{ "run": "pnpm dev", "cwd": "apps/api" }` | starts it and keeps it running ([in a job](./jobs), runs it to the end) |
+| Command | `{ "run": "pnpm dev", "cwd": "apps/api" }` | starts it and keeps it running; with `"finishes": true`, [waits for it to finish](./runs) |
 | Docker services | `{ "compose": "compose.yaml", "services": ["postgres"] }` | done when they're healthy |
 | Another bolt | `{ "bolt": "Database" }` | runs it first |
 | Wait | `{ "wait": "localhost:5432" }` · `{ "wait": "http://localhost:3000" }` · `{ "wait": 3 }` | a port, a website, or seconds |
@@ -57,6 +57,7 @@ You rarely write it by hand. `wisp init` reads the project, at its root and one 
 | Folder | `{ "folder": "apps/api" }` | in your file manager, or your editor |
 | File | `{ "file": "docs/runbook.md" }` | |
 | App | `{ "app": "Slack" }` | |
+| Together | `{ "together": [ … ] }` | [starts several steps at once](#steps-at-the-same-time) |
 
 Any step can have a `"label"`, the name Wisp shows for it.
 
@@ -86,11 +87,83 @@ Any step can have a `"label"`, the name Wisp shows for it.
 - What's already running is left alone, not started twice.
 - Another project's bolt: `{ "bolt": "Database", "workspace": "infra" }`.
 
-## Jobs
+## Commands that finish
 
-`"job": true` makes a bolt run each command to the end, in order, and stop at the first
-failure, like a CI job. Use it for what finishes (tests, builds, cleanups); leave it off for
-what keeps running (servers). See [a job, or a starter?](./jobs#a-job-or-a-starter)
+A command keeps running by default, like a server. Give one that finishes `"finishes": true`
+(a test, a build, a backup) and Wisp waits for it before the next step. A failed step stops
+the run, unless the bolt says `"keepGoing": true`. See
+[keeps running, or finishes?](./runs#keeps-running-or-finishes)
+
+## Steps at the same time
+
+`together` starts its steps at once, and the next step waits for all of them. Checks that
+don't depend on each other finish sooner:
+
+```json
+{
+  "label": "Check",
+  "targets": [
+    { "together": [
+      { "run": "pnpm lint", "finishes": true },
+      { "run": "pnpm typecheck", "finishes": true },
+      { "run": "pnpm test", "finishes": true }
+    ] },
+    { "run": "pnpm build", "finishes": true }
+  ]
+}
+```
+
+If one fails, the others still finish, so you see every failure, and then the run stops.
+Their output comes line by line, each line starting with its step's label, and each step's
+log in History stays its own. It works for any step but a bolt: start two servers, or wait
+for the database and the cache at once. In the dashboard's editor, `t` runs a step together
+with the one before it, or on its own again.
+
+## Asking first
+
+For a bolt with consequences, like a deploy or a restore, `"confirm"` is a question Wisp
+asks before it runs:
+
+```json
+{ "label": "Deploy", "confirm": "Deploy to production?", "targets": [{ "run": "./deploy.sh", "finishes": true }] }
+```
+
+A bolt that runs it asks too. In a script or a cron job there's no one to ask, so it stops,
+unless you pass `--yes`. A git hook runs it without asking. `"confirm": true` asks
+"Run "Deploy"?".
+
+## Inputs
+
+A bolt can ask for values each time it runs, like where to deploy or which backup to
+restore. Its steps use one as `{{name}}`:
+
+```json
+{
+  "label": "Deploy",
+  "inputs": {
+    "env": { "ask": "Deploy where?", "choices": ["staging", "production"], "default": "staging" }
+  },
+  "confirm": "Deploy to {{env}}?",
+  "targets": [{ "run": "./deploy.sh {{env}}", "finishes": true }]
+}
+```
+
+- Wisp asks at a terminal and in the dashboard. A script passes `--input env=production`;
+  a value it leaves out takes its default, and one with no default stops the run.
+- A value is plain words, like `staging`, `v1.2.3` or `fix the login`: letters, digits,
+  spaces and `. _ - / : @ + = , ~`, with no word starting with `-`. No quotes or anything else
+  a shell treats specially, so a value can't run commands or pass options of its own, even
+  when yours hands it on through `ssh` or `sh -c`. Wisp refuses any other value before
+  anything runs. To keep a value with spaces as one argument, put quotes around it in your
+  command: `git commit -m "{{note}}"`.
+- Wisp can't tell what a value means: `rm -rf ~/backups/{{name}}` with `../..` still does
+  harm. For a step like that, use `choices`.
+- `{{name}}` works in a command, its `cwd` and `env`, a link, a folder or file, a wait for a
+  website, and `confirm`.
+- `choices` limits it to a list, and `default` is offered first. Only `ask` is needed, and
+  even that can go: the name is asked instead.
+- The values are kept with the run in [History](./runs#history), and `--retry` uses them
+  again. Don't use inputs for passwords: let the step [fetch its secret](./recipes#use-a-secret).
 
 ## Taking a bolt down
 
@@ -101,21 +174,23 @@ isn't a process:
 { "label": "Services", "targets": [{ "run": "./start.sh" }], "down": [{ "run": "./stop.sh" }] }
 ```
 
-## Shared assets
+## Reusing steps
 
-When several bolts need the same thing, declare it once and name it by label:
+A file holds bolts and nothing else: each step is written inside the bolt that takes it.
+When several bolts need the same steps (start the database, say), put them in a bolt of
+their own and run it first from the others:
 
 ```json
 {
-  "links": [{ "label": "Repository", "url": "https://github.com/acme/acme" }],
   "bolts": [
-    { "label": "Work on api", "targets": [{ "folder": "apps/api" }, "Repository"] },
-    { "label": "Work on web", "targets": [{ "folder": "apps/web" }, "Repository"] }
+    { "label": "Database", "targets": [{ "compose": "compose.yaml", "services": ["postgres"] }] },
+    { "label": "Work on api", "targets": [{ "bolt": "Database" }, { "folder": "apps/api" }] },
+    { "label": "Work on web", "targets": [{ "bolt": "Database" }, { "folder": "apps/web" }] }
   ]
 }
 ```
 
-Sections: `links`, `folders`, `files`, `apps`, `commands`.
+It runs once per run, however many steps need it.
 
 ## Several operating systems
 
@@ -130,7 +205,7 @@ A step for another OS is skipped quietly.
 ## Your own additions
 
 A `.wisp.local.json` beside the project's file (add it to `.gitignore`) is merged in: its
-lists are added, and a bolt with the same name replaces the project's. Your own bolts and
+bolts are added, and a bolt with the same name replaces the project's. Your own bolts and
 scripts, without touching the shared file.
 
 ## Personal workspaces

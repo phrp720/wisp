@@ -2,6 +2,7 @@ import { readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
 import { WispError, describe } from "./errors.js";
+import { INPUT_NAME } from "./inputs.js";
 import { workspacesDir } from "./paths.js";
 import { PROJECT_SCHEMA_URL, parseWait, readProjectFile } from "./project.js";
 import { pickColor } from "./colors.js";
@@ -16,17 +17,33 @@ import { localFileFor, trustProject } from "./trust.js";
  * stays one a person can read in a pull request.
  */
 
-/** A step as it is written in the file: a label naming a shared asset, or an object. */
-export type RawStep = string | Record<string, unknown>;
+/** A step as it is written in the file. */
+export type RawStep = Record<string, unknown>;
 
 export interface RawBolt {
   label: string;
   notes?: string;
-  job?: boolean;
+  keepGoing?: boolean;
+  confirm?: string | boolean;
+  inputs?: Record<string, RawInput>;
   color?: string;
   targets: RawStep[];
   down?: RawStep[];
   [key: string]: unknown;
+}
+
+export interface RawInput {
+  ask?: string;
+  choices?: (string | number)[];
+  default?: string | number;
+}
+
+const BOLT_ORDER = ["label", "notes", "color", "keepGoing", "confirm", "inputs", "targets", "down"];
+
+function tidyBolt(bolt: RawBolt): RawBolt {
+  const known = BOLT_ORDER.filter((key) => bolt[key] !== undefined).map((key) => [key, bolt[key]]);
+  const rest = Object.entries(bolt).filter(([key]) => !BOLT_ORDER.includes(key));
+  return Object.fromEntries([...known, ...rest]) as RawBolt;
 }
 
 /**
@@ -56,23 +73,50 @@ export interface StepField {
   placeholder?: string;
   /** A choice between a few options instead of text. */
   choices?: { value: string; label: string }[];
+  when?: (values: Record<string, string>) => boolean;
+  guess?: (values: Record<string, string>) => string | undefined;
+}
+
+const FINISHING = /(?<![a-z])(build|test|tests|lint|check|typecheck|tsc|format|fmt|migrate|seed|deploy|release|publish|backup|dump|restore|install|ci|clean|compile|bundle|generate)(?![a-z])/;
+const RUNNING = /(?<![a-z])(dev|start|serve|server|up|run|watch)(?![a-z])/;
+
+export function guessFinishes(command: string): "running" | "finishes" | undefined {
+  const text = command.toLowerCase();
+  if (!text.trim()) return undefined;
+  if (/(?<![a-z])watch(?![a-z])|--watch/.test(text)) return "running";
+  if (/(?<![a-z])up(?![a-z])/.test(text) && /\s(-d|--detach)(\s|$)/.test(text)) return "finishes";
+  if (FINISHING.test(text)) return "finishes";
+  if (RUNNING.test(text)) return "running";
+  return undefined;
 }
 
 /** What each kind of step asks for. The first field is the one that matters. */
 export const STEP_FIELDS: Record<StepKindName, StepField[]> = {
   run: [
     { key: "run", label: "Command", hint: "what you would type in a terminal", placeholder: "pnpm dev", required: true },
+    {
+      key: "finishes",
+      label: "It",
+      hint: "a server keeps running; a test or a build finishes",
+      required: false,
+      choices: [
+        { value: "running", label: "keeps running" },
+        { value: "finishes", label: "finishes" },
+      ],
+      guess: (values) => guessFinishes(values["run"] ?? ""),
+    },
     { key: "label", label: "Name", hint: "how it is shown in Wisp — short is best", placeholder: "the command itself", required: false },
     { key: "cwd", label: "In folder", hint: "relative to the project", placeholder: "the project's folder", required: false },
     {
       key: "restart",
-      label: "If it stops",
-      hint: "brought back with a growing pause, up to 10 times in a row",
+      label: "Restart",
+      hint: "up to 10 times in a row, waiting longer each time",
       required: false,
+      when: (values) => values["finishes"] !== "finishes",
       choices: [
-        { value: "no", label: "leave it" },
-        { value: "on-failure", label: "restart if it crashed" },
-        { value: "always", label: "always restart" },
+        { value: "no", label: "never" },
+        { value: "on-failure", label: "if it crashes" },
+        { value: "always", label: "always" },
       ],
     },
   ],
@@ -104,16 +148,15 @@ export const STEP_FIELDS: Record<StepKindName, StepField[]> = {
 };
 
 /** The kind of a written step, for a form to open on. */
-export function stepKindOf(step: RawStep): StepKindName | "shared" {
-  if (typeof step === "string") return "shared";
+export function stepKindOf(step: RawStep): StepKindName | undefined {
   for (const { kind } of STEP_KINDS) if (step[kind] !== undefined) return kind;
-  return "shared";
+  return undefined;
 }
 
 /** A form's values for an existing step, as text. */
 export function stepValues(step: RawStep): Record<string, string> {
-  if (typeof step === "string") return {};
   const values: Record<string, string> = {};
+  if (step["run"] !== undefined) values["finishes"] = step["finishes"] === true ? "finishes" : "running";
   for (const [key, value] of Object.entries(step)) {
     if (typeof value === "string" || typeof value === "number") values[key] = String(value);
     else if (Array.isArray(value)) values[key] = value.join(", ");
@@ -159,8 +202,12 @@ export function buildStep(kind: StepKindName, values: Record<string, string>): {
     for (const field of STEP_FIELDS[kind]) {
       const text = value(field.key);
       if (!text || field.key === "label") continue;
+      if (field.key === "finishes") {
+        if (text === "finishes") step["finishes"] = true;
+        continue;
+      }
       // A choice at its default says nothing, so it is not written.
-      if (field.key === "restart" && text === "no") continue;
+      if (field.key === "restart" && (text === "no" || value("finishes") === "finishes")) continue;
       step[field.key] = text;
     }
   }
@@ -172,7 +219,6 @@ export function buildStep(kind: StepKindName, values: Record<string, string>): {
 
 /** A written step as a sentence, for the editor's list. */
 export function describeRawStep(step: RawStep): string {
-  if (typeof step === "string") return `${step} (shared)`;
   const label = typeof step["label"] === "string" ? step["label"] : undefined;
   const kind = stepKindOf(step);
   switch (kind) {
@@ -232,7 +278,7 @@ function findBolt(raw: Record<string, unknown>, label: string): number {
   return bolts.findIndex((bolt) => typeof bolt?.label === "string" && bolt.label.toLowerCase() === label.toLowerCase());
 }
 
-const ORDER = ["$schema", "name", "icon", "color", "notes", "links", "folders", "files", "apps", "commands", "bolts"];
+const ORDER = ["$schema", "name", "icon", "color", "notes", "bolts"];
 
 /**
  * Write a file back, laid out by hand as `init` does — and keep trust when it was there:
@@ -280,12 +326,12 @@ export async function changeBolt(file: string, bolt: string, change: (bolt: RawB
   const bolts = [...((raw["bolts"] as RawBolt[]) ?? [])];
   const index = findBolt(raw, bolt);
   const next = change({ ...(bolts[index] as RawBolt), targets: [...((bolts[index] as RawBolt).targets ?? [])] });
-  if (next) bolts[index] = next;
+  if (next) bolts[index] = tidyBolt(next);
   else bolts.splice(index, 1);
   await save(path, { ...raw, bolts }, file);
 }
 
-export async function addBolt(file: string, label: string, options: { job?: boolean } = {}): Promise<void> {
+export async function addBolt(file: string, label: string): Promise<void> {
   const name = label.trim();
   if (!name) throw new WispError("A bolt needs a name", "INVALID_INPUT");
   const raw = await readRaw(file);
@@ -293,7 +339,7 @@ export async function addBolt(file: string, label: string, options: { job?: bool
   const existing = (raw["bolts"] as RawBolt[]) ?? [];
   // A colour of its own, so it is told apart from its neighbours at a glance.
   const color = pickColor(existing.map((bolt) => bolt.color));
-  const bolts = [...existing, { label: name, color, ...(options.job ? { job: true } : {}), targets: [] }];
+  const bolts = [...existing, { label: name, color, targets: [] }];
   await save(file, { ...raw, bolts }, file);
 }
 
@@ -328,10 +374,71 @@ export async function moveBolt(file: string, bolt: string, by: -1 | 1): Promise<
   await save(file, { ...raw, bolts }, file);
 }
 
-export async function setJob(file: string, bolt: string, job: boolean): Promise<void> {
+export async function setConfirm(file: string, bolt: string, confirm: string | boolean): Promise<void> {
+  const value = typeof confirm === "string" ? confirm.trim() || false : confirm;
   await changeBolt(file, bolt, (current) => {
-    const { job: _job, ...rest } = current;
-    return job ? { ...rest, label: current.label, job: true, targets: current.targets } : { ...rest, label: current.label, targets: current.targets };
+    const { confirm: _confirm, ...rest } = current;
+    return value === false ? rest : { ...rest, confirm: value };
+  });
+}
+
+export function inputValues(name: string, input: RawInput): Record<string, string> {
+  return { name, ask: input.ask ?? "", choices: (input.choices ?? []).join(", "), default: input.default === undefined ? "" : String(input.default) };
+}
+
+export function buildInput(values: Record<string, string>, taken: string[]): { name: string; input: RawInput } | { errors: Record<string, string> } {
+  const name = (values["name"] ?? "").trim();
+  const ask = (values["ask"] ?? "").trim();
+  const choices = [...new Set((values["choices"] ?? "").split(",").map((choice) => choice.trim()).filter(Boolean))];
+  const fallback = (values["default"] ?? "").trim();
+  const errors: Record<string, string> = {};
+  if (!INPUT_NAME.test(name)) errors["name"] = "letters, digits, - and _, starting with a letter";
+  else if (taken.includes(name)) errors["name"] = `there is already an input called ${name}`;
+  if (fallback && choices.length > 0 && !choices.includes(fallback)) errors["default"] = `one of ${choices.join(", ")}`;
+  if (Object.keys(errors).length > 0) return { errors };
+  return { name, input: { ...(ask ? { ask } : {}), ...(choices.length > 0 ? { choices } : {}), ...(fallback ? { default: fallback } : {}) } };
+}
+
+function renamePlaceholder<T>(value: T, from: string, to: string): T {
+  const pattern = new RegExp(`\\{\\{\\s*${from.replace(/[-]/g, "\\-")}\\s*\\}\\}`, "g");
+  const walk = (item: unknown): unknown => {
+    if (typeof item === "string") return item.replace(pattern, `{{${to}}}`);
+    if (Array.isArray(item)) return item.map(walk);
+    if (item && typeof item === "object") return Object.fromEntries(Object.entries(item).map(([key, entry]) => [key, walk(entry)]));
+    return item;
+  };
+  return walk(value) as T;
+}
+
+export async function setInput(file: string, bolt: string, previous: string | undefined, name: string, input: RawInput): Promise<void> {
+  await changeBolt(file, bolt, (current) => {
+    const entries = Object.entries(current.inputs ?? {});
+    const at = previous === undefined ? -1 : entries.findIndex(([key]) => key === previous);
+    if (at >= 0) entries[at] = [name, input];
+    else entries.push([name, input]);
+    const next = { ...current, inputs: Object.fromEntries(entries) };
+    if (previous === undefined || previous === name) return next;
+    return {
+      ...next,
+      targets: renamePlaceholder(next.targets, previous, name),
+      ...(next.down ? { down: renamePlaceholder(next.down, previous, name) } : {}),
+      ...(typeof next.confirm === "string" ? { confirm: renamePlaceholder(next.confirm, previous, name) } : {}),
+    };
+  });
+}
+
+export async function removeInput(file: string, bolt: string, name: string): Promise<void> {
+  await changeBolt(file, bolt, (current) => {
+    const { inputs, ...rest } = current;
+    const left = Object.entries(inputs ?? {}).filter(([key]) => key !== name);
+    return left.length > 0 ? { ...rest, inputs: Object.fromEntries(left) } : rest;
+  });
+}
+
+export async function setKeepGoing(file: string, bolt: string, keepGoing: boolean): Promise<void> {
+  await changeBolt(file, bolt, (current) => {
+    const { keepGoing: _keepGoing, ...rest } = current;
+    return keepGoing ? { ...rest, keepGoing: true } : rest;
   });
 }
 
@@ -343,34 +450,127 @@ export async function readBolt(file: string, bolt: string): Promise<RawBolt> {
 }
 
 /** The steps of a bolt as written, for the editor to list. */
+export interface FlatStep {
+  step: RawStep;
+  joined: boolean;
+}
+
+export function flatSteps(targets: RawStep[]): FlatStep[] {
+  return targets.flatMap((target) => (Array.isArray(target["together"]) ? (target["together"] as RawStep[]).map((step, at) => ({ step, joined: at > 0 })) : [{ step: target, joined: false }]));
+}
+
+export function nestSteps(flat: FlatStep[]): RawStep[] {
+  const nested: RawStep[] = [];
+  for (const item of flat) {
+    const previous = nested[nested.length - 1];
+    if (!item.joined || !previous) nested.push(item.step);
+    else if (Array.isArray(previous["together"])) (previous["together"] as RawStep[]).push(item.step);
+    else nested[nested.length - 1] = { together: [previous, item.step] };
+  }
+  return nested;
+}
+
+function unitOf(items: FlatStep[], index: number): { start: number; end: number } {
+  let start = index;
+  while (start > 0 && items[start]?.joined) start -= 1;
+  let end = start + 1;
+  while (end < items.length && items[end]?.joined) end += 1;
+  return { start, end };
+}
+
+export function placeToggled(flat: FlatStep[], index: number): { flat: FlatStep[]; at: number } {
+  const items = flat.map((item) => ({ ...item }));
+  const { start, end } = unitOf(items, index);
+  if (end - start > 1) {
+    if (index === start) {
+      (items[start + 1] as FlatStep).joined = false;
+      return { flat: items, at: index };
+    }
+    const [item] = items.splice(index, 1);
+    items.splice(end - 1, 0, { step: (item as FlatStep).step, joined: false });
+    return { flat: items, at: end - 1 };
+  }
+  if (index > 0) (items[index] as FlatStep).joined = true;
+  else if (items[1]) items[1].joined = true;
+  return { flat: items, at: index };
+}
+
+export function placeMoved(flat: FlatStep[], index: number, by: -1 | 1): { flat: FlatStep[]; at: number } {
+  const items = flat.map((item) => ({ ...item }));
+  const { start, end } = unitOf(items, index);
+  if (end - start > 1) {
+    const to = index + by;
+    if (to >= start && to < end) {
+      const moving = (items[index] as FlatStep).step;
+      (items[index] as FlatStep).step = (items[to] as FlatStep).step;
+      (items[to] as FlatStep).step = moving;
+      return { flat: items, at: to };
+    }
+    if (by < 0) (items[start + 1] as FlatStep).joined = false;
+    else (items[index] as FlatStep).joined = false;
+    return { flat: items, at: index };
+  }
+  if (by < 0) {
+    if (start === 0) return { flat: items, at: index };
+    const before = unitOf(items, start - 1).start;
+    const [item] = items.splice(index, 1);
+    items.splice(before, 0, item as FlatStep);
+    return { flat: items, at: before };
+  }
+  if (end >= items.length) return { flat: items, at: index };
+  const after = unitOf(items, end).end;
+  const [item] = items.splice(index, 1);
+  items.splice(after - 1, 0, item as FlatStep);
+  return { flat: items, at: after - 1 };
+}
+
+async function changeSteps(file: string, bolt: string, change: (flat: FlatStep[]) => FlatStep[]): Promise<void> {
+  await changeBolt(file, bolt, (current) => ({ ...current, targets: nestSteps(change(flatSteps(current.targets))) }));
+}
+
 export async function boltSteps(file: string, bolt: string): Promise<RawStep[]> {
-  return (await readBolt(file, bolt)).targets;
+  return flatSteps((await readBolt(file, bolt)).targets).map((item) => item.step);
 }
 
 export async function addStep(file: string, bolt: string, step: RawStep, at?: number): Promise<void> {
-  await changeBolt(file, bolt, (current) => {
-    const targets = [...current.targets];
-    targets.splice(at ?? targets.length, 0, step);
-    return { ...current, targets };
+  await changeSteps(file, bolt, (flat) => {
+    const place = at ?? flat.length;
+    return [...flat.slice(0, place), { step, joined: flat[place]?.joined === true }, ...flat.slice(place)];
   });
 }
 
 export async function replaceStep(file: string, bolt: string, index: number, step: RawStep): Promise<void> {
-  await changeBolt(file, bolt, (current) => ({ ...current, targets: current.targets.map((entry, at) => (at === index ? step : entry)) }));
+  await changeSteps(file, bolt, (flat) => flat.map((item, at) => (at === index ? { ...item, step } : item)));
 }
 
 export async function removeStep(file: string, bolt: string, index: number): Promise<void> {
-  await changeBolt(file, bolt, (current) => ({ ...current, targets: current.targets.filter((_entry, at) => at !== index) }));
+  await changeSteps(file, bolt, (flat) => {
+    const items = flat.map((item) => ({ ...item }));
+    const { start, end } = unitOf(items, index);
+    items.splice(index, 1);
+    if (index === start && end - start > 1 && items[index]) items[index].joined = false;
+    return items;
+  });
 }
 
-export async function moveStep(file: string, bolt: string, index: number, by: -1 | 1): Promise<void> {
-  await changeBolt(file, bolt, (current) => {
-    const targets = [...current.targets];
-    const to = index + by;
-    if (to < 0 || to >= targets.length) return current;
-    [targets[index], targets[to]] = [targets[to] as RawStep, targets[index] as RawStep];
-    return { ...current, targets };
+export async function moveStep(file: string, bolt: string, index: number, by: -1 | 1): Promise<number> {
+  let at = index;
+  await changeSteps(file, bolt, (flat) => {
+    const moved = placeMoved(flat, index, by);
+    at = moved.at;
+    return moved.flat;
   });
+  return at;
+}
+
+export async function toggleTogether(file: string, bolt: string, index: number): Promise<number> {
+  let at = index;
+  await changeSteps(file, bolt, (flat) => {
+    const toggled = placeToggled(flat, index);
+    at = toggled.at;
+    return toggled.flat;
+  });
+  return at;
 }
 
 /**

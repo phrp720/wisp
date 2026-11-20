@@ -126,11 +126,11 @@ export function PanesPanel(props: {
       ) : (
         <Text color={TONE.up}>{glyphs.ok}</Text>
       );
-      return line(selected, 0, mark, `${glyphs.bolt}${active.bolt}`, active.stopped ? "stopped" : now ? describeStep(now.target, true, active.job) : active.done ? (failed ? "failed" : "done") : waitingWords(glyphs, Math.floor(width * 0.45)), failed || active.stopped ? TONE.failed : undefined);
+      return line(selected, 0, mark, `${glyphs.bolt}${active.bolt}`, active.stopped ? "stopped" : now ? describeStep(now.target, true) : active.done ? (failed ? "failed" : "done") : waitingWords(glyphs, Math.floor(width * 0.45)), failed || active.stopped ? TONE.failed : undefined);
     }
     if (entry.type === "step") {
       const step = entry.step;
-      const label = step.kind === "bolt" ? `${glyphs.bolt}${step.label}` : shortStep(step, entry.entry.job ?? false);
+      const label = step.kind === "bolt" ? `${glyphs.bolt}${step.label}` : shortStep(step);
       if (step.state === "running") return line(selected, entry.depth ?? 1, <Text color={TONE.accent}>{glyphs.running[tick % glyphs.running.length]}</Text>, label, "running");
       if (step.state === "waiting") return line(selected, entry.depth ?? 1, <Text dimColor>{glyphs.pending}</Text>, label, "waiting", "gray");
       const mark = step.skipped ? <Text dimColor>{glyphs.skip}</Text> : step.ok ? <Text color={TONE.up}>{glyphs.ok}</Text> : <Text color={TONE.failed}>{glyphs.fail}</Text>;
@@ -184,7 +184,7 @@ export function PanesPanel(props: {
       </Text>
     ) : item?.type === "step" ? (
       <Text wrap="truncate-end">
-        <Text bold>{item.step.kind === "bolt" ? item.step.label : describeHistoryStep(item.step, item.entry.job ?? false)}</Text>
+        <Text bold>{item.step.kind === "bolt" ? item.step.label : describeHistoryStep(item.step)}</Text>
         {item.step.skipped ? <Text dimColor>{"  not reached"}</Text> : item.step.ok ? <Text color={TONE.up}>{`  ${glyphs.ok} done`}</Text> : <Text color={TONE.failed}>{`  ${glyphs.fail} failed`}</Text>}
         <Text dimColor>{`  in ${baseLabel(item.entry.bolt)} #${item.entry.number ?? ""} · ${since(item.entry.startedAt)}`}</Text>
       </Text>
@@ -407,7 +407,7 @@ function pipeline(group: PaneGroup, members: PaneItem[], history: HistoryEntry[]
       });
       return;
     }
-    if (step.kind === "command" && !entry.job && !step.state) {
+    if (step.kind === "command" && !step.finishes && !step.state) {
       const live = take((member) => member.type === "run" && member.run.label === step.label);
       if (live.length > 0) return void ordered.push(...live);
     }
@@ -675,12 +675,12 @@ function clip(text: string, max: number): string {
 }
 
 /** A finished step in a few words, to fit the list: "wait for port 5050", "open Acme". */
-function shortStep(step: HistoryStep, job: boolean): string {
+function shortStep(step: HistoryStep): string {
   if (step.kind === "wait") {
     if (/^\d+(\.\d+)?s$/.test(step.label)) return `wait ${step.label}`;
     return `wait for ${step.label.replace(/^https?:\/\//, "").replace(/\/$/, "")}`;
   }
-  return describeHistoryStep(step, job);
+  return describeHistoryStep(step);
 }
 
 /** How a command that is no longer running ended: by itself, with a failure, or stopped. */

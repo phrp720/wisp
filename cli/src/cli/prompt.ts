@@ -189,7 +189,7 @@ export function filterChoices(items: ChoiceItem[], query: string): number[] {
   });
 }
 
-export async function choose(question: string, items: ChoiceItem[], action = "run"): Promise<number | undefined> {
+export async function choose(question: string, items: ChoiceItem[], action = "run", start = 0): Promise<number | undefined> {
   const { stdin, stdout } = process;
   const width = Math.max(40, stdout.columns || 80);
   const room = Math.max(3, Math.min(items.length, (stdout.rows || 24) - 4));
@@ -199,7 +199,7 @@ export async function choose(question: string, items: ChoiceItem[], action = "ru
   const slugWidth = Math.min(Math.max(0, ...items.map((item) => item.slug?.length ?? 0)), Math.floor(width / 4));
 
   let query = "";
-  let at = 0;
+  let at = Math.max(0, Math.min(start, items.length - 1));
   let first = 0;
   let drawn = 0;
   let shown = filterChoices(items, query);

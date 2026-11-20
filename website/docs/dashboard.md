@@ -8,8 +8,13 @@ it started, look back at past runs. It works the same at your desk, over SSH and
 ## Three tabs
 
 - **`1` Bolts:** your projects (and your own workspaces) on the left, their bolts on the
-  right, and under them the selected bolt: its notes, its steps, how its last run went, what
-  needs it, and the command that runs it from a terminal. `⏎` runs one and shows each step.
+  right, and under them the selected bolt, whole: its steps with what each runs and whether
+  it's up, the bolts it needs opened up in place, how its last run went, what needs it, and
+  the command that runs it from a terminal. `⏎` runs it right there: each step ticks off in
+  that box, with the output of the one running, while the list stays where it is. `x` stops
+  the run, `r` retries from a failed step, and `esc` hides the result.
+  One that [asks for values](./file#inputs) shows a short form first, and one that
+  [asks first](./file#asking-first) asks on its row.
 - **`2` Running:** what each bolt started, as a pipeline, with live output, health and
   ports, and a log of what crashed and came back. Beside the list, each command has tabs
   for its logs, its details and its past runs, as in lazydocker.
@@ -37,10 +42,11 @@ terminal app that uses the mouse. Rather select freely? Turn it off in [Settings
 ## No JSON needed
 
 `a` adds a bolt and `e` edits one. The editor has two sides: on the left, the bolt (its
-name, notes and kind, then its steps in order), and on the right, the form for whatever is
-selected there. `⏎` edits it, `ctrl+s` saves, `esc` goes back. New steps are picked from a list
+name, notes, what a failure does, whether it asks first and its inputs, then its steps
+in order), and on the right, the form for whatever is selected there. `⏎` edits it, `ctrl+s` saves, `esc` goes back. New steps are picked from a list
 (Start, Wait, Open) and filled in the same way; `a` adds one after the selected step, `d`
-removes it and `K` `J` move it. On a narrow terminal it shows one side at a time. `E` opens
+removes it, `K` `J` move it, and `t` runs it [together](./file#steps-at-the-same-time) with
+the one before it, or on its own again. On a narrow terminal it shows one side at a time. `E` opens
 the file itself if you'd rather.
 
 ![Making a bolt in the dashboard: name it, then add a command, a wait and a website through short forms, then run it](/demo/editor.gif)
@@ -49,9 +55,10 @@ the file itself if you'd rather.
 
 | | |
 |---|---|
-| `⏎` · `n` | run the selected bolt · dry run it |
-| `v` | view a bolt whole: its steps, what it needs, what's up |
-| `x` · `R` | stop what it started (asks about the bolts it needed) · restart it |
+| `⏎` · `n` | run the selected bolt, in its box · dry run it |
+| `u` · `d` | scroll the selected bolt's steps, when they don't fit |
+| `x` · `R` | stop the run while it goes, or what it started (asks about the bolts it needed) · restart it |
+| `r` · `esc` | after a failed run: retry from the step that failed · hide the run |
 | `e` · `a` · `D` | edit · add · delete a bolt (on the left: `e` renames a workspace and sets its icon and notes, `D` deletes it) |
 | `←` `⏎` or `y` · `esc` | deleting asks on the row itself: delete it · keep it |
 | `K` · `J` | move a bolt up · down |

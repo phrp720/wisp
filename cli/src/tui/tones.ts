@@ -13,6 +13,4 @@ export const TONE = {
   busy: "yellow",
   /** Wisp itself: what is selected, focused, in progress. */
   accent: "#a78bfa",
-  /** A job, as opposed to a bolt that starts things. */
-  job: "cyan",
 } as const;

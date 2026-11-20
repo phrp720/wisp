@@ -16,7 +16,7 @@ export interface CommandDef<Options = Record<string, never>> {
   /** One line, sentence case, no full stop — shown in `wisp --help`. */
   summary: string;
   args?: [name: string, description: string][];
-  options?: [flags: string, description: string, fallback?: string | boolean][];
+  options?: [flags: string, description: string, fallback?: string | boolean | string[]][];
   /** Lines shown under the command's own `--help`: what is usual, not just what is possible. */
   examples?: string[];
   /**
@@ -35,6 +35,7 @@ export function register<Options>(program: Command, def: CommandDef<Options>): C
   for (const [name, description] of def.args ?? []) command.argument(name, description);
   for (const [flags, description, fallback] of def.options ?? []) {
     if (fallback === undefined) command.option(flags, description);
+    else if (Array.isArray(fallback)) command.option(flags, description, (value: string, previous: string[]) => [...previous, value], fallback);
     else command.option(flags, description, fallback);
   }
 
@@ -83,6 +84,7 @@ const HINTS: Record<string, string> = {
   NOT_FOUND: "Run `wisp list` to see what's available.",
   NO_BOLT: "`wisp show [workspace]` lists the bolts, `wisp pick [workspace]` chooses one.",
   NOT_TRUSTED: "Read what it would run with `wisp check`, then allow it with `wisp trust` (at a terminal). --skip-untrusted runs only the allowed part.",
+  CONFIRM_NEEDED: "Ask the person first; then run it again with --yes.",
   AMBIGUOUS: "Name it more precisely.",
   PROJECT_INVALID: "Run `wisp check` to see what is wrong with the file.",
   PROJECT_EXISTS: "Run `wisp check` to see what the existing file declares.",

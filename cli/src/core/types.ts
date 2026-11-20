@@ -81,6 +81,7 @@ export interface Command extends AssetBase {
   /** Absolute by the time it is here; written relative to the file it came from. */
   cwd?: string;
   background?: boolean;
+  finishes?: boolean;
   /** Brought back when it stops: after a crash, or whenever. Absent: left stopped. */
   restart?: RestartPolicy;
   /** Which shell `run` is written for. Absent means the platform's usual one. */
@@ -104,7 +105,7 @@ export type WaitSpec =
  * once per run however many bolts need it, and a command it would start is skipped when
  * Wisp already has it running.
  */
-export type BoltStep =
+export type BoltStep = (
   | { kind: "asset"; id: string }
   | { kind: "wait"; wait: WaitSpec }
   | { kind: "bolt"; bolt: string; workspace?: string }
@@ -112,7 +113,8 @@ export type BoltStep =
    * Services of a compose file: started with `up --wait`, so the step is done when they are
    * healthy; stopped by `wisp down`; shown with their state, health and logs.
    */
-  | { kind: "compose"; file: string; services?: string[] };
+  | { kind: "compose"; file: string; services?: string[] }
+) & { together?: number };
 
 /**
  * A named action over some of a workspace's assets: "API development", "Doc writing".
@@ -126,11 +128,9 @@ export interface Bolt {
   notes?: string;
   color?: string;
   steps: BoltStep[];
-  /**
-   * A job runs to completion rather than starting things: its commands run attached, the
-   * first failure stops it, and every run is kept in history. "Test", "Build", "Release".
-   */
-  job?: boolean;
+  keepGoing?: boolean;
+  confirm?: string;
+  inputs?: InputSpec[];
   /** Run by `wisp down` after stopping what the bolt started: `docker compose stop`. */
   down?: BoltStep[];
 }
@@ -197,6 +197,14 @@ export interface Config {
   noSetup?: string[];
   /** The dashboard takes clicks and the scroll wheel. Absent means yes; false turns it off. */
   mouse?: boolean;
+  notify?: NotifySettings;
+}
+
+export type NotifyWhen = "failures" | "all" | "off";
+
+export interface NotifySettings {
+  when?: NotifyWhen;
+  webhook?: string;
 }
 
 /**
@@ -287,6 +295,7 @@ export interface SwitchTarget {
   value: string;
   cwd?: string;
   background?: boolean;
+  finishes?: boolean;
   restart?: RestartPolicy;
   shell?: ShellKind;
   env?: Record<string, string>;
@@ -297,6 +306,7 @@ export interface SwitchTarget {
   workspace?: string;
   /** For a compose step: which file, which services, and whether it starts or stops them. */
   compose?: { file: string; services: string[]; action: "up" | "stop" };
+  together?: number;
 }
 
 export interface TargetResult extends SwitchTarget {
@@ -323,17 +333,24 @@ export interface SwitchResult {
   ok: boolean;
   /** What it set out to do, step by step — so the failed part can be run again. */
   plan?: import("./switch.js").PlannedStep[];
+  inputs?: Record<string, string>;
+}
+
+export interface InputSpec {
+  name: string;
+  ask: string;
+  choices?: string[];
+  default?: string;
 }
 
 export interface SwitchOptions {
+  inputs?: Record<string, string>;
+  watched?: boolean;
   dryRun?: boolean;
   /** Open without stealing focus, where the platform can. */
   background?: boolean;
-  only?: TargetKind[];
   /** Which bolt to run, by id or any distinctive part of its label. */
   bolt?: string;
-  /** Open every asset the workspace holds. */
-  all?: boolean;
   /** Focus a link's existing tab rather than opening a second one, where possible. */
   reuseTabs?: boolean;
   /** How commands run. Defaults to `auto`. */

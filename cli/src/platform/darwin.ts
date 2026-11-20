@@ -46,8 +46,16 @@ function forAppleScript(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
+export function notificationScript(title: string, message: string): string {
+  return `display notification "${forAppleScript(message)}" with title "${forAppleScript(title)}"`;
+}
+
 export const darwin: Platform = {
   os: "darwin",
+
+  async notify(title, message) {
+    await run("osascript", ["-e", notificationScript(title, message)]);
+  },
 
   async openUrl(url, options = {}) {
     await run("open", [...(options.background ? ["-g"] : []), url]);

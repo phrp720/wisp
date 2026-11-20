@@ -1,16 +1,14 @@
 # Getting started
 
-Wisp starts any project with one word: the database, the server, your editor in the right
-folder, the page in your browser. You describe it once; after that, `wisp api` brings it all
-up, `wisp acme api` does from any terminal, and Wisp keeps watch while you work.
-
-It runs your workflows too: checks, builds and releases, step by step, stopping at the first
-failure, with every run kept like a CI.
+Wisp runs the tasks you do every day with one word each: start a project's database, server
+and page, run the checks, back up, redeploy. You write the steps once; after that, `wisp api`
+runs them, `wisp acme api` does from any terminal, and Wisp keeps watch while you work.
 
 Three words you'll see:
 
-- **Bolt:** one thing you do, like *Work on api*: what to start, in order.
-- **Job:** a bolt that runs to the end, like *Check* or *Build*, and passes or fails.
+- **Bolt:** one task, like *Work on api* or *Deploy*: its steps, in order.
+- **Step:** one thing a bolt does: start a server, wait for a port, run the tests, open a
+  page.
 - **Workspace:** where bolts live: a project's `.wisp.json`, or a list of your own (your
   morning links, say).
 
@@ -82,4 +80,4 @@ rm ~/.local/bin/wisp                                  # then the binary (or npm 
 Your settings, history and personal workspaces live where `wisp doctor` says; delete those
 folders too for a clean slate.
 
-Next: [the dashboard](./dashboard), [the file](./file), [jobs and history](./jobs).
+Next: [recipes](./recipes), [the dashboard](./dashboard), [the file](./file), [runs and history](./runs).

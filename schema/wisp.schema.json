@@ -34,41 +34,6 @@
       "type": "string",
       "description": "A line about what this project is for."
     },
-    "links": {
-      "type": "array",
-      "description": "Shared URLs any bolt can name by label. On macOS an already-open tab is focused rather than opened again.",
-      "items": {
-        "$ref": "#/$defs/link"
-      }
-    },
-    "folders": {
-      "type": "array",
-      "description": "Shared directories. Paths are relative to this file, so they mean the same thing on every machine.",
-      "items": {
-        "$ref": "#/$defs/folder"
-      }
-    },
-    "files": {
-      "type": "array",
-      "description": "Shared files. Paths are relative to this file. A file that runs when opened (.command, .exe, .sh…) waits for `wisp trust`.",
-      "items": {
-        "$ref": "#/$defs/file"
-      }
-    },
-    "apps": {
-      "type": "array",
-      "description": "Shared applications to launch or bring forward.",
-      "items": {
-        "$ref": "#/$defs/app"
-      }
-    },
-    "commands": {
-      "type": "array",
-      "description": "Shared shell commands. These do NOT run until the reader allows this exact file with `wisp trust`. Any edit asks again.",
-      "items": {
-        "$ref": "#/$defs/command"
-      }
-    },
     "bolts": {
       "type": "array",
       "description": "What you run: 'Work on api', 'Incident response'. A bolt lists what to start, in order: inline, or by naming a shared asset.",
@@ -131,45 +96,6 @@
         }
       }
     },
-    "openWith": {
-      "type": "string",
-      "description": "Which app opens this folder or file. Honoured only in your personal workspaces; a shared project file cannot choose anyone's editor; readers set their own with `wisp open-with`."
-    },
-    "link": {
-      "oneOf": [
-        {
-          "type": "object",
-          "required": [
-            "url"
-          ],
-          "properties": {
-            "label": {
-              "$ref": "#/$defs/label"
-            },
-            "url": {
-              "type": "string",
-              "minLength": 1,
-              "description": "The URL to open. A bare host is assumed to be https.",
-              "examples": [
-                "https://staging.acme.com",
-                "http://localhost:3000"
-              ]
-            },
-            "os": {
-              "$ref": "#/$defs/os"
-            },
-            "openWith": {
-              "$ref": "#/$defs/openWith"
-            }
-          },
-          "additionalProperties": false
-        },
-        {
-          "type": "string",
-          "description": "Shorthand: the URL, doubling as its own label."
-        }
-      ]
-    },
     "pathProperty": {
       "type": "string",
       "minLength": 1,
@@ -177,64 +103,6 @@
       "examples": [
         "apps/api",
         "README.md"
-      ]
-    },
-    "folder": {
-      "oneOf": [
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "path"
-          ],
-          "properties": {
-            "label": {
-              "$ref": "#/$defs/label"
-            },
-            "path": {
-              "$ref": "#/$defs/pathProperty"
-            },
-            "os": {
-              "$ref": "#/$defs/os"
-            },
-            "openWith": {
-              "$ref": "#/$defs/openWith"
-            }
-          }
-        },
-        {
-          "type": "string",
-          "description": "Shorthand: the path, doubling as its own label."
-        }
-      ]
-    },
-    "file": {
-      "oneOf": [
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "path"
-          ],
-          "properties": {
-            "label": {
-              "$ref": "#/$defs/label"
-            },
-            "path": {
-              "$ref": "#/$defs/pathProperty"
-            },
-            "os": {
-              "$ref": "#/$defs/os"
-            },
-            "openWith": {
-              "$ref": "#/$defs/openWith"
-            }
-          }
-        },
-        {
-          "type": "string",
-          "description": "Shorthand: the path, doubling as its own label."
-        }
       ]
     },
     "appValue": {
@@ -254,51 +122,6 @@
           "macos": "Visual Studio Code",
           "linux": "code",
           "windows": "code"
-        }
-      ]
-    },
-    "app": {
-      "oneOf": [
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "app"
-          ],
-          "properties": {
-            "label": {
-              "$ref": "#/$defs/label"
-            },
-            "app": {
-              "$ref": "#/$defs/appValue"
-            },
-            "os": {
-              "$ref": "#/$defs/os"
-            }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "bundleIdOrAppName"
-          ],
-          "properties": {
-            "label": {
-              "$ref": "#/$defs/label"
-            },
-            "bundleIdOrAppName": {
-              "$ref": "#/$defs/appValue",
-              "deprecated": true
-            },
-            "os": {
-              "$ref": "#/$defs/os"
-            }
-          }
-        },
-        {
-          "type": "string",
-          "description": "Shorthand: the app, doubling as its own label."
         }
       ]
     },
@@ -331,7 +154,7 @@
       },
       "background": {
         "type": "boolean",
-        "description": "Always run it in the background, even when you have chosen to open commands in terminal windows. For anything you never need to look at.",
+        "description": "Always run it in the background, even when you have chosen to open commands in terminal windows. For anything you never need to look at. It has no effect on a command that finishes, which Wisp always waits for.",
         "default": false
       },
       "shell": {
@@ -387,6 +210,11 @@
         },
         "run": {
           "$ref": "#/$defs/commandProperties/run"
+        },
+        "finishes": {
+          "type": "boolean",
+          "default": false,
+          "description": "Wait for it to finish before the next step, and keep its output: a build, a test, a backup. Without it, the command keeps running: Wisp starts it and moves on, like a server."
         },
         "cwd": {
           "$ref": "#/$defs/commandProperties/cwd"
@@ -456,13 +284,8 @@
       ]
     },
     "step": {
-      "description": "One step of a bolt: a shared asset by label, something written inline, a wait, or another bolt to run first.",
+      "description": "One step of a bolt: something to open or run, a wait, Docker services, or another bolt to run first.",
       "oneOf": [
-        {
-          "type": "string",
-          "minLength": 1,
-          "description": "The label of a shared link, folder, file, app or command. folder:spec style ids pick between two of different kinds with one label."
-        },
         {
           "type": "object",
           "additionalProperties": false,
@@ -497,6 +320,11 @@
             },
             "os": {
               "$ref": "#/$defs/os"
+            },
+            "openWith": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The app that opens it. Only in a personal workspace: a shared file does not choose anyone's editor."
             }
           }
         },
@@ -515,6 +343,11 @@
             },
             "os": {
               "$ref": "#/$defs/os"
+            },
+            "openWith": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The app that opens it. Only in a personal workspace: a shared file does not choose anyone's editor."
             }
           }
         },
@@ -596,6 +429,23 @@
               "description": "The workspace that bolt is in, when it is not this one."
             }
           }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "together"
+          ],
+          "description": "Steps that start at the same time, like lint and tests. The next step waits for all of them; if one fails, the run stops once they have all finished.",
+          "properties": {
+            "together": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/groupMember"
+              }
+            }
+          }
         }
       ]
     },
@@ -632,10 +482,82 @@
             "$ref": "#/$defs/step"
           }
         },
-        "job": {
+        "keepGoing": {
           "type": "boolean",
           "default": false,
-          "description": "A job runs to completion (Test, Build, Release): its commands run attached, the first failure stops it, and every run is kept in `wisp history`. Bolts it depends on still start the way they normally do."
+          "description": "Carry on after a step fails: report it, and run the steps after it anyway. Without it, a failed step stops the rest."
+        },
+        "inputs": {
+          "type": "object",
+          "description": "Values it asks for when it runs, used in its steps as {{name}}: in a command, its folder and environment, a link, a folder or file, a wait for a website, and confirm. A value is plain words: letters, digits, spaces and . _ - / : @ + = , ~, with no word starting with -, so it can't run commands or pass options of its own. At a terminal Wisp asks; a script passes --input name=value, or the default is used. Kept with the run in history, so not for secrets.",
+          "propertyNames": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "ask": {
+                "type": "string",
+                "description": "The question, like \"Deploy where?\". Left out, the name is asked."
+              },
+              "choices": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^(?!-)[\\p{L}\\p{N}._/:@+=,~-]+(?: +(?!-)[\\p{L}\\p{N}._/:@+=,~-]+)*$"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ]
+                },
+                "description": "The values to pick from."
+              },
+              "default": {
+                "description": "Used when no value is given, and offered first at a terminal.",
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^(?!-)[\\p{L}\\p{N}._/:@+=,~-]+(?: +(?!-)[\\p{L}\\p{N}._/:@+=,~-]+)*$"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              }
+            }
+          },
+          "examples": [
+            {
+              "env": {
+                "ask": "Deploy where?",
+                "choices": [
+                  "staging",
+                  "production"
+                ],
+                "default": "staging"
+              }
+            }
+          ]
+        },
+        "confirm": {
+          "description": "Ask before it runs, for a bolt with consequences: a deploy, a restore. The question to ask, or true for \"Run <label>?\". Bolts that run it ask too. Without a terminal, it runs only with --yes.",
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "examples": [
+                "Deploy to production?"
+              ]
+            },
+            {
+              "type": "boolean"
+            }
+          ]
         },
         "down": {
           "type": "array",
@@ -645,6 +567,136 @@
           }
         }
       }
+    },
+    "groupMember": {
+      "description": "A step inside together: anything but another bolt.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "url"
+          ],
+          "properties": {
+            "label": {
+              "$ref": "#/$defs/label"
+            },
+            "url": {
+              "type": "string",
+              "minLength": 1
+            },
+            "os": {
+              "$ref": "#/$defs/os"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "folder"
+          ],
+          "properties": {
+            "label": {
+              "$ref": "#/$defs/label"
+            },
+            "folder": {
+              "$ref": "#/$defs/pathProperty"
+            },
+            "os": {
+              "$ref": "#/$defs/os"
+            },
+            "openWith": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The app that opens it. Only in a personal workspace: a shared file does not choose anyone's editor."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "file"
+          ],
+          "properties": {
+            "label": {
+              "$ref": "#/$defs/label"
+            },
+            "file": {
+              "$ref": "#/$defs/pathProperty"
+            },
+            "os": {
+              "$ref": "#/$defs/os"
+            },
+            "openWith": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The app that opens it. Only in a personal workspace: a shared file does not choose anyone's editor."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "app"
+          ],
+          "properties": {
+            "label": {
+              "$ref": "#/$defs/label"
+            },
+            "app": {
+              "$ref": "#/$defs/appValue"
+            },
+            "os": {
+              "$ref": "#/$defs/os"
+            }
+          }
+        },
+        {
+          "$ref": "#/$defs/command",
+          "description": "A command written inline. Waits for `wisp trust` like any other."
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "compose"
+          ],
+          "properties": {
+            "compose": {
+              "type": "string",
+              "minLength": 1,
+              "description": "A docker compose file, relative to this file. Its services are started with `up --wait` (the step is done when they are healthy), shown with their state and logs, and stopped by `wisp down`. Waits for `wisp trust`, like a command.",
+              "examples": [
+                "compose.yaml",
+                "deployments/development/docker-compose.yml"
+              ]
+            },
+            "services": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": "Only these services. All of them when left out."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "wait"
+          ],
+          "properties": {
+            "wait": {
+              "$ref": "#/$defs/wait"
+            }
+          }
+        }
+      ]
     }
   }
 }

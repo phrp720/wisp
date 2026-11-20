@@ -1,10 +1,11 @@
 import { recordProject } from "../../core/config.js";
-import { listHistory } from "../../core/history.js";
+import { listHistory, type HistoryEntry } from "../../core/history.js";
 import { WispError } from "../../core/errors.js";
-import { matchBolt, planRetry, runPlan, switchToWorkspace, type RunDeps } from "../../core/switch.js";
+import { matchBolt, planRetry, resolveBolt, runPlan, switchToWorkspace, type RunDeps } from "../../core/switch.js";
+import { beforeRun } from "../lib/ask.js";
 import type { RunMode, SwitchOptions, SwitchResult, SwitchTarget, TargetResult, Workspace } from "../../core/types.js";
 import { bold, cyan, dim, green, kindLabel, plural, red, title, yellow } from "../format.js";
-import { emitJson, findWorkspaceForDependency, resolveRun, workspaceFor } from "../lib/context.js";
+import { emitJson, findWorkspaceForDependency, resolveRun } from "../lib/context.js";
 import type { CommandDef } from "../lib/define.js";
 import { diagnosticSummary, named as showNamed, printWithheld, resultLine, trustLine } from "../lib/render.js";
 import { tildify } from "../../core/paths.js";
@@ -15,12 +16,13 @@ import { Prompter } from "../prompt.js";
 
 export interface UseOptions {
   dryRun?: boolean;
-  all?: boolean;
   inline?: boolean;
   detach?: boolean;
   window?: boolean;
   retry?: boolean;
   skipUntrusted?: boolean;
+  yes?: boolean;
+  input?: string[];
   json?: boolean;
 }
 
@@ -34,12 +36,13 @@ export const use: CommandDef<UseOptions> = {
   ],
   options: [
     ["-n, --dry-run", "show what would happen, and where each command would run"],
-    ["-a, --all", "open everything the workspace holds"],
     ["-i, --inline", "run commands here, in this terminal"],
     ["-w, --window", "run commands in terminal windows (or tmux windows, inside tmux)"],
     ["-d, --detach", "run commands in the background, even if you chose a terminal"],
     ["-r, --retry", "run again only what failed last time — and what that kept from running"],
     ["--skip-untrusted", "run only what the file is allowed to, skipping what waits for `wisp trust`"],
+    ["--input <name=value>", "a value the bolt asks for, like --input env=staging; once for each", []],
+    ["-y, --yes", "don't ask: answer yes, and take each input's default"],
     ["--json", "print the result as JSON"],
   ],
   examples: [
@@ -47,19 +50,16 @@ export const use: CommandDef<UseOptions> = {
     "wisp acme api             # a bolt of another workspace, from any folder",
     "wisp api --dry-run        # what would happen, and where",
     "wisp api --detach         # commands in the background, on a server",
-    "wisp acme --all           # everything a workspace holds",
   ],
 
   async run([first, second], options) {
-    const locate = async () =>
-      options.all && !second ? { read: await workspaceFor(first), ...(first ? { workspaceRef: first } : {}) } : await resolveRun(first, second, undefined);
-    const resolved = await locate();
+    const resolved = await resolveRun(first, second, undefined);
     const { bolt, workspaceRef } = resolved;
     let { read } = resolved;
     let { workspace } = read;
     const mode: RunMode = options.inline ? "inline" : options.detach ? "background" : options.window ? "terminal" : "auto";
 
-    if (!options.all && !bolt) {
+    if (!bolt) {
       const prefix = workspaceRef ? `${workspaceRef} ` : "";
       throw new WispError(
         workspace.bolts.length > 0
@@ -72,11 +72,10 @@ export const use: CommandDef<UseOptions> = {
     // Not half a run: when steps it needs wait for trust, ask (at a terminal) or stop, and
     // start nothing. A dry run goes ahead, since showing what would be skipped is its point.
     if (!options.dryRun && !options.skipUntrusted) {
-      const waitLabel = bolt ? boltLabel(workspace, bolt) : undefined;
+      const waitLabel = boltLabel(workspace, bolt);
       const waiting = waitingForTrust(read, waitLabel);
       if (waiting.length > 0) {
-        const what = waitLabel ? `"${waitLabel}"` : "Everything";
-        const needs = `${what} needs ${plural(waiting.length, "thing")} this file isn't allowed to run yet`;
+        const needs = `"${waitLabel}" needs ${plural(waiting.length, "thing")} this file isn't allowed to run yet`;
         if (options.json || !process.stdin.isTTY || !process.stdout.isTTY) throw new WispError(needs, "NOT_TRUSTED");
         console.log(yellow(`! ${needs}. Run without them, it would start only part of it.`));
         console.log();
@@ -84,7 +83,7 @@ export const use: CommandDef<UseOptions> = {
         const prompt = new Prompter();
         let yes = false;
         try {
-          yes = await prompt.confirm(waitLabel ? `Trust it and run "${waitLabel}"?` : "Trust it and run everything?");
+          yes = await prompt.confirm(`Trust it and run "${waitLabel}"?`);
         } finally {
           prompt.close();
         }
@@ -97,38 +96,62 @@ export const use: CommandDef<UseOptions> = {
         await trustProject(workspace.file, read.hash);
         console.log(`${green("✓")} trusted ${dim(tildify(workspace.file))}`);
         console.log();
-        read = (await locate()).read;
+        read = (await resolveRun(first, second, undefined)).read;
         workspace = read.workspace;
       }
+    }
+
+    const last = options.retry ? await lastRun(workspace, boltLabel(workspace, bolt)) : undefined;
+    if (last && (options.input ?? []).length > 0) throw new WispError("A retry runs with the values its run had: leave out --input", "INVALID_INPUT");
+    const inputs = await beforeRun(workspace, resolveBolt(workspace, bolt), options, last ? (last.inputs ?? {}) : undefined);
+    if (!inputs) {
+      console.log(dim("Nothing ran."));
+      process.exitCode = 1;
+      return;
     }
 
     // Remembered when you run it, so it can be listed and run from anywhere after.
     if (!workspace.personal && !options.dryRun) await recordProject(workspace.file).catch(() => undefined);
 
     const json = options.json ?? false;
-    const label = bolt ? boltLabel(workspace, bolt) : undefined;
-    const isJob = workspace.bolts.find((entry) => entry.label === label)?.job ?? false;
+    const label = boltLabel(workspace, bolt);
     if (!json) {
-      const prefix = options.dryRun ? yellow("dry run") : green(isJob ? "job" : "running");
-      console.log(`${prefix} ${title(workspace)}${label ? ` ${dim("·")} ${bold(label)}` : ""}`);
+      const prefix = options.dryRun ? yellow("dry run") : green("running");
+      console.log(`${prefix} ${title(workspace)} ${dim("·")} ${bold(label)}`);
     }
 
     // Each step is reported as it finishes, and an attached command's output arrives under
-    // its own header — so a long job reads as it goes, not all at once at the end.
+    // its own header — so a long run reads as it goes, not all at once at the end.
     let lastWasOutput = false;
     const attachedSteps = new Set<string>();
+    let planned: SwitchTarget[] = [];
+    let headedGroup: number | undefined;
+    let listedGroup: number | undefined;
     const runOptions: SwitchOptions = {
       // A git hook says so in its environment; anything else typed this.
       trigger: process.env["WISP_TRIGGER"] ?? "cli",
       dryRun: options.dryRun ?? false,
-      all: options.all ?? false,
+      inputs,
+      watched: json || process.stdout.isTTY === true || process.stderr.isTTY === true,
       mode,
       echo: !json,
       ...(json
         ? {}
         : {
+            onPlan: (targets: SwitchTarget[]) => {
+              planned = targets;
+            },
             onStep: (target: SwitchTarget, info: { attached: boolean }) => {
               if (!info.attached) return;
+              if (target.together !== undefined) {
+                attachedSteps.add(target.id);
+                if (target.together === headedGroup) return;
+                headedGroup = target.together;
+                const members = planned.filter((entry) => entry.together === target.together).map((entry) => entry.label);
+                console.log(`\n${bold("▸")} ${bold(members.join(", "))} ${dim("together")}`);
+                lastWasOutput = true;
+                return;
+              }
               const detail = target.label === target.value ? "" : ` ${dim(target.value)}`;
               console.log(`\n${bold("▸")} ${bold(target.label)}${detail}`);
               lastWasOutput = true;
@@ -139,17 +162,16 @@ export const use: CommandDef<UseOptions> = {
               lastWasOutput = false;
               // Its command was just printed above its output: the result line need not
               // say it again — what happened, and how long it took, is enough.
-              // In a job every step reads the same short way; elsewhere a step that opened
-              // something says what it opened.
-              console.log(attachedSteps.has(target.id) || (isJob && target.kind === "command") ? compactLine(target) : resultLine(target));
+              if (attachedSteps.has(target.id)) return console.log(compactLine(target));
+              if (target.together === undefined) return console.log(resultLine(target));
+              if (target.together !== listedGroup) console.log(`  ${dim("together")}`);
+              listedGroup = target.together;
+              console.log(`  ${resultLine(target)}`);
             },
           }),
     };
     const find = { findWorkspace: findWorkspaceForDependency };
-    const result =
-      options.retry && label
-        ? await retryLast(workspace, label, isJob, runOptions, find)
-        : await switchToWorkspace(workspace, { ...runOptions, ...(bolt ? { bolt } : {}) }, find);
+    const result = last ? await retryLast(workspace, label, last, runOptions, find) : await switchToWorkspace(workspace, { ...runOptions, ...(bolt ? { bolt } : {}) }, find);
 
     const untrusted = waitingForTrust(read, result.bolt?.label ?? label);
 
@@ -157,10 +179,10 @@ export const use: CommandDef<UseOptions> = {
       return emitJson({
         workspace: workspace.name,
         bolt: result.bolt?.label,
-        job: result.bolt?.job ?? false,
         ok: result.ok,
         dryRun: result.dryRun,
         history: result.historyId ?? null,
+        ...(result.inputs ? { inputs: result.inputs } : {}),
         targets: result.targets,
         waitingForTrust: untrusted.map(({ kind, label: name, value, cwd }) => ({ kind, label: name, value, ...(cwd ? { cwd } : {}) })),
       });
@@ -180,7 +202,6 @@ export const use: CommandDef<UseOptions> = {
         process.exitCode = 1;
         return;
       }
-      console.log(dim("  nothing ran: this workspace holds nothing to open here"));
       return;
     }
 
@@ -206,7 +227,7 @@ export const use: CommandDef<UseOptions> = {
 
     // One line that says how it went and what to do next — not two that say the same.
     const failedAt = result.targets.find((target) => !target.ok && !target.skipped);
-    const name = result.bolt?.label ?? label ?? workspace.name;
+    const name = result.bolt?.label ?? label;
     const total = result.targets.reduce((sum, target) => sum + (target.durationMs ?? 0), 0);
     if (!result.ok) {
       const next = [
@@ -215,8 +236,8 @@ export const use: CommandDef<UseOptions> = {
       ].filter(Boolean);
       console.error(`\n${red("✗")} ${bold(name)} ${failedAt ? `failed at ${failedAt.label}` : "was stopped"}${next.length > 0 ? dim(` · ${next.join(" · ")}`) : ""}`);
       process.exitCode = 1;
-    } else if (isJob && !result.dryRun) {
-      console.log(`\n${green("✓")} ${bold(name)} passed ${dim(`in ${formatMs(total)}`)}`);
+    } else if (result.targets.some((target) => target.finishes) && backgrounded.length === 0 && !result.dryRun) {
+      console.log(`\n${green("✓")} ${bold(name)} finished ${dim(`in ${formatMs(total)}`)}`);
     }
   },
 };
@@ -233,19 +254,17 @@ function boltLabel(workspace: Workspace, ref: string): string {
  * Matched step by step against the bolt as it is now, so a bolt edited since is refused
  * rather than half-matched.
  */
-async function retryLast(
-  workspace: Workspace,
-  label: string,
-  job: boolean,
-  options: SwitchOptions,
-  deps: RunDeps,
-): Promise<SwitchResult> {
+async function lastRun(workspace: Workspace, label: string): Promise<HistoryEntry> {
   const [last] = (await listHistory({ workspace: workspace.file, bolt: label })).filter((entry) =>
     !entry.running && entry.bolt.replace(/ \(retry\)$/, "").toLowerCase() === label.toLowerCase(),
   );
   if (!last) throw new WispError(`"${label}" has not run yet — run it whole first`, "NOTHING_TO_RETRY");
+  return last;
+}
+
+async function retryLast(workspace: Workspace, label: string, last: HistoryEntry, options: SwitchOptions, deps: RunDeps): Promise<SwitchResult> {
   const again = await planRetry(workspace, last, deps);
-  return runPlan(workspace, again, { ...options, label: `${label} (retry)`, job, trigger: "retry" }, deps);
+  return runPlan(workspace, again, { ...options, label: `${label} (retry)`, trigger: "retry" }, deps);
 }
 
 /** A result line for a step whose command and output were just shown: the outcome and time. */

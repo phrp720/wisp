@@ -9,7 +9,7 @@ import { HelpPanel } from "./panels.js";
 import { spell } from "./spells.js";
 import { since } from "./state.js";
 import { TONE } from "./tones.js";
-import { matchesAll, shortUrl, windowed, type Services } from "./model.js";
+import { groupMarks, matchesAll, shortUrl, windowed, type Services } from "./model.js";
 import { FilterLine, filterLog, MatchLine } from "./logfilter.js";
 import { useMouse } from "./mouse.js";
 
@@ -483,7 +483,8 @@ function RunDetail(props: {
   const rows: { key: string; step?: number; lines?: number; node: ReactNode }[] = [];
   const longest = Math.max(1, ...all.map((step) => step.durationMs));
   // As wide as the longest step, so a step's time sits beside it rather than across the screen.
-  const labelWidth = Math.min(Math.max(24, columns - 34), Math.max(16, ...all.map((step) => describeHistoryStep(step, entry.job).length + 2)));
+  const marks = groupMarks(all, glyphs);
+  const labelWidth = Math.min(Math.max(24, columns - 34), Math.max(16, ...all.map((step, at) => (marks[at] ?? "").length + describeHistoryStep(step).length + 2)));
   let matches = 0;
   let matchingSteps = 0;
   let reading = false;
@@ -504,7 +505,7 @@ function RunDetail(props: {
       node: (
         <Text wrap="truncate-end">
           <Text color={TONE.accent}>{isSelected ? glyphs.pointer : " "}</Text> {isOpen ? "▾" : "▸"} <Mark ok={step.ok} skipped={step.skipped} running={step.state === "running"} waiting={step.state === "waiting"} glyphs={glyphs} />{" "}
-          <Text bold={isSelected} color={isSelected ? TONE.accent : undefined} dimColor={step.state === "waiting" && !isSelected}>{fit(describeHistoryStep(step, entry.job), labelWidth)}</Text>
+          <Text bold={isSelected} color={isSelected ? TONE.accent : undefined} dimColor={step.state === "waiting" && !isSelected}>{fit(`${marks[at] ?? ""}${describeHistoryStep(step)}`, labelWidth)}</Text>
           {step.state ? (
             <Text color={step.state === "running" ? "cyan" : undefined} dimColor={step.state === "waiting"}>{`  ${(step.state === "running" ? "running" : "waiting").padEnd(18)}  `}</Text>
           ) : (
@@ -534,7 +535,7 @@ function RunDetail(props: {
       const lines = logs.get(at);
       const say = (text: string) => rows.push({ key: `l${at}`, lines: wrappedLines(`        ${text}`, columns - 4), node: <Text dimColor wrap="wrap">{`        ${text}`}</Text> });
       // Every step opens: one without output says why there is none, rather than nothing.
-      if (!step.log) say(noOutput(step, entry.job ?? false));
+      if (!step.log) say(noOutput(step));
       else if (!lines) say("reading…");
       else if (lines === GONE) say("Its output is no longer kept — it was cleared along with the finished run.");
       else if (lines.length === 0) say("It printed nothing.");
@@ -709,6 +710,7 @@ function Summary({ entry }: { entry: HistoryEntry }) {
   const cells: [string, string, string?][] = [
     ["Triggered", `${triggerWords(entry.trigger) ? `from ${triggerWords(entry.trigger)} ` : ""}${since(entry.startedAt)}`],
     ...(entry.git ? ([["Commit", `${entry.git.branch} @ ${entry.git.commit}${entry.git.subject ? `  “${clip(entry.git.subject, 40)}”` : ""}`]] as [string, string][]) : []),
+    ...(entry.inputs ? ([["With", Object.entries(entry.inputs).map(([name, value]) => `${name}=${value}`).join(" ")]] as [string, string][]) : []),
     entry.running
       ? ["Status", `Running, step ${Math.min(entry.steps.length + 1, entry.total ?? entry.steps.length + 1)} of ${entry.total ?? "?"}`, "cyan"]
       : entry.interrupted
@@ -779,10 +781,10 @@ function graphWidth(nodes: GraphNode[]): number {
 }
 
 /** A past step as the sentence the rest of Wisp would use for it. */
-export function describeHistoryStep(step: HistoryStep, job: boolean): string {
+export function describeHistoryStep(step: HistoryStep): string {
   switch (step.kind) {
     case "command":
-      return `${job ? "run" : "start"} ${step.label}`;
+      return `${step.finishes ? "run" : "start"} ${step.label}`;
     case "compose":
       return `start Docker services: ${step.label}`;
     case "wait":
@@ -900,10 +902,10 @@ function searchText(entry: HistoryEntry): (string | undefined)[] {
 const GONE: string[] = [];
 
 /** Why a step has no output to show, in words. */
-function noOutput(step: HistoryStep, job: boolean): string {
+function noOutput(step: HistoryStep): string {
   switch (step.kind) {
     case "command":
-      return job || step.skipped
+      return step.finishes || step.skipped
         ? step.skipped
           ? "It did not run."
           : "It printed nothing."

@@ -53,4 +53,6 @@ export interface Platform {
     snapshot(): Promise<Tab[]>;
     focus(tab: Tab): Promise<void>;
   };
+
+  notify?(title: string, message: string): Promise<void>;
 }

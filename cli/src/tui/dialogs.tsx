@@ -129,9 +129,8 @@ export function SetupPanel({ suggestion, glyphs, height, onAnswer }: { suggestio
               <Text color={TONE.accent}>{selected ? `${glyphs.pointer} ` : "  "}</Text>
               <Text color={on ? TONE.accent : undefined} dimColor={!on}>{on ? "[✓] " : "[ ] "}</Text>
               <Text bold={selected} color={on ? (selected ? TONE.accent : undefined) : undefined} dimColor={!on}>{`${glyphs.bolt}${bolt.label}`}</Text>
-              {bolt.job ? <Text color={TONE.job} dimColor={!on}> · a job: stops at the first failure</Text> : null}
             </Text>
-            <Text wrap="truncate-end" dimColor>{`        ${(bolt.job ? bolt.steps.map((step) => step.replace(/^start /, "run ")) : bolt.steps).join(", then ")}`}</Text>
+            <Text wrap="truncate-end" dimColor>{`        ${bolt.steps.join(", then ")}`}</Text>
           </Box>
         );
       })}

@@ -5,7 +5,7 @@ import { WispError } from "../../core/errors.js";
 import { expandHome } from "../../core/paths.js";
 import { PROJECT_FILE, findProjectFile, readProjectFile } from "../../core/project.js";
 import { matchBolt } from "../../core/switch.js";
-import type { TargetKind, Workspace, WorkspaceRead } from "../../core/types.js";
+import type { Workspace, WorkspaceRead } from "../../core/types.js";
 import { discoverWorkspaces, matchWorkspace, resolveWorkspace, slugify } from "../../core/workspaces.js";
 
 /**
@@ -126,43 +126,6 @@ async function noBoltHere(word: string, here: WorkspaceRead | undefined): Promis
     !workspace && elsewhere.length === 0 && !here ? "`wisp list` shows your workspaces." : "",
   ].filter(Boolean);
   return new WispError([said, ...next].join(" "), "NO_BOLT");
-}
-
-/** `links,folders` and friends, as the kinds the runner understands. */
-export function parseKinds(value?: string): TargetKind[] | undefined {
-  if (!value) return undefined;
-
-  const aliases: Record<string, TargetKind> = {
-    link: "link",
-    links: "link",
-    folder: "folder",
-    folders: "folder",
-    dir: "folder",
-    file: "file",
-    files: "file",
-    app: "app",
-    apps: "app",
-    command: "command",
-    commands: "command",
-    run: "command",
-  };
-
-  const kinds = value
-    .split(",")
-    .map((part) => part.trim().toLowerCase())
-    .filter(Boolean)
-    .map((part) => {
-      const kind = aliases[part];
-      if (!kind) {
-        throw new WispError(
-          `Unknown target kind "${part}" — expected links, folders, files, apps or commands`,
-          "INVALID_INPUT",
-        );
-      }
-      return kind;
-    });
-
-  return kinds.length > 0 ? kinds : undefined;
 }
 
 export function emitJson(value: unknown): void {

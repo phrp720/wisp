@@ -1,6 +1,6 @@
 import type { Invocation } from "../core/types.js";
 import { which } from "../core/which.js";
-import { launch } from "./spawn.js";
+import { launch, run } from "./spawn.js";
 import { LINUX_TERMINALS, findIn } from "./terminals.js";
 import type { Platform, TerminalRequest } from "./types.js";
 
@@ -23,6 +23,10 @@ async function startApp(app: string, args: string[] = []): Promise<void> {
 
 export const linux: Platform = {
   os: "linux",
+
+  async notify(title, message) {
+    await run("notify-send", ["--app-name=Wisp", title, message]);
+  },
 
   async openUrl(url) {
     await systemOpen(url);

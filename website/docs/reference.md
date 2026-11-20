@@ -13,7 +13,6 @@ Your editor autocompletes all of this once the file has its `$schema` line.
 | `color` | a hex colour, like `"#6d4aff"` |
 | `notes` | a line about what the project is for |
 | `bolts` | the [bolts](#bolts) |
-| `links` · `folders` · `files` · `apps` · `commands` | [shared assets](#shared-assets) that bolts name by label |
 
 ## Bolts
 
@@ -22,15 +21,16 @@ Your editor autocompletes all of this once the file has its `$schema` line.
 | `label` | its name, and what you type: its slug or any whole word of it runs it. Keep it short: "Deploy", "Work on api" |
 | `notes` | a line on what it does, shown in `wisp show`, `wisp pick`, tab completion and the dashboard |
 | `targets` | its [steps](#steps), in order |
-| `job` | `true` makes it a [job](./jobs): runs to the end, stops at the first failure, kept in history |
+| `keepGoing` | `true` reports a failed step and runs the rest anyway; without it, a failed step [stops the run](./runs#when-a-step-fails) |
+| `confirm` | a question to [ask before it runs](./file#asking-first), like `"Deploy to production?"`; `true` asks "Run "Deploy"?" |
+| `inputs` | [values it asks for](./file#inputs) each time it runs, used in its steps as `{{name}}`: `{ "env": { "ask": "Deploy where?", "choices": ["staging", "production"], "default": "staging" } }` |
 | `down` | steps `wisp down` runs after stopping what it started, like `docker compose stop` |
 | `color` | a hex colour |
 
 ## Steps
 
-Each step is one of the forms below, or the label of a [shared asset](#shared-assets) as a
-plain string: `"Repository"`. Every form takes an optional `label` (what Wisp shows for it)
-and `os` (see [Several operating systems](#several-operating-systems)).
+Each step is one of the forms below. Every form takes an optional `label` (what Wisp shows
+for it) and `os` (see [Several operating systems](#several-operating-systems)).
 
 ### Command
 
@@ -41,11 +41,12 @@ and `os` (see [Several operating systems](#several-operating-systems)).
 | Field | |
 |---|---|
 | `run` | the command line; pipes and `&&` work. One per OS when they differ |
+| `finishes` | `true` for a command that ends, like a test or a build: Wisp [waits for it](./runs) and keeps its output. Left out, it keeps running, like a server |
 | `cwd` | the folder to run it in, relative to the file; left out, the project's folder |
 | `env` | environment variables, on top of yours |
 | `restart` | `"on-failure"` after a crash, `"always"` whenever it exits, `"no"` (the default). Waits 1s, 2s, 4s… up to 30s between tries; gives up after 10 in a row |
 | `shell` | `"sh"`, `"pwsh"` or `"cmd"`; the default is your shell on macOS and Linux, PowerShell on Windows |
-| `background` | `true` keeps it in the background even when your [settings](./settings) open commands in terminal windows |
+| `background` | `true` keeps it in the background even when your [settings](./settings) open commands in terminal windows. No effect with `finishes` |
 
 Runs only once the file is [trusted](./trust).
 
@@ -110,27 +111,17 @@ Paths are relative to the file. Folders open in your file manager or the editor 
 
 A name, a macOS bundle id (`com.tinyspeck.slackmacgap`), or a command on PATH.
 
-## Shared assets
-
-Declare something once, and any bolt names it by its label:
+### Together
 
 ```json
-{
-  "links": [{ "label": "Repository", "url": "https://github.com/acme/acme" }],
-  "folders": [{ "label": "API", "path": "apps/api" }],
-  "files": [{ "label": "Runbook", "path": "docs/runbook.md" }],
-  "apps": [{ "label": "Slack", "app": "Slack" }],
-  "commands": [{ "label": "api", "run": "pnpm dev", "cwd": "apps/api" }],
-  "bolts": [{ "label": "Work on api", "targets": ["API", "api", "Repository"] }]
-}
+{ "together": [{ "run": "pnpm lint", "finishes": true }, { "wait": "localhost:5432" }] }
 ```
 
-Each takes the same fields as its step form above (`path` for folders and files). A plain
-string works too: `"links": ["https://github.com/acme/acme"]` is its own label. When a link
-and a folder share a label, `"folder:API"` picks the folder.
+Starts its steps at the same time; the next step waits for all of them. Any step but
+another bolt. See [steps at the same time](./file#steps-at-the-same-time).
 
-In your [personal workspaces](./file#personal-workspaces), a shared link, folder or file can
-also say `"openWith": "WebStorm"`. A project's file can't: everyone chooses their own editor.
+In your [personal workspaces](./file#personal-workspaces), a folder or file step can also say
+`"openWith": "WebStorm"`. A project's file can't: everyone chooses their own editor.
 
 ## Several operating systems
 

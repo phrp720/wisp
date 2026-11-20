@@ -1,7 +1,7 @@
 import { Box, type DOMElement, Text, useInput } from "ink";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { STEP_FIELDS, STEP_KINDS, buildStep, describeRawStep, stepKindOf, stepValues, type RawBolt, type StepKindName } from "../core/edit.js";
+import { STEP_FIELDS, STEP_KINDS, buildInput, buildStep, describeRawStep, flatSteps, inputValues, stepKindOf, stepValues, type RawBolt, type RawInput, type StepKindName } from "../core/edit.js";
 import { tildify } from "../core/paths.js";
 import { ASK_KEYS, AskHere, Form, Picker } from "./forms.js";
 import type { Glyphs } from "./glyphs.js";
@@ -9,14 +9,22 @@ import { useMouse, useRefs } from "./mouse.js";
 import { TONE } from "./tones.js";
 import { windowed, type Editing } from "./model.js";
 
-type Row = { kind: "name" } | { kind: "notes" } | { kind: "kind" } | { kind: "step"; at: number } | { kind: "add" };
+type Row =
+  | { kind: "name" }
+  | { kind: "notes" }
+  | { kind: "failure" }
+  | { kind: "confirm" }
+  | { kind: "input"; name: string }
+  | { kind: "add-input" }
+  | { kind: "step"; at: number }
+  | { kind: "add" };
 
-const DETAILS = 3;
 const SIDE_BY_SIDE = 90;
 
 export interface BoltEditorProps {
   file: string;
   bolt: string;
+  workspace?: string | undefined;
   /** Other bolts of this workspace, for "run another bolt first". */
   others: string[];
   /** Bolts of other workspaces, which can be run first too. */
@@ -40,11 +48,11 @@ export interface BoltEditorProps {
  * A bolt, edited without its JSON: its steps in plain words, in order, and keys to add,
  * change, move and remove them. Every change is saved as it is made.
  */
-export function BoltEditor({ file, bolt, others, elsewhere = [], adding = false, editing, glyphs, height, columns = 100, onClose, onChanged, onMessage, onSaving, onHint }: BoltEditorProps) {
+export function BoltEditor({ file, bolt, workspace, others, elsewhere = [], adding = false, editing, glyphs, height, columns = 100, onClose, onChanged, onMessage, onSaving, onHint }: BoltEditorProps) {
   const [label, setLabel] = useState(bolt);
   const [raw, setRaw] = useState<RawBolt>();
-  const [index, setIndexState] = useState(DETAILS);
-  const indexRef = useRef(DETAILS);
+  const [index, setIndexState] = useState(-1);
+  const indexRef = useRef(-1);
   const setIndex = (next: number) => {
     indexRef.current = next;
     setIndexState(next);
@@ -52,6 +60,7 @@ export function BoltEditor({ file, bolt, others, elsewhere = [], adding = false,
   const [open, setOpen] = useState(adding);
   const [newStep, setNewStep] = useState<{ at: number; kind?: StepKindName } | undefined>(adding ? { at: 0 } : undefined);
   const [deleting, setDeleting] = useState<number>();
+  const [dropping, setDropping] = useState<string>();
   const [session, setSession] = useState(0);
   const [error, setError] = useState<string>();
 
@@ -68,15 +77,48 @@ export function BoltEditor({ file, bolt, others, elsewhere = [], adding = false,
   );
   useEffect(() => void load(bolt), [load, bolt]);
 
-  const steps = raw?.targets ?? [];
-  const rows: Row[] = [{ kind: "name" }, { kind: "notes" }, { kind: "kind" }, ...steps.map((_, at): Row => ({ kind: "step", at })), { kind: "add" }];
-  const selected = Math.min(index, rows.length - 1);
+  const flat = flatSteps(raw?.targets ?? []);
+  const steps = flat.map((item) => item.step);
+  const alongside = (at: number) => {
+    let start = at;
+    while (start > 0 && flat[start]?.joined) start -= 1;
+    let end = start + 1;
+    while (end < flat.length && flat[end]?.joined) end += 1;
+    return end - start > 1 ? Array.from({ length: end - start }, (_, offset) => start + offset).filter((other) => other !== at) : [];
+  };
+  const inputs = Object.entries(raw?.inputs ?? {});
+  const asking = raw?.confirm === true ? true : typeof raw?.confirm === "string" && raw.confirm.trim() ? raw.confirm.trim() : false;
+  const rows: Row[] = [
+    { kind: "name" },
+    { kind: "notes" },
+    { kind: "failure" },
+    { kind: "confirm" },
+    ...inputs.map(([name]): Row => ({ kind: "input", name })),
+    { kind: "add-input" },
+    ...steps.map((_, at): Row => ({ kind: "step", at })),
+    { kind: "add" },
+  ];
+  const first = 5 + inputs.length;
+  const place = (at: number) => (at < 0 ? first : Math.min(at, rows.length - 1));
+  const selected = place(index);
   const row = rows[selected] as Row;
 
   const back = () => {
     setOpen(false);
     setNewStep(undefined);
     setSession((count) => count + 1);
+  };
+
+  const shift = async (work: () => Promise<number>) => {
+    try {
+      onSaving?.();
+      const at = await work();
+      await load(label);
+      setIndex(first + at);
+      onChanged(label);
+    } catch (failure) {
+      onMessage(failure instanceof Error ? failure.message : String(failure));
+    }
   };
 
   const change = async (work: () => Promise<void>, next?: number, done?: string) => {
@@ -93,17 +135,22 @@ export function BoltEditor({ file, bolt, others, elsewhere = [], adding = false,
   };
 
   const edit = (target: Row) => {
+    if (target.kind === "add-input" || target.kind === "input") return setOpen(true);
     if (target.kind === "add") {
       setNewStep({ at: steps.length });
       return setOpen(true);
     }
-    if (target.kind === "step" && stepKindOf(steps[target.at] as RawBolt["targets"][number]) === "shared") {
-      return onMessage(`"${String(steps[target.at])}" is shared by name — change it in the file itself (E)`);
+    if (target.kind === "step" && !stepKindOf(steps[target.at] as RawBolt["targets"][number])) {
+      return onMessage("Wisp can't edit this step here — change it in the file itself (E)");
     }
     setOpen(true);
   };
 
   const addAfter = (from: Row) => {
+    if (from.kind === "input" || from.kind === "add-input") {
+      setIndex(first - 1);
+      return setOpen(true);
+    }
     const at = from.kind === "step" ? from.at + 1 : steps.length;
     setNewStep({ at });
     setOpen(true);
@@ -111,24 +158,26 @@ export function BoltEditor({ file, bolt, others, elsewhere = [], adding = false,
 
   useInput(
     (input, key) => {
-      const at = Math.min(indexRef.current, rows.length - 1);
+      const at = place(indexRef.current);
       const current = rows[at] as Row;
       if (key.escape || input === "q") return onClose();
       if (input === "K" || (key.shift && key.upArrow)) {
-        if (current.kind === "step") void change(() => editing.moveStep(file, label, current.at, -1), DETAILS + Math.max(0, current.at - 1));
+        if (current.kind === "step") void shift(() => editing.moveStep(file, label, current.at, -1));
         return;
       }
       if (input === "J" || (key.shift && key.downArrow)) {
-        if (current.kind === "step") void change(() => editing.moveStep(file, label, current.at, 1), DETAILS + Math.min(steps.length - 1, current.at + 1));
+        if (current.kind === "step") void shift(() => editing.moveStep(file, label, current.at, 1));
         return;
       }
+      if (input === "t" && current.kind === "step" && steps.length > 1) return void shift(() => editing.toggleTogether(file, label, current.at));
       if (key.upArrow || input === "k") return setIndex(Math.max(0, at - 1));
       if (key.downArrow || input === "j") return setIndex(Math.min(rows.length - 1, at + 1));
       if (key.return || key.rightArrow) return edit(current);
       if (input === "a") return addAfter(current);
       if (current.kind === "step" && (input === "d" || key.delete)) return setDeleting(current.at);
+      if (current.kind === "input" && (input === "d" || key.delete)) return setDropping(current.name);
     },
-    { isActive: !open && deleting === undefined },
+    { isActive: !open && deleting === undefined && dropping === undefined },
   );
 
   const rowNodes = useRefs<number>();
@@ -146,17 +195,29 @@ export function BoltEditor({ file, bolt, others, elsewhere = [], adding = false,
       else setIndex(hit[0]);
       return true;
     },
-    !open && deleting === undefined,
+    !open && deleting === undefined && dropping === undefined,
   );
 
+  const onInputs = row.kind === "input" || row.kind === "add-input";
   const hint =
     deleting !== undefined
       ? `Its place in the order closes up · ${ASK_KEYS}`
-      : open && newStep && !newStep.kind
-        ? "↑↓ choose · ⏎ pick · type to find · esc back"
-        : open
-          ? "↑↓ fields · ⏎ next · ctrl+s save · esc back"
-          : ["↑↓ choose", "⏎ edit", "a add a step", row.kind === "step" ? "d remove · K J move" : "", "esc done"].filter(Boolean).join(" · ");
+      : dropping !== undefined
+        ? `Steps that use {{${dropping}}} keep it as written · ${ASK_KEYS}`
+        : open && newStep && !newStep.kind
+          ? "↑↓ choose · ⏎ pick · type to find · esc back"
+          : open
+            ? "↑↓ fields · ⏎ next · ctrl+s save · esc back"
+            : [
+                "↑↓ choose",
+                "⏎ edit",
+                onInputs ? "a add an input" : "a add a step",
+                row.kind === "step" ? "d remove · K J move" : row.kind === "input" ? "d remove" : "",
+                row.kind === "step" && steps.length > 1 ? (alongside(row.at).length > 0 ? "t run on its own" : row.at > 0 ? "t run with the one before" : "t run with the next") : "",
+                "esc done",
+              ]
+                .filter(Boolean)
+                .join(" · ");
   useEffect(() => onHint?.(hint), [hint, onHint]);
 
   const stepForm = (kind: StepKindName, initial: Record<string, string>, at: number, replace: boolean, active: boolean, room: number) => {
@@ -164,7 +225,7 @@ export function BoltEditor({ file, bolt, others, elsewhere = [], adding = false,
     const choosable = [...others.map((name) => ({ value: name, label: name })), ...elsewhere.map((other) => ({ value: `${other.workspace} › ${other.bolt}`, label: `${other.workspace} › ${other.bolt}` }))];
     const picking = kind === "bolt" && choosable.length > 0;
     const fields = picking
-      ? [{ key: "bolt", label: "Bolt", hint: "it runs to its end — or until what it starts is up — before the next step", required: true, choices: choosable }]
+      ? [{ key: "bolt", label: "Bolt", hint: "it runs before the next step", required: true, choices: choosable }]
       : STEP_FIELDS[kind];
     const start = picking && initial["workspace"] ? { bolt: `${initial["workspace"]} › ${initial["bolt"] ?? ""}` } : initial;
     const valuesOf = (values: Record<string, string>) => {
@@ -176,6 +237,7 @@ export function BoltEditor({ file, bolt, others, elsewhere = [], adding = false,
       <Form
         key={`step:${at}:${kind}:${session}`}
         title={`${replace ? `Step ${at + 1}` : steps.length === 0 ? "The first step" : `New step ${at + 1}`} · ${entry && glyphs.border === "round" ? `${entry.icon} ` : ""}${entry?.title ?? "Step"}`}
+        {...(inputs.length > 0 && kind !== "bolt" && kind !== "wait" ? { intro: `${inputs.map(([name]) => `{{${name}}}`).join(", ")} puts in the value it asks for when it runs.` } : {})}
         fields={fields}
         initial={start}
         preview={(values) => {
@@ -192,7 +254,7 @@ export function BoltEditor({ file, bolt, others, elsewhere = [], adding = false,
           const values = valuesOf(given);
           const { step, errors } = buildStep(kind, values);
           if (!step) return errors;
-          await change(() => (replace ? editing.replaceStep(file, label, at, step) : editing.addStep(file, label, step, at)), DETAILS + at, replace ? "Saved." : `Added: ${describeRawStep(step)}`);
+          await change(() => (replace ? editing.replaceStep(file, label, at, step) : editing.addStep(file, label, step, at)), first + at, replace ? "Saved." : `Added: ${describeRawStep(step)}`);
           back();
           return undefined;
         }}
@@ -288,24 +350,24 @@ export function BoltEditor({ file, bolt, others, elsewhere = [], adding = false,
         />
       );
     }
-    if (row.kind === "kind") {
+    if (row.kind === "confirm") {
       return (
         <Form
-          key={`kind:${session}`}
-          title="Kind"
-          intro="What happens when it runs."
+          key={`confirm:${session}`}
+          title="Ask first"
+          intro="Wisp asks before it runs this bolt, for one with consequences: a deploy, a restore. A script has to pass --yes."
           fields={[
             {
-              key: "kind",
-              label: "Kind",
-              hint: "a job is for tests, builds and releases",
+              key: "ask",
+              label: "Ask first",
               choices: [
-                { value: "start", label: "Starter — starts things and leaves them running" },
-                { value: "job", label: "Job — runs to the end, stops at the first failure" },
+                { value: "no", label: "no" },
+                { value: "yes", label: "yes" },
               ],
             },
+            { key: "question", label: "Question", placeholder: `Run "${label}"?`, hint: "empty asks the one in grey", when: (values) => values["ask"] === "yes" },
           ]}
-          initial={{ kind: raw?.job ? "job" : "start" }}
+          initial={{ ask: asking === false ? "no" : "yes", question: typeof asking === "string" ? asking : "" }}
           submitLabel="Save"
           glyphs={glyphs}
           height={room}
@@ -313,9 +375,91 @@ export function BoltEditor({ file, bolt, others, elsewhere = [], adding = false,
           keys={false}
           onCancel={back}
           onSubmit={async (values) => {
-            const job = values["kind"] === "job";
-            if (job !== Boolean(raw?.job)) {
-              await change(() => editing.setJob(file, label, job), undefined, job ? `"${label}" is now a job: it runs to the end and stops at the first failure` : `"${label}" is now a starter: it starts things and leaves them running`);
+            const next = values["ask"] === "yes" ? values["question"]?.trim() || true : false;
+            if (next !== asking) {
+              const said = next === false ? `"${label}" now runs without asking` : next === true ? `"${label}" now asks first` : `"${label}" now asks first: ${next}`;
+              await change(() => editing.setConfirm(file, label, next), undefined, said);
+            }
+            back();
+            return undefined;
+          }}
+        />
+      );
+    }
+    if (row.kind === "input" || row.kind === "add-input") {
+      const previous = row.kind === "input" ? row.name : undefined;
+      const current = previous ? (raw?.inputs?.[previous] as RawInput) : undefined;
+      if (!active && !current) {
+        return (
+          <Box flexDirection="column" height={room} borderStyle={glyphs.border} borderColor="gray" paddingX={1}>
+            <Text bold>Inputs</Text>
+            <Text dimColor wrap="wrap">Values it asks for each time it runs, like where to deploy or which backup to restore. Its steps use one as {"{{name}}"}.</Text>
+            <Text> </Text>
+            <Text dimColor>⏎ to add one</Text>
+          </Box>
+        );
+      }
+      return (
+        <Form
+          key={`input:${previous ?? ""}:${session}`}
+          title={previous ? `Input ${previous}` : "A new input"}
+          intro="A value it asks for each time it runs. Its steps use it as {{name}}."
+          fields={[
+            { key: "name", label: "Name", required: true, placeholder: "env", hint: "what its steps write between {{ }}" },
+            { key: "ask", label: "Question", placeholder: "Deploy where?" },
+            { key: "choices", label: "Choices", placeholder: "staging, production", hint: "commas between them; empty takes any value" },
+            { key: "default", label: "Default", placeholder: "staging", hint: "used when none is given, as in a script" },
+          ]}
+          initial={previous && current ? inputValues(previous, current) : {}}
+          preview={(values) => {
+            const name = values["name"]?.trim();
+            return name ? `${previous && previous !== name ? `renames {{${previous}}} to ` : "steps use it as "}{{${name}}}` : undefined;
+          }}
+          submitLabel={previous ? "Save" : "Add input"}
+          glyphs={glyphs}
+          height={room}
+          active={active}
+          keys={false}
+          onCancel={back}
+          onSubmit={async (values) => {
+            const built = buildInput(values, inputs.map(([name]) => name).filter((name) => name !== previous));
+            if ("errors" in built) return built.errors;
+            const at = previous ? inputs.findIndex(([name]) => name === previous) : inputs.length;
+            await change(() => editing.setInput(file, label, previous, built.name, built.input), 4 + at, previous ? "Saved." : `Added the input ${built.name}`);
+            back();
+            return undefined;
+          }}
+        />
+      );
+    }
+    if (row.kind === "failure") {
+      return (
+        <Form
+          key={`failure:${session}`}
+          title="If a step fails"
+          intro="What the rest of the run does when one of its steps fails."
+          fields={[
+            {
+              key: "keepGoing",
+              label: "On failure",
+              hint: "stop: nothing after it runs",
+              choices: [
+                { value: "stop", label: "stop" },
+                { value: "continue", label: "keep going" },
+              ],
+            },
+          ]}
+          initial={{ keepGoing: raw?.keepGoing ? "continue" : "stop" }}
+          submitLabel="Save"
+          glyphs={glyphs}
+          height={room}
+          active={active}
+          keys={false}
+          onCancel={back}
+          onSubmit={async (values) => {
+            const keepGoing = values["keepGoing"] === "continue";
+            if (keepGoing !== Boolean(raw?.keepGoing)) {
+              await change(() => editing.setKeepGoing(file, label, keepGoing), undefined, keepGoing ? `"${label}" now keeps going after a failure` : `"${label}" now stops at the first failure`);
             }
             back();
             return undefined;
@@ -325,11 +469,11 @@ export function BoltEditor({ file, bolt, others, elsewhere = [], adding = false,
     }
     const step = steps[row.at] as RawBolt["targets"][number];
     const kind = stepKindOf(step);
-    if (kind === "shared") {
+    if (!kind) {
       return (
         <Box flexDirection="column" height={room} borderStyle={glyphs.border} borderColor="gray" paddingX={1}>
           <Text bold>{`Step ${row.at + 1}`}</Text>
-          <Text dimColor wrap="wrap">{`"${String(step)}" is declared once in the file and shared by name. Change it in the file itself (E).`}</Text>
+          <Text dimColor wrap="wrap">Wisp can't edit this step here. Change it in the file itself (E).</Text>
         </Box>
       );
     }
@@ -340,18 +484,27 @@ export function BoltEditor({ file, bolt, others, elsewhere = [], adding = false,
   if (!sideBySide && open) return right(true, height);
 
   const leftWidth = sideBySide ? Math.min(60, Math.max(36, Math.floor(columns * 0.42))) : undefined;
-  const room = Math.max(1, height - 10 - (deleting === undefined ? 0 : 1));
-  const stepRows = rows.map((entry, at) => ({ entry, at })).slice(DETAILS);
-  const { items } = windowed(stepRows, Math.max(0, selected - DETAILS), room);
-  const icon = (kind: string) => (glyphs.border !== "round" || kind === "bolt" ? "" : (STEP_KINDS.find((entry) => entry.kind === kind)?.icon ?? "🔗") + " ");
+  const room = Math.max(1, height - 12 - inputs.length - (deleting === undefined && dropping === undefined ? 0 : 1));
+  const stepRows = rows.map((entry, at) => ({ entry, at })).slice(first);
+  const { items } = windowed(stepRows, Math.max(0, selected - first), room);
+  const icon = (kind: string | undefined) => (glyphs.border !== "round" || kind === "bolt" ? "" : (STEP_KINDS.find((entry) => entry.kind === kind)?.icon ?? "🔗") + " ");
   const joint = (at: number) => (glyphs.border !== "round" ? "|" : steps.length === 1 ? "─" : at === 0 ? "┌" : at === steps.length - 1 ? "└" : "│");
   const pointer = (at: number) => <Text color={TONE.accent}>{at === selected ? `${glyphs.pointer} ` : "  "}</Text>;
   const detail = (at: number, name: string, value: string, empty: string) => (
     <Box ref={rowNodes.set(at)}>
       <Text wrap="truncate-end">
         {pointer(at)}
-        <Text bold={at === selected} color={at === selected ? TONE.accent : undefined}>{name.padEnd(7)}</Text>
+        <Text bold={at === selected} color={at === selected ? TONE.accent : undefined}>{name.padEnd(11)}</Text>
         {value ? <Text>{value}</Text> : <Text dimColor>{empty}</Text>}
+      </Text>
+    </Box>
+  );
+
+  const addInputRow = (at: number) => (
+    <Box ref={rowNodes.set(at)}>
+      <Text wrap="truncate-end">
+        {pointer(at)}
+        <Text color={TONE.accent} bold={at === selected}>{`${"".padEnd(11)}+  add an input`}</Text>
       </Text>
     </Box>
   );
@@ -359,11 +512,38 @@ export function BoltEditor({ file, bolt, others, elsewhere = [], adding = false,
   const left = (
     <Box flexDirection="column" width={leftWidth} flexGrow={sideBySide ? 0 : 1} flexShrink={0} height={height} borderStyle={glyphs.border} borderColor={open ? "gray" : TONE.accent} paddingX={1} overflow="hidden">
       <Text bold color={TONE.accent} wrap="truncate-end">{`${glyphs.bolt}${label}`}</Text>
-      <Text dimColor wrap="truncate-start">{tildify(file)}</Text>
+      <Box>
+        {workspace ? (
+          <Box flexShrink={0}>
+            <Text>{workspace}</Text>
+            <Text dimColor>{" · "}</Text>
+          </Box>
+        ) : null}
+        <Box flexShrink={1} minWidth={0}>
+          <Text dimColor wrap="truncate-start">{tildify(file)}</Text>
+        </Box>
+      </Box>
       {error ? <Text color={TONE.failed}>{error}</Text> : <Text> </Text>}
       {detail(0, "Name", label, "")}
       {detail(1, "Notes", raw?.notes ?? "", "none yet")}
-      {detail(2, "Kind", raw?.job ? "Job" : "Starter", "")}
+      {detail(2, "On failure", raw?.keepGoing ? "keep going" : "stop", "")}
+      {detail(3, "Ask first", asking === true ? "yes" : asking || "", "no")}
+      {inputs.map(([name, input], at) => (
+        <Box key={`input:${name}`} flexDirection="column">
+          {detail(4 + at, at === 0 ? "Inputs" : "", `${name}${input.ask ? ` · ${input.ask}` : ""}${input.choices ? ` · ${input.choices.join(", ")}` : ""}`, "")}
+          {name === dropping ? (
+            <AskHere
+              question="Remove this input?"
+              yes="Remove"
+              onAnswer={(yes) => {
+                setDropping(undefined);
+                if (yes) void change(() => editing.removeInput(file, label, name), 4 + Math.max(0, Math.min(at, inputs.length - 2)), `Removed the input ${name}`);
+              }}
+            />
+          ) : null}
+        </Box>
+      ))}
+      {inputs.length === 0 ? detail(first - 1, "Inputs", "", "none") : addInputRow(first - 1)}
       <Text> </Text>
       <Text bold>Steps</Text>
       {items.map(({ entry, at }) => {
@@ -388,6 +568,7 @@ export function BoltEditor({ file, bolt, others, elsewhere = [], adding = false,
                 <Text dimColor>{`${joint(entry.at)} ${String(entry.at + 1).padStart(2)}  `}</Text>
                 {icon(stepKindOf(step))}
                 <Text bold={active} color={entry.at === deleting ? "red" : active ? TONE.accent : undefined}>{describeRawStep(step)}</Text>
+                {alongside(entry.at).length > 0 ? <Text dimColor>{`  with ${alongside(entry.at).map((other) => other + 1).join(", ")}`}</Text> : null}
               </Text>
             </Box>
             {entry.at === deleting ? (
@@ -396,7 +577,7 @@ export function BoltEditor({ file, bolt, others, elsewhere = [], adding = false,
                 yes="Remove"
                 onAnswer={(yes) => {
                   setDeleting(undefined);
-                  if (yes) void change(() => editing.removeStep(file, label, entry.at), DETAILS + Math.max(0, Math.min(entry.at, steps.length - 2)), "Removed.");
+                  if (yes) void change(() => editing.removeStep(file, label, entry.at), first + Math.max(0, Math.min(entry.at, steps.length - 2)), "Removed.");
                 }}
               />
             ) : null}

@@ -4,7 +4,7 @@ import { interpret } from "../../core/project.js";
 import { type CompletionSources, complete } from "./complete.js";
 
 const read = (file: string, main: Record<string, unknown>) => interpret({ main }, { file, personal: false, trust: "trusted", os: "darwin" });
-const acme = read("/dev/acme/.wisp.json", { name: "Acme", bolts: [{ label: "Work on api", targets: [] }, { label: "Check", job: true, targets: [] }] });
+const acme = read("/dev/acme/.wisp.json", { name: "Acme", bolts: [{ label: "Work on api", targets: [] }, { label: "Check", targets: [] }] });
 const payments = read("/dev/payments/.wisp.json", { name: "Payments Service", bolts: [{ label: "Services", targets: [] }, { label: "Test", targets: [] }] });
 
 const sources = (here = acme): CompletionSources => ({

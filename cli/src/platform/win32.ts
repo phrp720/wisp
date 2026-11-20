@@ -1,6 +1,7 @@
 import type { Invocation } from "../core/types.js";
 import { which } from "../core/which.js";
-import { launch } from "./spawn.js";
+import { pwshQuote } from "../core/shell.js";
+import { launch, run } from "./spawn.js";
 import { CROSS_PLATFORM_TERMINALS, findIn, type TerminalSpec } from "./terminals.js";
 import type { Platform, TerminalRequest } from "./types.js";
 
@@ -37,8 +38,23 @@ export function windowsTerminalCommand(name: string, invocation: Invocation, tit
   return spec.binary ? [spec.binary, ...args] : args;
 }
 
+export function toastScript(title: string, message: string): string {
+  return [
+    "[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null",
+    "$xml = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)",
+    "$texts = $xml.GetElementsByTagName('text')",
+    `$texts.Item(0).AppendChild($xml.CreateTextNode(${pwshQuote(title)})) > $null`,
+    `$texts.Item(1).AppendChild($xml.CreateTextNode(${pwshQuote(message)})) > $null`,
+    "[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\WindowsPowerShell\\v1.0\\powershell.exe').Show([Windows.UI.Notifications.ToastNotification]::new($xml))",
+  ].join("; ");
+}
+
 export const win32: Platform = {
   os: "win32",
+
+  async notify(title, message) {
+    await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", toastScript(title, message)]);
+  },
 
   async openUrl(url) {
     // The shell's own URL handler, and no `cmd /c start` — whose quoting would let an `&`

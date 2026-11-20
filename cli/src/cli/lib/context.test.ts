@@ -37,7 +37,7 @@ beforeEach(async () => {
       { label: "Document", targets: [{ url: "localhost:5174" }] },
     ],
   });
-  mira = await project("mira", { name: "Mira", links: [{ label: "Site", url: "https://mira.example" }], bolts: [{ label: "Deploy", targets: ["Site"] }] });
+  mira = await project("mira", { name: "Mira", bolts: [{ label: "Deploy", targets: [{ label: "Site", url: "https://mira.example" }] }] });
   outside = join(dir, "elsewhere");
   await mkdir(outside, { recursive: true });
   await recordProject(join(wisp, ".wisp.json"));
@@ -93,16 +93,6 @@ describe("two words", () => {
     const { read, bolt } = await resolveRun("mira", "deploy", undefined);
     expect(read.workspace.name).toBe("Mira");
     expect(bolt).toBe("deploy");
-  });
-});
-
-describe("wisp <workspace> --all", () => {
-  it("takes the one word as the workspace", async () => {
-    standIn(wisp);
-    await use.run(["mira"], { all: true, dryRun: true, json: true });
-    const result = JSON.parse(printed.join("\n")) as { workspace: string; targets: { value: string }[] };
-    expect(result.workspace).toBe("Mira");
-    expect(result.targets.map((target) => target.value)).toEqual(["https://mira.example"]);
   });
 });
 

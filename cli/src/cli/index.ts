@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 
+import { securePrivateFolders } from "../core/paths.js";
 import { status } from "./commands/status.js";
 import { dim } from "./format.js";
 import { withImplicitUse } from "./lib/argv.js";
@@ -77,5 +78,6 @@ if (process.argv[2] === "__complete") {
     // no suggestions
   }
 } else {
+  await securePrivateFolders().catch(() => undefined);
   program.parseAsync(withImplicitUse(process.argv, verbs())).catch(fail);
 }

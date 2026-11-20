@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { Environment } from "./environment.js";
 import { interpret } from "./project.js";
-import { matchBolt, planBolt, resolveBolt, routeFor, switchToWorkspace } from "./switch.js";
+import { inputsFor, matchBolt, planBolt, questionsFor, resolveBolt, routeFor, switchToWorkspace } from "./switch.js";
 import type { Platform } from "../platform/types.js";
 import type { SwitchOptions, Workspace } from "./types.js";
 
@@ -104,6 +104,41 @@ describe("planBolt", () => {
     const ws = workspace({ bolts: [{ label: "x", targets: [{ run: "make" }, { folder: "src" }] }] }, undefined, false);
     const plan = await planBolt(ws, resolveBolt(ws, "x"));
     expect(plan.map((step) => step.target.kind)).toEqual(["folder"]);
+  });
+});
+
+describe("questionsFor", () => {
+  it("asks the bolt's question and those of the bolts it runs, each once", async () => {
+    const ws = workspace({
+      bolts: [
+        { label: "Database", confirm: "Touch the shared database?", targets: [{ run: "db" }] },
+        { label: "Migrate", targets: [{ bolt: "Database" }, { run: "migrate", finishes: true }] },
+        { label: "Deploy", confirm: "Deploy to production?", targets: [{ bolt: "Migrate" }, { bolt: "Database" }, { run: "deploy", finishes: true }] },
+        { label: "Dev", targets: [{ run: "pnpm dev" }] },
+      ],
+    });
+    expect(await questionsFor(ws, resolveBolt(ws, "Deploy"))).toEqual(["Deploy to production?", "Touch the shared database?"]);
+    expect(await questionsFor(ws, resolveBolt(ws, "Dev"))).toEqual([]);
+  });
+
+  it("puts the run's values in the question", async () => {
+    const ws = workspace({ bolts: [{ label: "Deploy", inputs: { env: {} }, confirm: "Deploy to {{env}}?", targets: [{ run: "deploy {{env}}" }] }] });
+    expect(await questionsFor(ws, resolveBolt(ws, "Deploy"), {}, { env: "production" })).toEqual(["Deploy to production?"]);
+  });
+});
+
+describe("inputsFor", () => {
+  it("asks each name once, the bolt's own first, then those of the bolts it runs", async () => {
+    const ws = workspace({
+      bolts: [
+        { label: "Push", inputs: { env: { ask: "Push where?" }, tag: { default: "latest" } }, targets: [{ run: "push {{env}} {{tag}}" }] },
+        { label: "Release", inputs: { env: { ask: "Release where?", choices: ["staging", "production"] } }, targets: [{ bolt: "Push" }] },
+      ],
+    });
+    expect(await inputsFor(ws, resolveBolt(ws, "Release"))).toEqual([
+      { name: "env", ask: "Release where?", choices: ["staging", "production"] },
+      { name: "tag", ask: "tag", default: "latest" },
+    ]);
   });
 });
 

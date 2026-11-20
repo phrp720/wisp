@@ -39,16 +39,8 @@ describe("the published schema", async () => {
       name: "Acme",
       icon: "🏢",
       color: "#6d4aff",
-      links: ["acme.com", { label: "Staging", url: "https://staging.acme.com", os: "macos" }],
-      folders: ["apps/api", { label: "web", path: "apps/web", os: ["linux", "windows"] }],
-      files: [{ label: "Readme", path: "README.md" }],
-      apps: ["Slack", { label: "Editor", app: { macos: "Visual Studio Code", linux: "code" } }],
-      commands: [
-        { label: "dev", run: "pnpm dev", cwd: "apps/api", env: { PORT: 3000 }, shell: "sh", background: true },
-        { label: "build", run: { macos: "make", windows: "nmake" } },
-      ],
       bolts: [
-        { label: "Database", job: true, targets: [{ run: "docker compose up -d" }, { wait: "5432" }], down: [{ run: "docker compose stop" }] },
+        { label: "Database", keepGoing: true, targets: [{ run: "docker compose up -d", finishes: true }, { wait: "5432" }], down: [{ run: "docker compose stop" }] },
         {
           label: "Work on api",
           color: "#4a9dff",
@@ -56,24 +48,44 @@ describe("the published schema", async () => {
             { bolt: "Database", workspace: "infra" },
             { bolt: "Database" },
             { compose: "deployments/development/docker-compose.yml", services: ["postgres"] },
-            "apps/api",
             { folder: "apps/api" },
+            { label: "web", folder: "apps/web", os: ["linux", "windows"] },
             { file: "docs/runbook.md" },
             { url: "http://localhost:3000" },
+            { label: "Staging", url: "https://staging.acme.com", os: "macos" },
             { app: "Slack" },
+            { label: "Editor", app: { macos: "Visual Studio Code", linux: "code" } },
+            { label: "dev", run: "pnpm dev", cwd: "apps/api", env: { PORT: 3000 }, shell: "sh", background: true },
+            { label: "build", run: { macos: "make", windows: "nmake" } },
             { run: "pnpm test", env: { CI: true } },
             { wait: 3 },
             { wait: "localhost:5432" },
             { wait: { url: "http://localhost:3000", timeout: 90 } },
-            "dev",
           ],
         },
+        {
+          label: "Deploy",
+          confirm: "Deploy {{tag}} to {{env}}?",
+          inputs: { env: { ask: "Deploy where?", choices: ["staging", "production"], default: "staging" }, tag: {} },
+          targets: [{ run: "./deploy.sh {{env}} {{tag}}", finishes: true }, { wait: "https://{{env}}.acme.com/health" }, { url: "https://{{env}}.acme.com" }],
+        },
+        { label: "Restore", confirm: true, targets: [{ run: "./restore.sh", finishes: true }] },
+        { label: "Check", targets: [{ together: [{ run: "pnpm lint", finishes: true }, { run: "pnpm test", finishes: true }, { wait: "localhost:5432" }] }, { run: "pnpm build", finishes: true }] },
       ],
     };
 
     expect(valid(file)).toBe(true);
     const read = interpret({ main: file }, { file: "/w/.wisp.json", personal: false, trust: "trusted", os: "darwin" });
     expect(read.diagnostics.filter((entry) => entry.level === "error")).toEqual([]);
+    expect(read.diagnostics.filter((entry) => entry.at.startsWith("bolts[2]") || entry.at.startsWith("bolts[3]") || entry.at.startsWith("bolts[4]"))).toEqual([]);
+  });
+
+  it("has no shared sections, and no steps written as a name", () => {
+    expect(valid({ links: [{ label: "Repository", url: "https://github.com/acme/acme" }], bolts: [] })).not.toBe(true);
+    expect(valid({ bolts: [{ label: "Open", targets: ["Repository"] }] })).not.toBe(true);
+    const read = interpret({ main: { bolts: [{ label: "Open", targets: ["Repository", { url: "acme.com" }] }] } }, { file: "/w/.wisp.json", personal: false, trust: "trusted", os: "darwin" });
+    expect(read.diagnostics.filter((entry) => entry.level === "error").map((entry) => entry.message)).toEqual(['dropped: a step is an object, like { "run": "pnpm dev" } or { "url": "localhost:3000" }']);
+    expect(read.workspace.bolts[0]?.steps).toHaveLength(1);
   });
 
   it("flags what the reader would warn about", () => {
@@ -82,6 +94,15 @@ describe("the published schema", async () => {
     expect(valid({ commands: [{ run: "x", shell: "fish" }] })).not.toBe(true);
     expect(valid({ bolts: [{ label: "x", targets: [{ wait: "soon" }] }] })).not.toBe(true);
     expect(valid({ bolts: [{ label: "x", targets: [{ folder: "a", run: "b" }] }] })).not.toBe(true);
+    expect(valid({ bolts: [{ label: "x", confirm: 3, targets: [] }] })).not.toBe(true);
+    expect(valid({ bolts: [{ label: "x", inputs: { "bad name": {} }, targets: [] }] })).not.toBe(true);
+    expect(valid({ bolts: [{ label: "x", inputs: { env: { ask: "Where?", options: ["a"] } }, targets: [] }] })).not.toBe(true);
+    expect(valid({ bolts: [{ label: "x", inputs: { env: { choices: ["eu;west"] } }, targets: [] }] })).not.toBe(true);
+    expect(valid({ bolts: [{ label: "x", inputs: { note: { default: "a --force" } }, targets: [] }] })).not.toBe(true);
+    expect(valid({ bolts: [{ label: "x", inputs: { tag: { default: "-rf" } }, targets: [] }] })).not.toBe(true);
+    expect(valid({ bolts: [{ label: "x", inputs: { city: { choices: ["München", 3, "eu west"] } }, targets: [] }] })).toBe(true);
+    expect(valid({ bolts: [{ label: "x", targets: [{ together: [{ bolt: "Database" }] }] }] })).not.toBe(true);
+    expect(valid({ bolts: [{ label: "x", targets: [{ together: [] }] }] })).not.toBe(true);
   });
 
   it("validates Wisp's own project file", async () => {

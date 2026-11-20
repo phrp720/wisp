@@ -1,8 +1,8 @@
 import { randomBytes } from "node:crypto";
-import { mkdir, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { join } from "node:path";
 
-import { readJson, stateDir, withLock, writeJson } from "./paths.js";
+import { privateDir, readJson, stateDir, withLock, writeJson } from "./paths.js";
 import type { StepKind } from "./types.js";
 
 /** One step of a past run, as it went. */
@@ -17,6 +17,8 @@ export interface HistoryStep {
   error?: string;
   note?: string;
   durationMs: number;
+  finishes?: boolean;
+  together?: number;
   /** What an attached command printed. Commands in windows keep their output there. */
   log?: string;
   /** The bolt it belongs to, when a dependency brought it in — drawn as one group. */
@@ -32,9 +34,9 @@ export interface HistoryEntry {
   workspace: string;
   workspaceName: string;
   bolt: string;
-  job: boolean;
   /** What started it: "tui", "cli", "hook", "retry" — the "triggered by" of a CI run. */
   trigger?: string;
+  inputs?: Record<string, string>;
   /** The code it ran against, when the project is a git repository. */
   git?: { branch: string; commit: string; subject?: string };
   /** Which run of this bolt it was, counting from one: "Check #7". */
@@ -64,7 +66,7 @@ export function newHistoryId(): string {
 
 /** Where step `index` of run `id` writes its output. */
 export async function stepLogPath(id: string, index: number): Promise<string> {
-  await mkdir(join(stateDir(), "history", id), { recursive: true });
+  await privateDir(join(stateDir(), "history", id));
   return stepLogFile(id, index);
 }
 

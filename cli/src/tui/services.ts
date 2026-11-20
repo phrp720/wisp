@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, resolve } from "node:path";
 
-import { declineSetup, forgetProject, getMouse, getOpenWithDefaults, recordProject, setMouse, setOpenWithDefaults, setupDeclined } from "../core/config.js";
+import { declineSetup, forgetProject, getMouse, getNotify, getOpenWithDefaults, recordProject, setMouse, setNotify, setOpenWithDefaults, setupDeclined } from "../core/config.js";
 import { installedEditors } from "../core/editors.js";
 import { detectEnvironment } from "../core/environment.js";
 import { listRuns, restartRun, stopRun, tail } from "../core/processes.js";
@@ -12,7 +12,7 @@ import { containerAction, containerLogs, containerStats, composeContainers, Dock
 import { describe as describeError } from "../core/errors.js";
 import { PROJECT_FILE, checkProject, findProjectFile } from "../core/project.js";
 import { bolts as draftBolts, draftProject, writeProjectDraft } from "../core/scaffold.js";
-import { downBolt, planRetry, runPlan, switchToWorkspace } from "../core/switch.js";
+import { downBolt, inputsFor, planRetry, questionsFor, resolveBolt, runPlan, switchToWorkspace } from "../core/switch.js";
 import { forgetHistory, listHistory } from "../core/history.js";
 import { trustProject } from "../core/trust.js";
 import { which } from "../core/which.js";
@@ -56,6 +56,7 @@ export function realServices(hooks: { suspend: () => void; resume: () => void })
           bolt,
           trigger: "tui",
           dryRun: callbacks.dryRun,
+          ...(callbacks.inputs ? { inputs: callbacks.inputs } : {}),
           mode: "auto",
           onPlan: callbacks.onPlan,
           onStep: callbacks.onStep,
@@ -67,14 +68,14 @@ export function realServices(hooks: { suspend: () => void; resume: () => void })
       );
     },
 
-    retry: (read, steps, label, job, callbacks) =>
+    retry: (read, steps, label, callbacks) =>
       runPlan(
         read.workspace,
         steps,
         {
           label: `${label} (retry)`,
-          job,
           trigger: "retry",
+          ...(callbacks.inputs ? { inputs: callbacks.inputs } : {}),
           onPlan: callbacks.onPlan,
           onStep: callbacks.onStep,
           onResult: callbacks.onResult,
@@ -85,6 +86,8 @@ export function realServices(hooks: { suspend: () => void; resume: () => void })
       ),
 
     planRetry: (read, entry) => planRetry(read.workspace, entry, { findWorkspace: async (ref) => resolveWorkspace(ref, await everything()).workspace }),
+    questions: (read, bolt, values = {}) => questionsFor(read.workspace, resolveBolt(read.workspace, bolt), { findWorkspace: async (ref) => resolveWorkspace(ref, await everything()).workspace }, values),
+    inputs: (read, bolt) => inputsFor(read.workspace, resolveBolt(read.workspace, bolt), { findWorkspace: async (ref) => resolveWorkspace(ref, await everything()).workspace }),
 
     down: (read, bolt, options = {}) =>
       downBolt(read.workspace, bolt, options.deps ? { deps: true } : {}, { findWorkspace: async (ref) => resolveWorkspace(ref, await everything()).workspace }),
@@ -163,6 +166,8 @@ export function realServices(hooks: { suspend: () => void; resume: () => void })
       set: (change) => setOpenWithDefaults(change),
       mouse: () => getMouse(),
       setMouse: (on) => setMouse(on),
+      notify: () => getNotify(),
+      setNotify: (change) => setNotify(change),
       choices: () => {
         const environment = detectEnvironment();
         const platform = getPlatform(environment.os);
@@ -178,11 +183,15 @@ export function realServices(hooks: { suspend: () => void; resume: () => void })
       setWorkspaceDetails: edit.setWorkspaceDetails,
       removeBolt: edit.removeBolt,
       moveBolt: edit.moveBolt,
-      setJob: edit.setJob,
+      setKeepGoing: edit.setKeepGoing,
+      setConfirm: edit.setConfirm,
+      setInput: edit.setInput,
+      removeInput: edit.removeInput,
       addStep: edit.addStep,
       replaceStep: edit.replaceStep,
       removeStep: edit.removeStep,
       moveStep: edit.moveStep,
+      toggleTogether: edit.toggleTogether,
       createPersonalWorkspace: edit.createPersonalWorkspace,
       removePersonalWorkspace: edit.removePersonalWorkspace,
       forgetProject: async (file) => {
@@ -216,13 +225,10 @@ export function setupSuggestion(dir: string, draft: Awaited<ReturnType<typeof dr
     found: detected.sources,
     bolts: draftBolts(detected).map((bolt) => ({
       label: bolt.label,
-      job: bolt.job ?? false,
       steps: bolt.targets.map((step) =>
-        typeof step === "string"
-          ? `open ${step}`
-          : typeof step["compose"] === "string" && detected.compose
-            ? `start Docker services: ${detected.compose.services.map((service) => service.name).join(", ")} — and wait until they're healthy`
-            : describeDraftStep(step),
+        typeof step["compose"] === "string" && detected.compose
+          ? `start Docker services: ${detected.compose.services.map((service) => service.name).join(", ")} — and wait until they're healthy`
+          : describeDraftStep(step),
       ),
     })),
     contents: draft.contents,
@@ -232,7 +238,7 @@ export function setupSuggestion(dir: string, draft: Awaited<ReturnType<typeof dr
 /** A drafted step, described the way the running TUI describes it. */
 function describeDraftStep(step: Record<string, unknown>): string {
   if (typeof step["compose"] === "string") return describeStep(composeTarget({ file: step["compose"] }, "up"));
-  if (typeof step["run"] === "string") return `start ${typeof step["label"] === "string" ? step["label"] : step["run"]}`;
+  if (typeof step["run"] === "string") return `${step["finishes"] === true ? "run" : "start"} ${typeof step["label"] === "string" ? step["label"] : step["run"]}`;
   if (typeof step["bolt"] === "string") return `${step["bolt"]} first`;
   if (typeof step["folder"] === "string") return `open the ${step["folder"]} folder`;
   if (typeof step["url"] === "string") return `open ${step["url"]}`;

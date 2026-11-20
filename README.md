@@ -15,10 +15,9 @@
 </p>
 
 <p align="center">
-  <b>Start any project with one word.</b><br />
-  The database, the server, your editor in the right folder, the page in your browser:<br />
-  described once, brought up with <code>wisp &lt;bolt&gt;</code> from any terminal.<br />
-  Your workflows too: checks, builds and releases, kept like CI runs.
+  <b>Your everyday tasks, one word each.</b><br />
+  Start the dev stack, run the checks, back up the database, redeploy:<br />
+  written once, run with <code>wisp &lt;bolt&gt;</code> from any terminal, on your laptop or a server.
 </p>
 
 <p align="center">
@@ -27,6 +26,7 @@
 
 <p align="center">
   <a href="https://willowisp.dev/docs/getting-started">Docs</a> ·
+  <a href="https://willowisp.dev/docs/recipes">Recipes</a> ·
   <a href="https://willowisp.dev/docs/commands">Commands</a> ·
   <a href="https://willowisp.dev/docs/reference">File reference</a> ·
   <a href="https://willowisp.dev/docs/questions">Questions</a> ·
@@ -74,8 +74,8 @@ forms; no JSON to touch. It works the same over SSH and in tmux.
 
 ## A bolt
 
-A named list of things to start, in order. It lives in a `.wisp.json` next to your code, so
-the whole team has it:
+One task's steps, in order. It lives in a `.wisp.json` next to your code, so the whole team
+has it:
 
 ```json
 {
@@ -96,18 +96,20 @@ the whole team has it:
 ```
 
 Steps can run commands, start Docker services, wait for a port or a website, run another
-bolt first, and open links, folders, files and apps. Every field is in the
+bolt first, run side by side, and open links, folders, files and apps. Every field is in the
 [File reference](https://willowisp.dev/docs/reference).
 
-## Workflows
+## Checks, builds, deploys
 
-Checks, builds and releases run as workflows: mark a bolt `"job": true` and it runs step by
-step, stopping at the first failure. Every run is kept like a CI run, with its commit and each
-step's output; `--retry` runs only what failed. `wisp hook pre-push check` runs one before
-every push.
+Mark a command `"finishes": true` and Wisp waits for it; the first failure stops the run.
+Checks can run side by side, and a deploy can ask where to and ask before it goes. Every run
+is kept like a CI run, with its commit and each step's output; `--retry` runs only what
+failed. Run one before every push with `wisp hook pre-push verify`, or every night with
+cron, and Wisp tells you when it fails. [Recipes](https://willowisp.dev/docs/recipes) has
+each of these as a bolt to copy.
 
 <p align="center">
-  <img src="website/public/demo/jobs.gif" alt="A Check job fails at its test; History shows the run like CI, with the test's output; after the fix, --retry runs only the test, and it passes" width="900" />
+  <img src="website/public/demo/jobs.gif" alt="A Check bolt fails at its test; History shows the run like CI, with the test's output; after the fix, --retry runs only the test, and it passes" width="900" />
 </p>
 
 ## What's running

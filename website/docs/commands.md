@@ -19,11 +19,12 @@ Every command takes `--help`; most take `--json`, for scripts and agents.
 |---|---|
 | `-n`, `--dry-run` | show what it would do, and where; change nothing |
 | `-r`, `--retry` | run again from the step that failed last time |
-| `-a`, `--all` | open everything the workspace holds, not one bolt |
 | `-w`, `--window` | run its commands in terminal windows (tmux windows, inside tmux) |
 | `-i`, `--inline` | run them here, with their output in this terminal |
 | `-d`, `--detach` | run them in the background, even if your settings say windows |
 | `--skip-untrusted` | run only what the file is allowed to, skipping what waits for trust |
+| `--input name=value` | a value the bolt [asks for](./file#inputs), like `--input env=staging`; once for each |
+| `-y`, `--yes` | don't ask: answer yes to a bolt that [asks first](./file#asking-first), and take each input's default |
 | `--json` | the result as JSON |
 
 ### How Wisp reads `wisp <name>`
@@ -42,7 +43,7 @@ Every command takes `--help`; most take `--json`, for scripts and agents.
 - **A bolt named like a command** (`list`, `check`) still runs with `wisp use list`.
 
 `down` and `restart` take `--deps`, for the bolts it needed too; `down --dry-run` shows what
-would stop. `wisp <workspace> --all` opens everything a workspace holds.
+would stop.
 
 `wisp pick` lists the bolts with what's running, their slugs and notes: type to filter, `⏎`
 runs the one selected, `esc` cancels. It takes the same options as running a bolt. Without
@@ -56,8 +57,9 @@ a terminal, or with `--json`, it asks nothing and prints the list instead.
 | `wisp check` | what's wrong with the file, and what it would run |
 | `wisp trust` | allow this file's commands, after showing them |
 | `wisp scan ~/dev` | find the projects you already have, so they show up everywhere |
-| `wisp hook pre-push check` | run a job from a git hook; the push stops if it fails |
+| `wisp hook pre-push check` | run a bolt from a git hook; the push stops if it fails |
 | `wisp open-with` | your editor and terminal; the same as [Settings](./settings) |
+| `wisp notify` | when Wisp [tells you about a run](./settings#notifications), and a webhook for a server; `--test` sends one now |
 | `wisp completion --install` | tab completion for your shell (zsh, bash, fish): commands, workspaces, bolts, running commands |
 
 | Option | |
@@ -86,7 +88,7 @@ a terminal, or with `--json`, it asks nothing and prints the list instead.
 | Command | |
 |---|---|
 | `wisp list` | every workspace: yours, and the projects you've used |
-| `wisp show [workspace]` | a workspace's bolts, with their slugs, notes and what's running, then everything it holds |
+| `wisp show [workspace]` | a workspace's bolts, with their slugs, notes, what's running and each one's steps |
 | `wisp doctor` | what works on this machine, and where Wisp keeps its files |
 | `wisp help agents` | the full reference, for AI agents (also `wisp spec`) |
 
@@ -99,6 +101,7 @@ a terminal, or with `--json`, it asks nothing and prints the list instead.
 | `WISP_HEADLESS` | `1` when there's no screen to open things on; `0` when there is but Wisp can't tell |
 | `WISP_NO_TUI` | `1` to never open the dashboard; `wisp` prints what it can run instead |
 | `WISP_ASCII` | `1` for plain characters, no emoji or box drawing |
+| `WISP_NOTIFY` | `off`, `failures` or `all`, over the [setting](./settings#notifications), for one command |
 
 ## Exit codes
 

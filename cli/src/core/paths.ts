@@ -1,6 +1,6 @@
-import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, sep } from "node:path";
 
 import { WispError, describe, isNotFound } from "./errors.js";
 import type { OS } from "./types.js";
@@ -106,10 +106,31 @@ export async function readJson(file: string): Promise<unknown> {
  * rather than half of the new one.
  */
 export async function writeJson(file: string, value: unknown): Promise<void> {
-  await mkdir(dirname(file), { recursive: true });
+  await privateDir(dirname(file));
   const temp = `${file}.${process.pid}.tmp`;
-  await writeFile(temp, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+  await writeFile(temp, `${JSON.stringify(value, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
   await rename(temp, file);
+}
+
+const secured = new Set<string>();
+
+async function secureRoot(root: string): Promise<void> {
+  if (secured.has(root) || currentOS() === "win32") return;
+  secured.add(root);
+  const info = await stat(root).catch(() => undefined);
+  const mine = typeof process.getuid !== "function" || info?.uid === process.getuid();
+  if (info && mine && (info.mode & 0o077) !== 0) await chmod(root, 0o700).catch(() => undefined);
+}
+
+export async function securePrivateFolders(): Promise<void> {
+  await Promise.all([configDir(), stateDir()].map(secureRoot));
+}
+
+export async function privateDir(dir: string): Promise<void> {
+  await mkdir(dir, { recursive: true, mode: 0o700 });
+  for (const root of [configDir(), stateDir()]) {
+    if (dir === root || dir.startsWith(`${root}${sep}`)) await secureRoot(root);
+  }
 }
 
 /** A lock older than this belongs to a process that died holding it. */
@@ -124,7 +145,7 @@ const STALE_LOCK_MS = 10_000;
  */
 export async function withLock<T>(file: string, work: () => Promise<T>): Promise<T> {
   const lock = `${file}.lock`;
-  await mkdir(dirname(file), { recursive: true });
+  await privateDir(dirname(file));
 
   for (let attempt = 0; ; attempt += 1) {
     try {

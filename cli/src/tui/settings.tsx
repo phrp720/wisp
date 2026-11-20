@@ -1,31 +1,37 @@
-/** Your own settings on this machine: the app that opens folders and files, and where commands run. */
+/** Your own settings on this machine: the app that opens folders and files, where commands run, and when Wisp tells you about a run. */
 
 import { Box, Text, useInput } from "ink";
 import { useEffect, useRef, useState } from "react";
 
+import { webhookProblem } from "../core/notify.js";
 import { Form, Picker } from "./forms.js";
 import type { Glyphs } from "./glyphs.js";
 import { useMouse, useRefs } from "./mouse.js";
-import type { OpenWith, Services } from "./model.js";
+import type { NotifyChoice, OpenWith, Services } from "./model.js";
 import { TONE } from "./tones.js";
 
 type Key = "folder" | "file" | "terminal";
 
-const ROWS: { key: Key | "mouse"; label: string; what: string }[] = [
+const ROWS: { key: Key | "mouse" | "notify" | "webhook"; label: string; what: string }[] = [
   { key: "folder", label: "Folders open in", what: "a bolt's folder steps, like apps/api" },
   { key: "file", label: "Files open in", what: "a bolt's file steps, like docs/runbook.md" },
   { key: "terminal", label: "Commands run", what: "a bolt's commands, like pnpm dev" },
   { key: "mouse", label: "Mouse", what: "click rows and tabs, scroll output with the wheel. Off: select text without holding Shift" },
+  { key: "notify", label: "Tell me", what: "about a run you might have missed: nobody watched it, or it took over 30s" },
+  { key: "webhook", label: "Webhook", what: "also post it here, for a server: Slack, Discord, ntfy or your own" },
 ];
+
+const WHEN = { failures: "when a run fails", all: "when any run ends", off: "never" } as const;
 
 const DEFAULT = "__default";
 const OTHER = "__other";
 
-type Mode = { kind: "list" } | { kind: "pick"; key: Key } | { kind: "other"; key: Key };
+type Mode = { kind: "list" } | { kind: "pick"; key: Key } | { kind: "other"; key: Key } | { kind: "notify" } | { kind: "webhook" };
 
 export function SettingsScreen({ services, glyphs, height, onClose, onSaved, onMouse }: { services: Services; glyphs: Glyphs; height: number; onClose: () => void; onSaved: (text: string) => void; onMouse?: (on: boolean) => void }) {
   const [current, setCurrent] = useState<OpenWith>();
   const [mouse, setMouse] = useState<boolean>();
+  const [notify, setNotify] = useState<NotifyChoice>();
   const [index, setIndexState] = useState(0);
   const indexRef = useRef(0);
   const setIndex = (next: number) => {
@@ -38,6 +44,7 @@ export function SettingsScreen({ services, glyphs, height, onClose, onSaved, onM
   useEffect(() => {
     void services.settings.get().then(setCurrent);
     void services.settings.mouse().then(setMouse);
+    void services.settings.notify().then(setNotify);
   }, [services]);
 
   // On and off, so ⏎ flips it rather than opening a list of two.
@@ -60,6 +67,7 @@ export function SettingsScreen({ services, glyphs, height, onClose, onSaved, onM
   const change = (at: number) => {
     const chosen = (ROWS[at] as (typeof ROWS)[number]).key;
     if (chosen === "mouse") return void toggleMouse();
+    if (chosen === "notify" || chosen === "webhook") return setMode({ kind: chosen });
     setMode({ kind: "pick", key: chosen });
   };
   // A click chooses a setting; a click on the chosen one changes it, as ⏎ does.
@@ -120,6 +128,55 @@ export function SettingsScreen({ services, glyphs, height, onClose, onSaved, onM
     );
   }
 
+  if (mode.kind === "notify") {
+    return (
+      <Picker
+        title="Tell me"
+        intro="About a run you might have missed: one nobody watched (cron, a script), or one that took over 30 seconds. On this screen, and at the webhook if you set one."
+        options={[
+          { key: "failures", title: "When a run fails", detail: "the default", group: "Choose" },
+          { key: "all", title: "When any run ends", detail: "passed or failed", group: "Choose" },
+          { key: "off", title: "Never", detail: "", group: "Choose" },
+        ]}
+        glyphs={glyphs}
+        height={height}
+        onCancel={() => setMode({ kind: "list" })}
+        onPick={(picked) => {
+          void services.settings.setNotify({ when: picked as NotifyChoice["when"] }).then((next) => {
+            setNotify(next);
+            setMode({ kind: "list" });
+            onSaved(`Tell me: ${WHEN[next.when]}`);
+          });
+        }}
+      />
+    );
+  }
+
+  if (mode.kind === "webhook") {
+    return (
+      <Form
+        title="Webhook"
+        intro="Where to post it as well, so a server can reach you. Slack, Discord and ntfy get a message they show as it is; any other address gets JSON."
+        fields={[{ key: "url", label: "Address", hint: "leave it empty for none", placeholder: "https://ntfy.sh/my-server" }]}
+        initial={{ url: notify?.webhook ?? "" }}
+        submitLabel="Save"
+        glyphs={glyphs}
+        height={height}
+        onCancel={() => setMode({ kind: "list" })}
+        onSubmit={async (values) => {
+          const url = values["url"]?.trim() ?? "";
+          const refused = url ? webhookProblem(url) : undefined;
+          if (refused) return { url: refused };
+          const next = await services.settings.setNotify({ webhook: url });
+          setNotify(next);
+          setMode({ kind: "list" });
+          onSaved(`Webhook: ${next.webhook ?? "none"}`);
+          return undefined;
+        }}
+      />
+    );
+  }
+
   if (mode.kind === "other") {
     const row = ROWS.find((entry) => entry.key === mode.key)!;
     return (
@@ -148,18 +205,36 @@ export function SettingsScreen({ services, glyphs, height, onClose, onSaved, onM
       {ROWS.map((row, at) => {
         const selected = at === index;
         return (
-          <Box key={row.key} ref={rowNodes.set(at)} flexDirection="column" marginBottom={1}>
+          <Box key={row.key} ref={rowNodes.set(at)} flexDirection="column" flexShrink={0}>
             <Text wrap="truncate-end">
               <Text color={TONE.accent}>{selected ? `${glyphs.pointer} ` : "  "}</Text>
               <Text bold={selected} color={selected ? TONE.accent : undefined}>{row.label.padEnd(18)}</Text>
-              <Text>{row.key === "mouse" ? (mouse === undefined ? "…" : mouse ? "on" : "off") : current ? describe(row.key, current[row.key]) : "…"}</Text>
+              <Text>
+                {row.key === "mouse"
+                  ? mouse === undefined
+                    ? "…"
+                    : mouse
+                      ? "on"
+                      : "off"
+                  : row.key === "notify"
+                    ? notify
+                      ? WHEN[notify.when]
+                      : "…"
+                    : row.key === "webhook"
+                      ? notify
+                        ? (notify.webhook ?? "none")
+                        : "…"
+                      : current
+                        ? describe(row.key, current[row.key])
+                        : "…"}
+              </Text>
             </Text>
-            <Text dimColor>{`    ${row.what}`}</Text>
+            {selected ? <Text dimColor wrap="truncate-end">{`    ${row.what}`}</Text> : null}
           </Box>
         );
       })}
       <Box flexGrow={1} />
-      <Text dimColor>{"↑↓ choose · ⏎ change · esc back   (also on the command line: wisp open-with)"}</Text>
+      <Text dimColor>{"↑↓ choose · ⏎ change · esc back   (also on the command line: wisp open-with, wisp notify)"}</Text>
     </Box>
   );
 }

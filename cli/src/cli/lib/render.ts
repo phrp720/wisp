@@ -52,10 +52,16 @@ export function printBolts(workspace: Workspace, expand = false, withheld: Withh
       return id && held.has(id) ? [held.get(id) as Withheld] : [];
     });
     const note = waiting.length > 0 ? yellow(` · ${waiting.length} waiting for trust`) : "";
-    console.log(`  ${upMark(workspace, bolt, runs)}${bold(bolt.label)}${bolt.job ? dim(" job") : ""} ${cyan(slugify(bolt.label))} ${dim(plural(steps.length, "step"))}${note}`);
+    const asks = bolt.confirm ? dim(" · asks first") : "";
+    console.log(`  ${upMark(workspace, bolt, runs)}${bold(bolt.label)} ${cyan(slugify(bolt.label))} ${dim(plural(steps.length, "step"))}${asks}${note}`);
     if (bolt.notes) console.log(`    ${dim(bolt.notes)}`);
     if (!expand) continue;
-    for (const step of steps) console.log(`    ${dim(kindLabel(step.kind))} ${step.label}`);
+    let group: number | undefined;
+    for (const step of steps) {
+      if (step.together !== undefined && step.together !== group) console.log(`    ${dim("together")}`);
+      group = step.together;
+      console.log(`${step.together === undefined ? "    " : "      "}${dim(kindLabel(step.kind))} ${step.label}`);
+    }
     for (const item of waiting) console.log(`    ${dim(kindLabel(item.kind))} ${dim(item.label)} ${yellow("(not trusted)")}`);
     const down = collectDownTargets(workspace, bolt);
     if (down.length > 0) console.log(dim(`    down: ${down.map((step) => step.label).join(", ")}`));

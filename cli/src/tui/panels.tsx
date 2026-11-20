@@ -9,27 +9,37 @@ import { tildify } from "../core/paths.js";
 import { retryPlan } from "../core/switch.js";
 import type { Diagnostic } from "../core/types.js";
 import type { Glyphs } from "./glyphs.js";
-import { describeStep, windowed } from "./model.js";
+import { describeStep, groupMarks, windowed } from "./model.js";
 import { KIND, type RunState, type View } from "./state.js";
 import { spell } from "./spells.js";
 import { TONE } from "./tones.js";
 
-export function RunPanel({ view, glyphs, height, tick }: { view: RunState; glyphs: Glyphs; height: number; tick: number }) {
+export function RunProgress({ view, glyphs, height, tick }: { view: RunState; glyphs: Glyphs; height: number; tick: number }) {
   const retryable = view.done && view.result ? retryPlan(view.result).length : 0;
+  const background = view.steps.filter((step) => step.result?.run).length;
   const hint = !view.done
-    ? "x stop this run · p watch it next to what's running · esc back (it keeps going)"
-    : `${retryable > 0 ? `r retry from ${view.steps.find((step) => step.result && !step.result.ok && !step.result.skipped)?.target.label ?? "where it stopped"} · ` : ""}${view.steps.some((step) => step.result?.run && step.result.ok) ? "⏎ watch what it started · esc back" : "⏎ back"}`;
+    ? "x stop this run · p watch it next to what's running"
+    : [
+        retryable > 0 ? `r retry from ${view.steps.find((step) => step.result && !step.result.ok && !step.result.skipped)?.target.label ?? "where it stopped"}` : "",
+        background > 0 ? "p watch what it started" : "",
+        "⏎ run again · esc hide",
+      ]
+        .filter(Boolean)
+        .join(" · ");
   const failed = view.steps.filter((step) => step.result && !step.result.ok && !step.result.skipped).length;
   const links = view.steps.filter((step) => step.result?.kind === "link" && step.result.note?.startsWith("no display"));
-  const background = view.steps.filter((step) => step.result?.run).length;
   const output = view.output.length > 0 && view.output[view.output.length - 1] === "" ? view.output.slice(0, -1) : view.output;
-  const outputRoom = output.length > 0 ? Math.max(3, Math.floor((height - 6) / 2)) : 0;
-  const { items } = windowed(view.steps, Math.max(0, view.steps.findIndex((step) => step.state === "running")), height - 6 - (outputRoom ? outputRoom + 1 : 0));
+  const summary = view.done ? 2 + links.length : 0;
+  const stepRoom = Math.max(1, height - 3 - summary);
+  const outputRoom = output.length > 0 ? Math.max(0, Math.min(output.length, Math.floor((stepRoom - 1) / 2))) : 0;
+  const { items } = windowed(view.steps, Math.max(0, view.steps.findIndex((step) => step.state === "running")), Math.max(1, stepRoom - (outputRoom ? outputRoom + 1 : 0)));
+  const marks = groupMarks(view.steps.map((step) => step.target), glyphs);
 
   return (
-    <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor={view.done ? (failed > 0 || view.error ? "red" : "green") : TONE.accent} paddingX={1}>
+    <>
       {/* The title stays where it is; the words that change go after it, cut first when it is long. */}
       <Text wrap="truncate-end">
+        <Text color={TONE.accent}>{glyphs.bolt}</Text>
         <Text bold>
           {view.dryRun ? <Text color="yellow">dry run </Text> : null}
           {view.title}
@@ -51,7 +61,8 @@ export function RunPanel({ view, glyphs, height, tick }: { view: RunState; glyph
                   : <Text color="green">{glyphs.ok}</Text>;
         return (
           <Text key={`${index}:${step.target.id}`} wrap="truncate-end">
-            {mark} {step.state === "running" ? <Text bold>{describeStep(step.target, true, view.job)}</Text> : describeStep(step.target, false, view.job)}
+            {mark} <Text dimColor>{marks[view.steps.indexOf(step)]}</Text>
+            {step.state === "running" ? <Text bold>{describeStep(step.target, true)}</Text> : describeStep(step.target)}
             {step.target.workspace ? <Text dimColor>{` (from ${step.target.workspace})`}</Text> : null}
             {result && !result.skipped && result.durationMs !== undefined && step.state !== "running" ? <Text dimColor>{`  ${result.durationMs >= 1000 ? `${(result.durationMs / 1000).toFixed(1)}s` : `${result.durationMs}ms`}`}</Text> : null}
             {result?.error ? <Text color="red">{`  ${result.error}`}</Text> : result?.note ? <Text dimColor>{`  ${result.note}`}</Text> : null}
@@ -59,7 +70,7 @@ export function RunPanel({ view, glyphs, height, tick }: { view: RunState; glyph
         );
       })}
       {outputRoom > 0 ? (
-        <Box flexDirection="column" marginTop={1} borderStyle="single" borderLeft borderRight={false} borderTop={false} borderBottom={false} borderColor="gray" paddingLeft={1}>
+        <Box flexDirection="column" marginTop={1} flexShrink={0} borderStyle="single" borderLeft borderRight={false} borderTop={false} borderBottom={false} borderColor="gray" paddingLeft={1}>
           {output.slice(-outputRoom).map((line, index) => (
             <Text key={index} wrap="truncate-end" dimColor>{line || " "}</Text>
           ))}
@@ -73,16 +84,16 @@ export function RunPanel({ view, glyphs, height, tick }: { view: RunState; glyph
           {links.map((step) => (
             <Text key={`link:${step.target.id}`} color="cyan">{`  ${step.result?.value ?? step.target.value}`}</Text>
           ))}
-          <Text>
+          <Text wrap="truncate-end">
             {view.stopped ? <Text color="yellow">{`Stopped — ${view.stopped}. `}</Text> : null}
             {failed > 0 ? <Text color="red">{`${glyphs.fail} Failed — h shows this run in History`}</Text> : view.error || view.stopped ? null : <Text color="green">{view.dryRun ? "That's what it would do. Nothing was changed." : "All done."}</Text>}
-            {background > 0 ? <Text>{`  ${background === 1 ? "It's" : `${background} things are`} running now — press ⏎ to watch.`}</Text> : null}
+            {background > 0 ? <Text>{`  ${background === 1 ? "It's" : `${background} things are`} running now.`}</Text> : null}
           </Text>
         </>
       ) : null}
       <Box flexGrow={1} />
       <Text dimColor wrap="truncate-end">{hint}</Text>
-    </Box>
+    </>
   );
 }
 
@@ -185,10 +196,11 @@ export function HelpPanel({ glyphs, height, tab = "bolts" }: { glyphs: Glyphs; h
     [
       "Run",
       [
-        ["⏎", "run the selected bolt"],
+        ["⏎", "run the selected bolt, in its box: each step ticks off as it goes"],
         ["n", "dry run — see what it would do, change nothing"],
-        ["v", "view the bolt whole — its order, what it needs, what's up"],
-        ["x  R", "stop what it started · restart it"],
+        ["u  d", "scroll the selected bolt's steps, when they don't fit"],
+        ["x  R", "stop the run, or what it started · restart it"],
+        ["r  esc", "after a failed run, retry from where it failed · hide the run"],
       ],
     ],
     [

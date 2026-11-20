@@ -1,19 +1,20 @@
 /** The main screen: workspaces on the left, the selected one's bolts on the right; and search. */
 
 import { Box, Text } from "ink";
-import { Fragment } from "react";
+import { Fragment, type ReactNode } from "react";
 
 import type { Container } from "../core/docker.js";
 import { baseLabel, type HistoryEntry } from "../core/history.js";
 import { tildify } from "../core/paths.js";
 import type { RunStatus } from "../core/processes.js";
-import { boltStatus, collectBoltTargets } from "../core/switch.js";
+import { boltStatus } from "../core/switch.js";
 import type { Bolt, WorkspaceRead } from "../core/types.js";
 import { slugify } from "../core/workspaces.js";
 import { shortest } from "../cli/lib/render.js";
 import { AskHere } from "./forms.js";
 import type { Glyphs } from "./glyphs.js";
-import { describeStep, type SearchHit, windowed } from "./model.js";
+import { type SearchHit, windowed } from "./model.js";
+import { flow, stepLines, usedBy } from "./steps.js";
 import { counts, needsTrust, since } from "./state.js";
 import { TONE } from "./tones.js";
 
@@ -25,6 +26,7 @@ import { TONE } from "./tones.js";
 export interface Asking {
   question: string;
   yes: string;
+  no?: string;
   onAnswer: (yes: boolean) => void;
 }
 
@@ -108,8 +110,24 @@ interface BoltState {
   dim?: boolean;
 }
 
-export function WorkspacePanel(props: { read: WorkspaceRead; boltIndex: number; focused: boolean; glyphs: Glyphs; height: number; width?: number; here?: boolean; runs: RunStatus[]; containers: Container[]; history: HistoryEntry[]; confirming?: Asking | undefined }) {
-  const { read, boltIndex, focused, glyphs, height, width = 80, here = false, runs, containers, history, confirming } = props;
+export function WorkspacePanel(props: {
+  read: WorkspaceRead;
+  reads: WorkspaceRead[];
+  boltIndex: number;
+  focused: boolean;
+  glyphs: Glyphs;
+  height: number;
+  width?: number;
+  here?: boolean;
+  runs: RunStatus[];
+  containers: Container[];
+  history: HistoryEntry[];
+  confirming?: Asking | undefined;
+  scroll?: number;
+  scrollLimit?: { current: number };
+  instead?: ((room: number) => ReactNode) | undefined;
+}) {
+  const { read, reads, boltIndex, focused, glyphs, height, width = 80, here = false, runs, containers, history, confirming, scroll = 0, scrollLimit, instead } = props;
   const lastRun = (label: string) => history.find((entry) => baseLabel(entry.bolt) === label);
   const { workspace } = read;
   const bolts = workspace.bolts;
@@ -134,7 +152,7 @@ export function WorkspacePanel(props: { read: WorkspaceRead; boltIndex: number; 
   const rows = shownBolts.map((entry) => ({ entry, state: stateOf(entry) }));
   const stateWidth = Math.max(0, ...rows.map(({ state }) => state?.text.length ?? 0));
   const stateColumn = stateWidth > 0 ? stateWidth + 3 : 0;
-  const longest = Math.max(0, ...rows.map(({ entry }) => entry.label.length + (entry.job ? 4 : 0)));
+  const longest = Math.max(0, ...rows.map(({ entry }) => entry.label.length));
   const showSteps = 2 + Math.min(longest, 24) + stateColumn + 10 <= width;
   const labelWidth = Math.max(10, Math.min(longest, width - 2 - stateColumn - (showSteps ? 10 : 0)));
 
@@ -174,27 +192,26 @@ export function WorkspacePanel(props: { read: WorkspaceRead; boltIndex: number; 
     ) : (
       rows.map(({ entry, state }, position) => {
         const isSelected = offset + position === boltIndex;
-        const tag = entry.job ? " job" : "";
-        const name = clip(entry.label, Math.max(4, labelWidth - tag.length));
-        const gap = " ".repeat(Math.max(0, labelWidth - name.length - tag.length));
+        const name = clip(entry.label, Math.max(4, labelWidth));
+        const gap = " ".repeat(Math.max(0, labelWidth - name.length));
         const count = entry.steps.length;
         return (
           <Fragment key={entry.id}>
             <Text wrap="truncate-end" bold={isSelected}>
               {isSelected ? glyphs.pointer : " "} <Text color={isSelected && confirming ? "red" : isSelected && focused ? undefined : entry.color} inverse={isSelected && focused}>{name}</Text>
-              {tag ? <Text color="cyan">{tag}</Text> : null}
               {gap}
               {stateWidth > 0 ? (
                 state ? <Text color={state.color} dimColor={state.dim ?? false}>{`   ${state.text.padEnd(stateWidth)}`}</Text> : <Text>{" ".repeat(stateWidth + 3)}</Text>
               ) : null}
               {showSteps ? <Text dimColor>{`   ${count} step${count === 1 ? "" : "s"}`}</Text> : null}
             </Text>
-            {isSelected && confirming ? <AskHere question={confirming.question} yes={confirming.yes} onAnswer={confirming.onAnswer} /> : null}
+            {isSelected && confirming ? <AskHere question={confirming.question} yes={confirming.yes} {...(confirming.no ? { no: confirming.no } : {})} onAnswer={confirming.onAnswer} /> : null}
           </Fragment>
         );
       })
     );
 
+  const room = split ? Math.max(1, height - topHeight - 2) : stepRoom;
   const details = selected ? (
     <BoltDetails
       read={read}
@@ -204,11 +221,17 @@ export function WorkspacePanel(props: { read: WorkspaceRead; boltIndex: number; 
       here={here}
       glyphs={glyphs}
       full={split}
-      room={split ? Math.max(1, height - topHeight - 2) : stepRoom}
+      room={room}
+      reads={reads}
+      runs={runs}
+      containers={containers}
+      scroll={scroll}
+      scrollLimit={scrollLimit}
     />
   ) : null;
 
   if (!split) {
+    if (selected && instead) return <Box flexDirection="column" flexGrow={1} flexShrink={1} minWidth={0}>{instead(height)}</Box>;
     return (
       <Box flexDirection="column" flexGrow={1} flexShrink={1} minWidth={0} borderStyle={glyphs.border} borderColor={focused ? TONE.accent : "gray"} paddingX={1} overflow="hidden">
         {header}
@@ -225,33 +248,50 @@ export function WorkspacePanel(props: { read: WorkspaceRead; boltIndex: number; 
         {header}
         {list}
       </Box>
-      <Box flexDirection="column" flexGrow={1} borderStyle={glyphs.border} borderColor="gray" paddingX={1} overflow="hidden">
-        {details}
-      </Box>
+      {selected && instead ? (
+        instead(Math.max(3, height - topHeight))
+      ) : (
+        <Box flexDirection="column" flexGrow={1} borderStyle={glyphs.border} borderColor="gray" paddingX={1} overflow="hidden">
+          {details}
+        </Box>
+      )}
     </Box>
   );
 }
 
-function BoltDetails(props: { read: WorkspaceRead; bolt: Bolt; state: BoltState | undefined; last: HistoryEntry | undefined; here: boolean; glyphs: Glyphs; full: boolean; room: number }) {
-  const { read, bolt, state, last, here, glyphs, full, room } = props;
+function BoltDetails(props: {
+  read: WorkspaceRead;
+  bolt: Bolt;
+  state: BoltState | undefined;
+  last: HistoryEntry | undefined;
+  here: boolean;
+  glyphs: Glyphs;
+  full: boolean;
+  room: number;
+  reads: WorkspaceRead[];
+  runs: RunStatus[];
+  containers: Container[];
+  scroll: number;
+  scrollLimit?: { current: number } | undefined;
+}) {
+  const { read, bolt, state, last, here, glyphs, full, room, reads, runs, containers, scroll, scrollLimit } = props;
   const { workspace } = read;
-  const held = new Map(read.withheld.map((item) => [item.id, item]));
-  const waiting = bolt.steps.flatMap((step) => {
-    const id = step.kind === "asset" ? step.id : step.kind === "compose" ? `compose:${step.file}` : undefined;
-    return id && held.has(id) ? [held.get(id)!] : [];
-  });
-  const lines = [
-    ...collectBoltTargets(workspace, bolt).map((step) => ({ key: `${step.kind}:${step.id}:${step.label}`, label: `${step.kind === "bolt" ? glyphs.bolt : ""}${describeStep(step, false, bolt.job ?? false).replace("›", glyphs.arrow)}`, note: step.workspace ? ` (from ${step.workspace})` : "", waiting: false })),
-    ...waiting.map((item) => ({ key: `held:${item.id}`, label: `start ${item.label}`, note: "", waiting: true })),
-  ];
-  const neededBy = workspace.bolts.filter((other) => other.steps.some((step) => step.kind === "bolt" && !step.workspace && step.bolt.toLowerCase() === bolt.label.toLowerCase())).map((other) => other.label);
+  const lines = stepLines({ read, bolt, reads, runs, containers, glyphs });
+  const needs = flow(read, bolt, reads);
+  const neededBy = usedBy(read, bolt, reads);
   const typed = here ? shortest(bolt, workspace.bolts) : `${slugify(workspace.name)} ${shortest(bolt, workspace.bolts)}`;
 
-  const used = full ? 1 + (bolt.notes ? 1 : 0) + 2 + 3 : bolt.notes ? 1 : 0;
-  const space = Math.max(1, room - used);
-  const shown = lines.length > space ? Math.max(1, space - 1) : lines.length;
+  const above = full ? 1 + (bolt.notes ? 1 : 0) + (needs.length > 1 ? 1 : 0) + 2 : (bolt.notes ? 1 : 0) + 1;
+  const space = Math.max(1, room - above - (full ? 2 : 0));
+  const overflow = lines.length > space;
+  const fit = overflow ? Math.max(1, space - 1) : lines.length;
+  const most = Math.max(0, lines.length - fit);
+  if (scrollLimit) scrollLimit.current = most;
+  const top = Math.min(scroll, most);
+  const below = lines.length - top - fit;
 
   const facts = [
+    bolt.confirm ? `asks first: ${bolt.confirm}` : "",
     last ? (last.running ? `running now, #${last.number ?? ""}` : `last run ${last.interrupted ? "!" : last.ok ? glyphs.ok : glyphs.fail} #${last.number ?? ""} ${since(last.startedAt)}`) : "never run yet",
     neededBy.length > 0 ? `needed by ${neededBy.join(", ")}` : "",
   ]
@@ -264,27 +304,32 @@ function BoltDetails(props: { read: WorkspaceRead; bolt: Bolt; state: BoltState 
         <Text wrap="truncate-end">
           <Text color={TONE.accent}>{glyphs.bolt}</Text>
           <Text bold color={bolt.color}>{bolt.label}</Text>
-          {bolt.job ? <Text color="cyan"> job</Text> : null}
           {state ? <Text color={state.color} dimColor={state.dim ?? false}>{`   ${state.text}`}</Text> : null}
         </Text>
       ) : null}
       {bolt.notes ? <Text wrap="truncate-end">{full ? bolt.notes : `  ${bolt.notes}`}</Text> : null}
+      {full && needs.length > 1 ? (
+        <Text wrap="truncate-end">
+          <Text dimColor>order  </Text>
+          {needs.map((name, at) => (
+            <Text key={name}>
+              {at > 0 ? <Text dimColor>{` ${glyphs.border === "round" ? "──▶" : "->"} `}</Text> : null}
+              <Text bold={at === needs.length - 1}>{name}</Text>
+            </Text>
+          ))}
+        </Text>
+      ) : null}
       {full ? <Text> </Text> : null}
       {lines.length === 0 ? (
         <Text dimColor>{full ? "It has no steps yet — press e to add some." : "  It has no steps yet — press e to add some."}</Text>
       ) : (
-        <>
-          <Text dimColor>{`${full ? "" : "  "}${bolt.job ? "When you run it, it will — and stop at the first failure:" : "When you run it, it will:"}`}</Text>
-          {lines.slice(0, shown).map((line, at) => (
-            <Text key={line.key} wrap="truncate-end">
-              <Text dimColor>{`${full ? "" : "  "}${String(at + 1).padStart(2)}. `}</Text>
-              {line.waiting ? <Text dimColor>{line.label}</Text> : line.label}
-              {line.note ? <Text dimColor>{line.note}</Text> : null}
-              {line.waiting ? <Text color="yellow"> (not trusted)</Text> : null}
-            </Text>
+        <Box flexDirection="column" paddingLeft={full ? 0 : 2} flexShrink={0}>
+          <Text dimColor>{bolt.keepGoing ? "When you run it, it will (and keep going if a step fails):" : "When you run it, it will:"}</Text>
+          {lines.slice(top, top + fit).map((line) => (
+            <Box key={line.key}>{line.node}</Box>
           ))}
-          {lines.length > shown ? <Text dimColor>{`${full ? "" : "  "}… ${lines.length - shown} more · v shows it whole`}</Text> : null}
-        </>
+          {overflow ? <Text dimColor>{[top > 0 ? `${top} above` : "", below > 0 ? `${below} more below` : "", "u d scroll"].filter(Boolean).join(" · ")}</Text> : null}
+        </Box>
       )}
       {full ? (
         <>
