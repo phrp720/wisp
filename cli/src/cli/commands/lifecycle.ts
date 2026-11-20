@@ -3,12 +3,12 @@ import { chmod, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises
 import { isAbsolute, join, resolve } from "node:path";
 
 import { WispError } from "../../core/errors.js";
-import { forgetHistory, getHistory, listHistory, type HistoryEntry } from "../../core/history.js";
+import { forgetHistory, getHistory, listHistory, withWorkspaceNames, type HistoryEntry } from "../../core/history.js";
 import { tildify } from "../../core/paths.js";
 import { downBolt, matchBolt, resolveBolt, switchToWorkspace } from "../../core/switch.js";
 import type { Bolt, WorkspaceRead } from "../../core/types.js";
 import { ago, bold, cyan, dim, green, kindLabel, plural, red, title, yellow } from "../format.js";
-import { emitJson, findWorkspaceForDependency, maybeProject, resolveRun } from "../lib/context.js";
+import { emitJson, everything, findWorkspaceForDependency, maybeProject, resolveRun } from "../lib/context.js";
 import type { CommandDef } from "../lib/define.js";
 import { named, resultLine } from "../lib/render.js";
 
@@ -93,11 +93,11 @@ export const history: CommandDef<{ all?: boolean; log?: string; clear?: boolean;
 
   async run([query], options) {
     if (options.clear) return clearHistory(query, options);
-    const entry = query ? await getHistory(query) : undefined;
-    if (entry) return showEntry(entry, options);
+    const found = query ? await getHistory(query) : undefined;
+    if (found) return showEntry((await currentNames([found]))[0] as HistoryEntry, options);
 
     const here = options.all ? undefined : await maybeProject();
-    const entries = await listHistory({ ...(here ? { workspace: here.workspace.file } : {}), ...(query ? { bolt: query } : {}) });
+    const entries = await currentNames(await listHistory({ ...(here ? { workspace: here.workspace.file } : {}), ...(query ? { bolt: query } : {}) }));
     if (options.json) return emitJson(entries);
 
     if (entries.length === 0) {
@@ -165,6 +165,12 @@ async function clearHistory(query: string | undefined, options: { all?: boolean;
   const what = one ? `run ${one.id}` : bolt ? `the runs of "${bolt}"` : here ? `${here.workspace.name}'s runs` : "every run";
   console.log(removed.length > 0 ? `${green("✓")} cleared ${plural(removed.length, "run")} ${dim(`(${what})`)}` : dim(`Nothing to clear (${what}).`));
   if (running.length > 0) console.log(dim(`  kept ${plural(running.length, "run")} still going`));
+}
+
+async function currentNames(entries: HistoryEntry[]): Promise<HistoryEntry[]> {
+  if (entries.length === 0) return entries;
+  const reads = await everything().catch(() => []);
+  return withWorkspaceNames(entries, new Map(reads.map((read) => [read.workspace.file, read.workspace.name])));
 }
 
 const TRIGGERS: Record<string, string> = { tui: "the dashboard", cli: "the command line", hook: "a git hook", retry: "a retry" };

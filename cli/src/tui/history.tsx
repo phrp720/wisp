@@ -2,7 +2,7 @@ import { Box, type DOMElement, measureElement, Text, useInput } from "ink";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { cleanOutput } from "../core/ansi.js";
-import { allSteps, baseLabel, type HistoryEntry, type HistoryStep, type StepProgress } from "../core/history.js";
+import { allSteps, baseLabel, withWorkspaceNames, type HistoryEntry, type HistoryStep, type StepProgress } from "../core/history.js";
 import { ASK_KEYS, AskHere } from "./forms.js";
 import type { Glyphs } from "./glyphs.js";
 import { HelpPanel } from "./panels.js";
@@ -28,6 +28,7 @@ export interface HistoryScreenProps {
   /** Run the whole bolt again. */
   onRerun: (entry: HistoryEntry) => void;
   onHint?: (hint: string) => void;
+  names?: ReadonlyMap<string, string>;
 }
 
 /** A bolt in the sidebar: the filter, like a workflow in a CI's list. */
@@ -46,8 +47,9 @@ export interface BoltFilter {
  * their logs expanding in place.
  */
 export function HistoryScreen(props: HistoryScreenProps) {
-  const { services, glyphs, height, columns, onClose, onRunning, onRetry, onRerun, onJump, onHint } = props;
-  const [entries, setEntries] = useState<HistoryEntry[]>();
+  const { services, glyphs, height, columns, onClose, onRunning, onRetry, onRerun, onJump, onHint, names } = props;
+  const [recorded, setEntries] = useState<HistoryEntry[]>();
+  const entries = useMemo(() => recorded && (names ? withWorkspaceNames(recorded, names) : recorded), [recorded, names]);
   const [filterIndex, setFilterIndex] = useState(0);
   const [runIndex, setRunIndex] = useState(0);
   const [focus, setFocus] = useState<"bolts" | "runs">("runs");

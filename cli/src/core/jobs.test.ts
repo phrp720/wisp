@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { Platform } from "../platform/types.js";
 import type { Environment } from "./environment.js";
-import { forgetHistory, getHistory, listHistory, recordHistory, type HistoryEntry } from "./history.js";
+import { forgetHistory, getHistory, listHistory, recordHistory, withWorkspaceNames, type HistoryEntry } from "./history.js";
 import { spawn } from "node:child_process";
 
 import { listRuns, stopRun } from "./processes.js";
@@ -401,6 +401,12 @@ describe("history like a CI", () => {
       ["test", false, false, "interrupted", "/logs/2.log"],
       ["build", false, true, "not reached — Wisp stopped", ""],
     ]);
+  });
+
+  it("shows a renamed workspace's runs under its name now, and a gone one's under the name it had", () => {
+    const run = (id: string, workspace: string, workspaceName: string): HistoryEntry => ({ id, workspace, workspaceName, bolt: "Check", job: true, startedAt: "2026-01-01T00:00:00.000Z", finishedAt: "2026-01-01T00:00:01.000Z", ok: true, steps: [] });
+    const named = withWorkspaceNames([run("a1", "/a/.wisp.json", "Mira"), run("a2", "/a/.wisp.json", "Mira Web"), run("b1", "/b/.wisp.json", "Gone")], new Map([["/a/.wisp.json", "Mira Web"]]));
+    expect(named.map((entry) => entry.workspaceName)).toEqual(["Mira Web", "Mira Web", "Gone"]);
   });
 
   it("deletes runs by id, workspace or bolt, keeping the ones still going", async () => {

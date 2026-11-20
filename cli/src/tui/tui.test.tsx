@@ -183,6 +183,19 @@ describe("the TUI", () => {
     expect((app.lastFrame() ?? "").split("\n").at(-1)).toContain("↑↓ steps");
   });
 
+  it("shows a renamed workspace's runs in History under the name it has now", async () => {
+    const run = (id: string, workspace: string, workspaceName: string, bolt: string): HistoryEntry => ({ id, workspace, workspaceName, bolt, job: true, number: 1, startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), ok: true, steps: [] });
+    const app = await open(services({ history: async () => [run("aaaaaaaaaaaa", acme.workspace.file, "Acme Old", "Check"), run("bbbbbbbbbbbb", acme.workspace.file, "Acme", "Lint"), run("cccccccccccc", "/dev/gone/.wisp.json", "Gone", "Deploy")] }));
+    app.stdin.write("h");
+    await tick();
+    await eventually(() => expect(app.lastFrame()).toContain("ACME"));
+    const frame = app.lastFrame() ?? "";
+    expect(frame).not.toContain("Acme Old");
+    expect(frame).not.toContain("ACME OLD");
+    expect(frame.match(/ACME/g)).toHaveLength(1);
+    expect(frame).toContain("GONE");
+  });
+
   it("cuts a long bolt name in History short, never into its count", async () => {
     const entry: HistoryEntry = { id: "", workspace: acme.workspace.file, workspaceName: "Acme", bolt: "Work on the whole Flower Testbed", job: false, number: 1, startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), ok: true, steps: [] };
     const app = await open(services({ history: async () => Array.from({ length: 14 }, (_, at) => ({ ...entry, id: `${at}`.padStart(12, "a"), number: at + 1 })) }));

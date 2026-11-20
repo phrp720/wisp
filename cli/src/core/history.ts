@@ -170,6 +170,13 @@ function alive(pid: number): boolean {
 }
 
 /** The branch and short commit of a directory, or nothing when it is not a repository. */
+export function withWorkspaceNames(entries: HistoryEntry[], names: ReadonlyMap<string, string>): HistoryEntry[] {
+  return entries.map((entry) => {
+    const name = names.get(entry.workspace);
+    return name && name !== entry.workspaceName ? { ...entry, workspaceName: name } : entry;
+  });
+}
+
 export type StepProgress = "running" | "waiting";
 
 export function allSteps(entry: HistoryEntry): (HistoryStep & { state?: StepProgress })[] {

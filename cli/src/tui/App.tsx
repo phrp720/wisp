@@ -125,6 +125,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
   }, [active, record]);
 
   const reads = useMemo(() => (library ? ordered(library) : []), [library]);
+  const workspaceNames = useMemo(() => new Map(reads.map((read) => [read.workspace.file, read.workspace.name])), [reads]);
   const current = reads[Math.min(wsIndex, Math.max(0, reads.length - 1))];
   const bolts = current?.workspace.bolts ?? [];
   const bolt = bolts[Math.min(boltIndex, Math.max(0, bolts.length - 1))];
@@ -1150,6 +1151,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
         </Box>
       ) : view.kind === "history" ? (
         <HistoryScreen
+          names={workspaceNames}
           services={services}
           glyphs={glyphs}
           height={bodyHeight}

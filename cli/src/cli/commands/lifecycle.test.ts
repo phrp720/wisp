@@ -44,6 +44,21 @@ afterEach(async () => {
 
 const ids = async () => (await listHistory()).map((entry) => entry.id).sort();
 
+describe("wisp history", () => {
+  it("shows a renamed workspace's runs under the name it has now", async () => {
+    await recordHistory({ ...run("ccc111ccc111", "Check", file), workspaceName: "Old Shop" });
+    await recordHistory({ ...run("ddd111ddd111", "Check", "/gone/.wisp.json"), workspaceName: "Gone" });
+    vi.spyOn(process, "cwd").mockReturnValue(dir);
+    await history.run(["ccc111"], { json: true });
+    expect(JSON.parse(printed.join("\n")).workspaceName).toBe("Shop");
+    printed.length = 0;
+    await history.run([], { all: true, json: true });
+    const names = (JSON.parse(printed.join("\n")) as HistoryEntry[]).map((entry) => `${entry.id} ${entry.workspaceName}`);
+    expect(names).toContain("ccc111ccc111 Shop");
+    expect(names).toContain("ddd111ddd111 Gone");
+  });
+});
+
 describe("wisp history --clear", () => {
   it("clears one bolt's finished runs in this project, and keeps the one still going", async () => {
     vi.spyOn(process, "cwd").mockReturnValue(dir);
