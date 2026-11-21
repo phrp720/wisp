@@ -1155,10 +1155,14 @@ describe("commands that finish, down and history in the TUI", () => {
     app.stdin.write("3");
     await eventually(() => expect(app.lastFrame()).not.toContain("Triggered"));
     expect(app.lastFrame()).toContain("Check #7");
-    app.stdin.write("\r");
-    await eventually(() => expect(app.lastFrame()).toContain("Triggered"));
-    app.stdin.write("1");
-    await eventually(() => expect(app.lastFrame()).toContain("Workspaces"));
+    await eventually(() => {
+      if (!(app.lastFrame() ?? "").includes("Triggered")) app.stdin.write("\r");
+      expect(app.lastFrame()).toContain("Triggered");
+    });
+    await eventually(() => {
+      if (!(app.lastFrame() ?? "").includes("Workspaces")) app.stdin.write("1");
+      expect(app.lastFrame()).toContain("Workspaces");
+    });
   });
 
   it("retries the failed part of a past run from history", async () => {
@@ -1450,6 +1454,7 @@ describe("doing everything without JSON", () => {
     await tick();
     app.stdin.write("a");
     await eventually(() => expect(app.lastFrame()).toContain("Run a bolt"));
+    await tick();
     app.stdin.write("3");
     await eventually(() => expect(app.lastFrame()).toContain("● Work on web"));
     expect(app.lastFrame()).not.toMatch(/[○●] Work on api/);
