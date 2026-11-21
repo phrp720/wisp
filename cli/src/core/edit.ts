@@ -257,7 +257,7 @@ export function describeRawStep(step: RawStep): string {
     case "app":
       return `open ${label ?? String(step["app"])}`;
     case "bolt":
-      return `⚡ ${String(step["bolt"])}`;
+      return `run the ${String(step["bolt"])} bolt`;
     default:
       return "…";
   }

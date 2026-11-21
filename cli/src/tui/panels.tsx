@@ -1,16 +1,12 @@
-/** Full-width panels: a run as it happens, a file's check, and the list of keys. */
-
-import { dirname } from "node:path";
+/** Full-width panels: a run as it happens, and the list of keys. */
 
 import { Box, Text } from "ink";
-import type { ReactNode } from "react";
 
-import { tildify } from "../core/paths.js";
 import { retryPlan } from "../core/switch.js";
 import type { Diagnostic } from "../core/types.js";
 import type { Glyphs } from "./glyphs.js";
 import { describeStep, windowed } from "./model.js";
-import { KIND, type RunState, type View } from "./state.js";
+import type { RunState } from "./state.js";
 import { spell } from "./spells.js";
 import { TONE } from "./tones.js";
 
@@ -40,7 +36,7 @@ export function RunProgress({ view, glyphs, height, tick }: { view: RunState; gl
       <Text wrap="truncate-end">
         <Text color={TONE.accent}>{glyphs.bolt}</Text>
         <Text bold>
-          {view.dryRun ? <Text color="yellow">dry run </Text> : null}
+          {view.dryRun ? <Text color="yellow">checking </Text> : null}
           {view.title}
         </Text>
         {view.dryRun || view.done ? null : <Text color={TONE.accent}>{`   ${glyphs.spark} ${spell()}…`}</Text>}
@@ -84,7 +80,11 @@ export function RunProgress({ view, glyphs, height, tick }: { view: RunState; gl
           ))}
           <Text wrap="truncate-end">
             {view.stopped ? <Text color="yellow">{`Stopped — ${view.stopped}. `}</Text> : null}
-            {failed > 0 ? <Text color="red">{`${glyphs.fail} Failed — h shows this run in History`}</Text> : view.error || view.stopped ? null : <Text color="green">{view.dryRun ? "That's what it would do. Nothing was changed." : "All done."}</Text>}
+            {failed > 0 ? (
+              <Text color="red">{view.dryRun ? `${glyphs.fail} It would stop there. Nothing ran.` : `${glyphs.fail} Failed — h shows this run in History`}</Text>
+            ) : view.error || view.stopped ? null : (
+              <Text color="green">{view.dryRun ? `${glyphs.ok} Ready to run. That's what it would do; nothing ran.` : "All done."}</Text>
+            )}
             {background > 0 ? <Text>{`  ${background === 1 ? "It's" : `${background} things are`} running now.`}</Text> : null}
           </Text>
         </>
@@ -92,51 +92,6 @@ export function RunProgress({ view, glyphs, height, tick }: { view: RunState; gl
       <Box flexGrow={1} />
       <Text dimColor wrap="truncate-end">{hint}</Text>
     </>
-  );
-}
-
-export function CheckPanel({ view, glyphs, height }: { view: Extract<View, { kind: "check" }>; glyphs: Glyphs; height: number }) {
-  if (!view.read) {
-    return (
-      <Box height={height} borderStyle={glyphs.border} paddingX={1}>
-        <Text dimColor>checking…</Text>
-      </Box>
-    );
-  }
-  const read = view.read;
-  const rank = { error: 0, warning: 1, note: 2 } as const;
-  const lines: { key: string; node: ReactNode }[] = [];
-  const diagnostics = [...read.diagnostics].sort((left, right) => rank[left.level] - rank[right.level]);
-
-  // Said outright when there is nothing to fix: silence reads as "still checking".
-  if (diagnostics.every((entry) => entry.level === "note")) {
-    lines.push({ key: "good", node: <Text color="green">{`${glyphs.ok} Nothing wrong with this file.`}</Text> });
-  }
-  for (const [index, entry] of diagnostics.entries()) {
-    lines.push({ key: `d${index}`, node: <DiagnosticLine entry={entry} glyphs={glyphs} /> });
-    if (entry.hint) lines.push({ key: `h${index}`, node: <Text dimColor wrap="truncate-end">{`    ${entry.hint}`}</Text> });
-  }
-  if (read.declaredCommands.length > 0 || read.withheld.length > 0) {
-    lines.push({ key: "gap", node: <Text> </Text> });
-    lines.push({ key: "runs", node: <Text bold>{`Runs code ${read.workspace.trusted ? "(allowed)" : "(waiting for trust — t)"}`}</Text> });
-    for (const command of read.declaredCommands) {
-      lines.push({ key: `c${command.id}`, node: <Text wrap="truncate-end"><Text dimColor>{"  run    "}</Text><Text color="cyan">{command.run}</Text>{command.cwd && command.cwd !== dirname(read.workspace.file) ? <Text dimColor>{` in ${tildify(command.cwd).replace(`${tildify(dirname(read.workspace.file))}/`, "")}`}</Text> : null}</Text> });
-    }
-    for (const item of read.withheld.filter((entry) => entry.kind !== "command")) {
-      lines.push({ key: `w${item.id}`, node: <Text wrap="truncate-end"><Text dimColor>{`  ${KIND[item.kind].padEnd(6)} `}</Text><Text color="cyan">{tildify(item.value)}</Text><Text dimColor>{` (${item.reason})`}</Text></Text> });
-    }
-  }
-
-  const room = height - 4;
-  const scroll = Math.min(view.scroll, Math.max(0, lines.length - room));
-  return (
-    <Box flexDirection="column" height={height} borderStyle={glyphs.border} paddingX={1}>
-      <Text bold>{`Check ${read.workspace.name}`}</Text>
-      <Text> </Text>
-      {lines.slice(scroll, scroll + room).map((line) => (
-        <Box key={line.key}>{line.node}</Box>
-      ))}
-    </Box>
   );
 }
 
@@ -195,7 +150,7 @@ export function HelpPanel({ glyphs, height, tab = "bolts" }: { glyphs: Glyphs; h
       "Run",
       [
         ["⏎", "run the selected bolt, in its box: each step ticks off as it goes"],
-        ["n", "dry run — see what it would do, change nothing"],
+        ["c", "check it: what it would do, and what's wrong; nothing runs"],
         ["u  d", "scroll the selected bolt's steps, when they don't fit"],
         ["x  R", "stop the run, or what it started · restart it"],
         ["r  esc", "after a failed run, retry from where it failed · hide the run"],
@@ -207,7 +162,6 @@ export function HelpPanel({ glyphs, height, tab = "bolts" }: { glyphs: Glyphs; h
         ["p", "what's running — commands and containers, live"],
         ["h", "history — every run, like a CI"],
         ["/", "search every workspace and bolt"],
-        ["c", "check the file for problems"],
       ],
     ],
     [

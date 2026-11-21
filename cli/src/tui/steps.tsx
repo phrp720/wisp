@@ -5,7 +5,7 @@ import { containerMood, type Container } from "../core/docker.js";
 import { describeDuration } from "../core/duration.js";
 import { tildify } from "../core/paths.js";
 import type { RunStatus } from "../core/processes.js";
-import { stagesOfTargets, stepTargets } from "../core/switch.js";
+import { composeTarget, stagesOfTargets, stepTargets } from "../core/switch.js";
 import type { Bolt, SwitchTarget, WorkspaceRead } from "../core/types.js";
 import type { Glyphs } from "./glyphs.js";
 import { TONE } from "./tones.js";
@@ -51,9 +51,11 @@ export function stepLines(context: { read: WorkspaceRead; bolt: Bolt; reads: Wor
     const all: (SwitchTarget & { held?: boolean })[] = bolt.steps.flatMap((step, at) => {
       const target = aligned[at];
       if (target) return [target];
-      const item = step.kind === "asset" ? heldById.get(step.id) : step.kind === "compose" ? heldById.get(`compose:${step.file}`) : undefined;
+      const placed = { ...(step.name ? { name: step.name } : {}), ...(step.after && step.after.length > 0 ? { after: step.after } : {}), held: true };
+      if (step.kind === "compose") return [{ ...composeTarget(step, "up"), ...placed }];
+      const item = step.kind === "asset" ? heldById.get(step.id) : undefined;
       if (!item) return [];
-      return [{ kind: item.kind, label: item.label, id: item.id, value: item.value, ...(item.cwd ? { cwd: item.cwd } : {}), ...(step.name ? { name: step.name } : {}), ...(step.after && step.after.length > 0 ? { after: step.after } : {}), held: true }];
+      return [{ kind: item.kind, label: item.label, id: item.id, value: item.value, ...(item.cwd ? { cwd: item.cwd } : {}), ...placed }];
     });
     const stages = stagesOfTargets(all);
 
@@ -70,7 +72,7 @@ export function stepLines(context: { read: WorkspaceRead; bolt: Bolt; reads: Wor
             <Text wrap="truncate-end">
               <Text dimColor>{shown}</Text>
               <Text color={found?.color ?? TONE.accent} bold>{`${glyphs.bolt}${found?.label ?? target.label}`}</Text>
-              {!found ? <Text dimColor>  — no bolt by that name</Text> : twice ? <Text dimColor>  — already run above, not again</Text> : null}
+              {!found ? <Text color="red">{`  ${glyphs.fail} no bolt by that name`}</Text> : twice ? <Text dimColor>  — already run above, not again</Text> : null}
               {after}
             </Text>
           ),
@@ -93,7 +95,11 @@ export function stepLines(context: { read: WorkspaceRead; bolt: Bolt; reads: Wor
                 {after}
               </Text>
             </Box>
-            {status ? <Text color={status.color}>{`  ${status.text}`}</Text> : null}
+            {status ? (
+              <Box flexShrink={0}>
+                <Text color={status.color}>{`  ${status.text}`}</Text>
+              </Box>
+            ) : null}
           </Box>
         ),
       });

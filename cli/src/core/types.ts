@@ -255,6 +255,7 @@ export interface Diagnostic {
   at: string;
   message: string;
   hint?: string;
+  bolt?: string;
 }
 
 /** Something a file declares that would run code, and so waits for trust. */

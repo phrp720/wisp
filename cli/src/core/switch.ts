@@ -199,7 +199,7 @@ export async function runPlan(
       options.onStep?.(step.target, { attached: inline });
       const began = Date.now();
       const shared = inline && sideways.has(at) ? sideBySide(context, step.target, width) : { context, flush: () => undefined };
-      const outcome = dryRun ? preview(step, context) : await execute(step, at, shared.context);
+      const outcome = dryRun ? await preview(step, context) : await execute(step, at, shared.context);
       shared.flush();
       const result: TargetResult = { ...outcome, durationMs: Date.now() - began };
       // Cut short by a stop, not broken: say so, rather than a signal's exit code.
@@ -471,9 +471,16 @@ export function composeTarget(step: { file: string; services?: string[] }, actio
 }
 
 /** What a dry run reports: the plan, with where each thing would go. */
-function preview(step: PlannedStep, context: Context): TargetResult {
+async function preview(step: PlannedStep, context: Context): Promise<TargetResult> {
   const { target } = step;
   const headless = !context.environment.gui;
+  if (target.kind === "folder" || target.kind === "file") {
+    const problem = await checkPath(target, step.workspace).then(
+      () => undefined,
+      (error: unknown) => describe(error),
+    );
+    if (problem) return { ...target, ok: false, error: problem };
+  }
 
   if (target.kind === "command") return { ...target, ok: true, note: describeRoute(target, step, context) };
   if (target.kind === "compose") {
@@ -540,7 +547,7 @@ async function openLink(target: SwitchTarget, context: Context): Promise<TargetR
   return { ...target, ok: true };
 }
 
-async function openPath(target: SwitchTarget, workspace: Workspace, context: Context): Promise<TargetResult> {
+async function checkPath(target: SwitchTarget, workspace: Workspace): Promise<string> {
   const wantsFolder = target.kind === "folder";
   const path = resolve(expandHome(target.value));
 
@@ -556,7 +563,11 @@ async function openPath(target: SwitchTarget, workspace: Workspace, context: Con
   if (!workspace.trusted && !wantsFolder && currentOS() !== "win32" && (stats.mode & 0o111) !== 0) {
     throw new Error("this file is executable, so it waits until you trust the workspace — `wisp trust`");
   }
+  return path;
+}
 
+async function openPath(target: SwitchTarget, workspace: Workspace, context: Context): Promise<TargetResult> {
+  const path = await checkPath(target, workspace);
   if (!context.environment.gui) return { ...target, ok: true, skipped: true, note: "no display — skipped" };
 
   const app = target.openWith?.trim();

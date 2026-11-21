@@ -240,8 +240,8 @@ take input defaults), `--json`.
 `wisp` at a terminal opens it. Everything above can be done there without writing JSON:
 a folder with no file is offered a setup; `e` edits the selected bolt through forms
 (add, change, move, remove steps, each with what it depends on; its name, notes, what a
-failure does, its question, what it needs and its inputs), or, on the workspace
-list, the workspace's name, icon and notes; `a` adds a bolt, `N` a personal workspace; the selected bolt is shown whole below the list, its dependencies opened up, and `⏎` runs it in that same box, step by step;
+failure does, its question and its inputs), or, on the workspace
+list, the workspace's name, icon and notes; `a` adds a bolt, `N` a personal workspace; the selected bolt is shown whole below the list, the bolts it runs opened up and its problems said in words, and `⏎` runs it in that same box, step by step (`c` checks it there, running nothing);
 `p` (or `2`) shows what is running, grouped by the bolt that started it, with live
 output (`[` and `]` switch to a command's details and past runs); `h` (or `3`) the
 history of every run, `D` there deleting runs; `/` filters, and in a log full screen (`f`) or an open run of

@@ -456,13 +456,14 @@ describe("the TUI", () => {
     await eventually(() => expect(app.lastFrame()).toContain("asks first: Ship it? · never run yet"));
   });
 
-  it("dry-runs with n", async () => {
+  it("checks a bolt with c: a dry run in its box, nothing runs", async () => {
     const run = vi.fn(services().run);
     const app = await open(services({ run }));
-    app.stdin.write("n");
+    app.stdin.write("c");
     await tick();
     await eventually(() => expect(run).toHaveBeenCalledWith(acme, "Work on api", expect.objectContaining({ dryRun: true })));
-    expect(app.lastFrame()).toContain("dry run");
+    await eventually(() => expect(app.lastFrame()).toContain("Ready to run. That's what it would do; nothing ran."));
+    expect(app.lastFrame()).toContain("checking");
   });
 
   it("switches workspace from the list", async () => {
@@ -747,14 +748,38 @@ describe("the TUI", () => {
         name: "Shop",
         bolts: [
           { label: "Work on web", targets: [{ bolt: "Database", label: "db" }, { run: "pnpm dev", label: "web", after: "db" }, { wait: "localhost:3000", label: "up", after: "web" }, { url: "http://localhost:3000", after: "up" }] },
-          { label: "Database", targets: [{ url: "http://db.test" }] },
+          { label: "Database", targets: [{ url: "http://db.test" }, { compose: "docker-compose.yml" }] },
         ],
       },
       "untrusted",
     );
     const app = render(<App services={services({}, { reads: [shop], here: shop.workspace.file, unreadable: [] })} glyphs={unicode} size={{ columns: 100, rows: 30 }} />);
     await eventually(() => expect(app.lastFrame()).toContain("When you run it, it will:"));
+    expect(app.lastFrame()).toMatch(/start Docker services from docker-com.* +not allowed yet — t │/);
+    expect(app.lastFrame()).not.toContain("Docker services: Docker services");
     expect(app.lastFrame()).toMatch(/ 1\. ⚡ ?Database[\s\S]* {4}1\. open[\s\S]* 2\. start web +after db +not allowed yet[\s\S]*pnpm dev[\s\S]* 3\. wait until port 3000 is open +after web[\s\S]* 4\. open http:\/\/localhost:3000 +after up/);
+  });
+
+  it("shows a bolt's problems on its row and in its box, and the file's in the header, without a check to run", async () => {
+    const shop = read("/dev/shop/.wisp.json", {
+      name: "Shop",
+      nmae: "typo",
+      bolts: [
+        { label: "dev", targets: [{ bolt: "Services" }, { folder: "web" }] },
+        { label: "Docs", targets: [{ url: "https://docs.shop.test" }] },
+      ],
+    });
+    const check = async () => ({ ...shop, diagnostics: [...shop.diagnostics, { level: "error" as const, at: "bolts[0].targets[1].folder", message: "no such folder: /dev/shop/web", bolt: "dev" }] });
+    const app = render(<App services={services({ check }, { reads: [shop], here: shop.workspace.file, unreadable: [] })} glyphs={unicode} size={{ columns: 110, rows: 30 }} />);
+    await eventually(() => expect(app.lastFrame()).toContain("no such folder: /dev/shop/web"));
+    const frame = app.lastFrame() ?? "";
+    expect(frame).toMatch(/1\. ⚡ ?Services +✗ no bolt by that name/);
+    expect(frame).toMatch(/❯ dev +✗ 2 problems/);
+    expect(frame).not.toMatch(/Docs +✗/);
+    expect(frame).toContain('✗ "dev" runs a bolt called "Services", which this file does not declare');
+    expect(frame).toContain('Pick one of this file\'s bolts in the step, or add a bolt called "Services"');
+    expect(frame).toMatch(/! "nmae"/);
+    expect(frame).not.toContain("c to check");
   });
 
   it("scrolls a long bolt's steps with u and d", async () => {

@@ -22,7 +22,6 @@ export interface StepState {
 export type View =
   | { kind: "browse" }
   | { kind: "search"; query: string; index: number }
-  | { kind: "check"; read?: WorkspaceRead; scroll: number }
   /** `then`: the bolt you pressed ⏎ on, run as soon as you say yes. */
   | { kind: "trust"; read: WorkspaceRead; then?: string }
   | {
@@ -70,7 +69,6 @@ export type View =
 const TAKES_ITS_OWN_KEYS: Record<View["kind"], boolean> = {
   browse: false,
   search: false,
-  check: false,
   trust: false, // the dashboard hands its keys to the trust dialog itself
   processes: false,
   help: false,

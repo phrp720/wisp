@@ -15,6 +15,9 @@ it started, look back at past runs. It works the same at your desk, over SSH and
   the run, `r` retries from a failed step, and `esc` hides the result.
   One that [asks for values](./file#inputs) shows a short form first, and one that
   [asks first](./file#asking-first) asks on its row.
+  A bolt with a problem says so on its row (`✗ 1 problem`), and its box says what's wrong
+  and how to fix it: a step naming a bolt that isn't there, a folder that's gone. A problem
+  with the file itself is in the header. `c` checks the bolt without running anything.
 - **`2` Running:** what each bolt started, as a pipeline, with live output, health and
   ports, and a log of what crashed and came back. Beside the list, each command has tabs
   for its logs, its details and its past runs, as in lazydocker.
@@ -55,7 +58,7 @@ the file itself if you'd rather.
 
 | | |
 |---|---|
-| `⏎` · `n` | run the selected bolt, in its box · dry run it |
+| `⏎` · `c` | run the selected bolt, in its box · check it: what it would do, and what's wrong, with nothing run |
 | `u` · `d` | scroll the selected bolt's steps, when they don't fit |
 | `x` · `R` | stop the run while it goes, or what it started (asks about the bolts it needed) · restart it |
 | `r` · `esc` | after a failed run: retry from the step that failed · hide the run |
@@ -70,7 +73,7 @@ the file itself if you'd rather.
 | `[` · `]` | on Running: the selected command's tabs: logs, info, past runs |
 | `u` · `d` · `G` | scroll output up · down · back to the newest |
 | `f` | on Running: the log full screen, where `↑↓` scroll it and `←→` go to the command before or after |
-| `t` · `c` | allow a file's commands · check it for problems |
+| `t` | allow a file's commands |
 | `s` | settings: your editor, and where commands run |
 | `D` | on History: delete the selected run, or the selected bolt's runs |
 | `r` · `?` · `q` | reload the files · the keys of the tab you're on · quit |

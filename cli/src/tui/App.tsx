@@ -8,7 +8,7 @@ import { checkValue } from "../core/inputs.js";
 import { tildify } from "../core/paths.js";
 import type { RunStatus } from "../core/processes.js";
 import { composeFiles, retryPlan } from "../core/switch.js";
-import type { Bolt, SwitchResult, WorkspaceRead } from "../core/types.js";
+import type { Bolt, Diagnostic, SwitchResult, WorkspaceRead } from "../core/types.js";
 import { flow } from "./steps.js";
 import { Footer, Header, headerTabAt, runningStatus } from "./chrome.js";
 import { SetupPanel, TrustPanel } from "./dialogs.js";
@@ -18,7 +18,7 @@ import { type Glyphs, glyphs as defaultGlyphs } from "./glyphs.js";
 import { HistoryScreen } from "./history.js";
 import { boltWindow, Empty, FIRST_BOLT_LINE, SearchPanel, WorkspaceList, workspaceListWidth, WorkspacePanel, workspaceRows } from "./home.js";
 import { type Library, ordered, search, type Services } from "./model.js";
-import { CheckPanel, HelpPanel, RunProgress } from "./panels.js";
+import { HelpPanel, RunProgress } from "./panels.js";
 import { SettingsScreen } from "./settings.js";
 import { type MouseListener, MouseContext, type MouseSource } from "./mouse.js";
 import { filterPanes, groupPanes, logWindow, nextTab, nextWithLog, paneKey, PanesPanel, paneSpotAt, shownTab } from "./running.js";
@@ -36,7 +36,7 @@ export interface AppProps {
 }
 
 /** Screens the tabs along the top can be clicked from: not one with a form half filled in. */
-const TABS_CLICKABLE = new Set<View["kind"]>(["browse", "processes", "history", "help", "check", "search"]);
+const TABS_CLICKABLE = new Set<View["kind"]>(["browse", "processes", "history", "help", "search"]);
 
 export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProps) {
   const { exit } = useApp();
@@ -138,6 +138,20 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
   const current = reads[Math.min(wsIndex, Math.max(0, reads.length - 1))];
   const bolts = current?.workspace.bolts ?? [];
   const bolt = bolts[Math.min(boltIndex, Math.max(0, bolts.length - 1))];
+  const [checked, setChecked] = useState<{ read: WorkspaceRead; diagnostics: Diagnostic[] }>();
+  useEffect(() => {
+    if (!current) return;
+    let live = true;
+    services
+      .check(current.workspace.file)
+      .then((result) => {
+        if (live && result.workspace.file === current.workspace.file) setChecked({ read: current, diagnostics: result.diagnostics });
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [current, services]);
   const inBox = active && current && bolt && active.read.workspace.file === current.workspace.file && active.bolt === bolt.label && (!active.done || runPinned) ? active : undefined;
 
   const reload = useCallback(
@@ -527,20 +541,6 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
     setActive((prior) => (prior ? { ...prior, stopped: why } : prior));
   }, [setActive]);
 
-  const openCheck = useCallback(
-    async (read: WorkspaceRead) => {
-      setView({ kind: "check", scroll: 0 });
-      try {
-        const checked = await services.check(read.workspace.file);
-        setView((prior) => (prior.kind === "check" ? { ...prior, read: checked } : prior));
-      } catch (error) {
-        setView({ kind: "browse" });
-        setMessage(describe(error));
-      }
-    },
-    [services],
-  );
-
   const edit = useCallback(
     async (read: WorkspaceRead) => {
       await services.edit(read.workspace.file);
@@ -646,14 +646,6 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
       // Nothing left running attached and unseen.
       stopActive("Wisp was closed");
       return exit();
-    }
-
-    if (view.kind === "check") {
-      if (key.upArrow || input === "k") return setView({ ...view, scroll: Math.max(0, view.scroll - 1) });
-      if (key.downArrow || input === "j") return setView({ ...view, scroll: view.scroll + 1 });
-      if (input === "t" && view.read && needsTrust(view.read)) return setView({ kind: "trust", read: view.read });
-      if (key.escape || key.return || input === "q") return setView({ kind: "browse" });
-      return;
     }
 
     if (view.kind === "processes") {
@@ -880,17 +872,16 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
         .catch((error: unknown) => setMessage(describe(error)));
       return;
     }
-    if (input === "c") return void openCheck(current);
     if (input === "t") {
       if (needsTrust(current)) return setView({ kind: "trust", read: current });
       return setMessage(current.workspace.trusted ? "already trusted" : "nothing here needs trust");
     }
-    if ((key.return && focus === "bolts") || input === "n") {
+    if ((key.return && focus === "bolts") || input === "c") {
       if (!bolt) {
-        if (input === "n") return setMessage("no bolts yet: a adds one");
+        if (input === "c") return setMessage("no bolts yet: a adds one");
         return setView({ kind: "new-bolt", file: current.workspace.file, workspace: current.workspace.name });
       }
-      void runBolt(current, bolt.label, input === "n");
+      void runBolt(current, bolt.label, input === "c");
     }
   }, { isActive: !SELF_DRIVEN.has(view.kind) });
 
@@ -1238,8 +1229,6 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
             void runBolt(read, entry.bolt.replace(/ \((retry|down)\)$/, ""), false);
           }}
         />
-      ) : view.kind === "check" ? (
-        <CheckPanel view={view} glyphs={glyphs} height={bodyHeight} />
       ) : view.kind === "trust" ? (
         <TrustPanel
           read={view.read}
@@ -1305,6 +1294,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
                     : undefined
               }
               read={current}
+              {...(checked && checked.read === current ? { diagnostics: checked.diagnostics } : {})}
               reads={reads}
               instead={
                 view.kind === "run-inputs"

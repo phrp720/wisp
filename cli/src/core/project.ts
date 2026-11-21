@@ -323,7 +323,19 @@ export function interpret(
     });
   }
 
-  return { workspace, diagnostics: ctx.found, trust: input.trust, declaredCommands, withheld: ctx.withheld };
+  return { workspace, diagnostics: tagBolts(ctx.found, boltEntries), trust: input.trust, declaredCommands, withheld: ctx.withheld };
+}
+
+function tagBolts(found: Diagnostic[], boltEntries: Entry[]): Diagnostic[] {
+  const places = boltEntries.flatMap(({ value, at }) => {
+    const label = isRecord(value) ? optionalString(value["label"]) : undefined;
+    return label ? [{ at, label }] : [];
+  });
+  return found.map((entry) => {
+    if (entry.bolt) return entry;
+    const place = places.find(({ at }) => entry.at === at || entry.at.startsWith(`${at}.`));
+    return place ? { ...entry, bolt: place.label } : entry;
+  });
 }
 
 /**
@@ -991,7 +1003,9 @@ function checkDependencies(bolts: Bolt[], ctx: Context): void {
         ctx.found.push({
           level: "error",
           at: `bolts`,
+          bolt: bolt.label,
           message: `"${bolt.label}" runs a bolt called "${step.bolt}", which this file does not declare`,
+          hint: `Pick one of this file's bolts in the step, or add a bolt called "${step.bolt}"`,
         });
       }
     }
@@ -1011,6 +1025,7 @@ function checkDependencies(bolts: Bolt[], ctx: Context): void {
         ctx.found.push({
           level: "error",
           at: "bolts",
+          bolt: cycle[0] as string,
           message: `these bolts need each other: ${cycle.join(" → ")}`,
           hint: "Running any of them would be refused — remove one of the dependencies",
         });
@@ -1058,7 +1073,8 @@ export async function checkProject(file: string, options: ReadOptions = {}): Pro
     valueById: new Map(),
   };
 
-  const inline = inlineEntries(sectionEntries(sources, "bolts", scratch));
+  const boltEntries = sectionEntries(sources, "bolts", scratch);
+  const inline = inlineEntries(boltEntries);
   for (const [entries, kind] of [
     [inline.folders, "folder"],
     [inline.files, "file"],
@@ -1107,7 +1123,7 @@ export async function checkProject(file: string, options: ReadOptions = {}): Pro
     }
   }
 
-  return { ...read, diagnostics: found };
+  return { ...read, diagnostics: tagBolts(found, boltEntries) };
 }
 
 type Picked =

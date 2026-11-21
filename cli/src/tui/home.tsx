@@ -8,7 +8,7 @@ import { baseLabel, type HistoryEntry } from "../core/history.js";
 import { tildify } from "../core/paths.js";
 import type { RunStatus } from "../core/processes.js";
 import { boltStatus } from "../core/switch.js";
-import type { Bolt, WorkspaceRead } from "../core/types.js";
+import type { Bolt, Diagnostic, WorkspaceRead } from "../core/types.js";
 import { slugify } from "../core/workspaces.js";
 import { shortest } from "../cli/lib/render.js";
 import { AskHere } from "./forms.js";
@@ -126,13 +126,16 @@ export function WorkspacePanel(props: {
   scroll?: number;
   scrollLimit?: { current: number };
   instead?: ((room: number) => ReactNode) | undefined;
+  diagnostics?: Diagnostic[];
 }) {
   const { read, reads, boltIndex, focused, glyphs, height, width = 80, here = false, runs, containers, history, confirming, scroll = 0, scrollLimit, instead } = props;
+  const problems = (props.diagnostics ?? read.diagnostics).filter((entry) => entry.level !== "note" && entry.at !== "trust");
+  const problemsOf = (entry: Bolt) => problems.filter((problem) => problem.bolt?.toLowerCase() === entry.label.toLowerCase());
+  const fileProblems = problems.filter((problem) => !problem.bolt || !read.workspace.bolts.some((entry) => entry.label.toLowerCase() === problem.bolt?.toLowerCase()));
   const lastRun = (label: string) => history.find((entry) => baseLabel(entry.bolt) === label);
   const { workspace } = read;
   const bolts = workspace.bolts;
   const selected = bolts[Math.min(boltIndex, Math.max(0, bolts.length - 1))];
-  const errors = read.diagnostics.filter((entry) => entry.level === "error").length;
   const { items: shownBolts, offset, split, topHeight, stepRoom } = boltWindow(bolts, boltIndex, height, Boolean(confirming));
 
   const stateOf = (entry: Bolt): BoltState | undefined => {
@@ -142,6 +145,8 @@ export function WorkspacePanel(props: {
       const all = status.running === status.commands;
       return { text: `${glyphs.dot} ${all ? "running" : `${status.running} of ${status.commands} running`}`, color: all ? "green" : "yellow" };
     }
+    const errors = problemsOf(entry).filter((problem) => problem.level === "error").length;
+    if (errors > 0) return { text: `${glyphs.fail} ${errors} problem${errors === 1 ? "" : "s"}`, color: "red" };
     const last = lastRun(entry.label);
     if (!last) return undefined;
     if (last.running) return { text: `${glyphs.dot} running, step ${Math.min(last.steps.length + 1, last.total ?? last.steps.length + 1)} of ${last.total ?? "?"}`, color: "cyan" };
@@ -174,7 +179,7 @@ export function WorkspacePanel(props: {
         ) : (
           <Text dimColor>nothing here runs code</Text>
         )}
-        {errors > 0 ? <Text color="red">{`  ${errors} problem${errors === 1 ? "" : "s"} — c to check`}</Text> : null}
+        {fileProblems[0] ? <Text color={fileProblems[0].level === "error" ? "red" : "yellow"}>{`  ${fileProblems[0].level === "error" ? glyphs.fail : "!"} ${fileProblems[0].message}`}</Text> : null}
       </Text>
       <Text> </Text>
     </>
@@ -227,6 +232,7 @@ export function WorkspacePanel(props: {
       containers={containers}
       scroll={scroll}
       scrollLimit={scrollLimit}
+      problems={[...problemsOf(selected), ...fileProblems]}
     />
   ) : null;
 
@@ -273,15 +279,17 @@ function BoltDetails(props: {
   containers: Container[];
   scroll: number;
   scrollLimit?: { current: number } | undefined;
+  problems: Diagnostic[];
 }) {
-  const { read, bolt, state, last, here, glyphs, full, room, reads, runs, containers, scroll, scrollLimit } = props;
+  const { read, bolt, state, last, here, glyphs, full, room, reads, runs, containers, scroll, scrollLimit, problems } = props;
   const { workspace } = read;
   const lines = stepLines({ read, bolt, reads, runs, containers, glyphs });
   const needs = flow(read, bolt);
   const neededBy = usedBy(read, bolt);
   const typed = here ? shortest(bolt, workspace.bolts) : `${slugify(workspace.name)} ${shortest(bolt, workspace.bolts)}`;
 
-  const above = full ? 1 + (bolt.notes ? 1 : 0) + (needs.length > 1 ? 1 : 0) + 2 : (bolt.notes ? 1 : 0) + 1;
+  const problemLines = problems.length > 0 ? problems.reduce((sum, problem) => sum + 1 + (problem.hint ? 1 : 0), 0) + 1 : 0;
+  const above = (full ? 1 + (bolt.notes ? 1 : 0) + (needs.length > 1 ? 1 : 0) + 2 : (bolt.notes ? 1 : 0) + 1) + problemLines;
   const space = Math.max(1, room - above - (full ? 2 : 0));
   const overflow = lines.length > space;
   const fit = overflow ? Math.max(1, space - 1) : lines.length;
@@ -320,6 +328,17 @@ function BoltDetails(props: {
         </Text>
       ) : null}
       {full ? <Text> </Text> : null}
+      {problems.length > 0 ? (
+        <Box flexDirection="column" paddingLeft={full ? 0 : 2} flexShrink={0}>
+          {problems.map((problem, at) => (
+            <Box key={`${problem.at}:${at}`} flexDirection="column">
+              <Text color={problem.level === "error" ? "red" : "yellow"} wrap="wrap">{`${problem.level === "error" ? glyphs.fail : "!"} ${problem.bolt && problem.bolt.toLowerCase() === bolt.label.toLowerCase() ? "" : "In the file: "}${problem.message}`}</Text>
+              {problem.hint ? <Text dimColor wrap="wrap">{`  ${problem.hint}`}</Text> : null}
+            </Box>
+          ))}
+          <Text> </Text>
+        </Box>
+      ) : null}
       {lines.length === 0 ? (
         <Text dimColor>{full ? "It has no steps yet — press e to add some." : "  It has no steps yet — press e to add some."}</Text>
       ) : (

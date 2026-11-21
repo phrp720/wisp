@@ -100,7 +100,6 @@ export function Footer({ view, message, notice, hint, columns = 0 }: { view: Vie
     settings: "",
     setup: "",
     search: "type to search · ↑↓ choose · ⏎ run · esc back",
-    check: "↑↓ scroll · t trust · esc back",
     trust: "",
     processes: "↑↓ choose · [ ] tabs · f full log · x stop · r restart · ? keys · esc",
     history: "",
