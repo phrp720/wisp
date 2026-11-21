@@ -307,7 +307,9 @@ export function HistoryScreen(props: HistoryScreenProps) {
           <Text> </Text>
         )}
         {shown.length === 0 ? <Text dimColor>{`No run matches “${query}”. esc clears it.`}</Text> : null}
-        {runRows.map((entry, position) => {
+        {runRows.map((entry, position, all) => {
+          const titleOf = (run: HistoryEntry) => (filter?.bolt ? 0 : run.bolt.length + 1) + `#${run.number ?? ""}`.length;
+          const titleWidth = Math.min(32, Math.max(0, ...all.map(titleOf)));
           const at = runOffset + position;
           const selected = at === runIndex && focus === "runs";
           const failedAt = entry.steps.find((step) => !step.ok && !step.skipped);
@@ -315,7 +317,7 @@ export function HistoryScreen(props: HistoryScreenProps) {
           // A fixed width, so the times line up down the list whatever their length.
           const right = `${(entry.interrupted ? "?" : formatDuration(totalMs(entry)) || "0ms").padStart(7)} · ${since(entry.startedAt).padEnd(8)}`;
           const doomed = forget?.ids.includes(entry.id) ?? false;
-          const branch = entry.git ? ` ${clip(entry.git.branch, 24)} ` : "";
+          const branch = entry.git ? clip(entry.git.branch, 24) : "";
           const subject = entry.git?.subject ? clip(entry.git.subject, 48) : "";
           return (
             <Box key={entry.id} flexDirection="column">
@@ -326,6 +328,7 @@ export function HistoryScreen(props: HistoryScreenProps) {
                       {selected ? glyphs.pointer : " "} <Mark ok={entry.ok} running={entry.running} interrupted={entry.interrupted} glyphs={glyphs} /> {filter?.bolt ? "" : `${entry.bolt} `}
                     </Text>
                     <Text dimColor={!filter?.bolt} bold={selected && Boolean(filter?.bolt)} color={selected && filter?.bolt ? TONE.accent : undefined}>{`#${entry.number ?? ""}`}</Text>
+                    {" ".repeat(Math.max(0, titleWidth - titleOf(entry)))}
                     {state ? <Text color="cyan">{`  ${state}`}</Text> : null}
                     {failedAt ? <Text color="red">{`  at ${failedAt.label}`}</Text> : null}
                     {entry.git ? <Text color="yellow" dimColor>{`  ${entry.git.commit}`}</Text> : null}
@@ -335,7 +338,7 @@ export function HistoryScreen(props: HistoryScreenProps) {
                   </Text>
                 </Box>
                 <Box flexShrink={0}>
-                  {branch ? <Text color="#60a5fa" inverse>{branch}</Text> : null}
+                  {branch ? <Text color="#60a5fa">{`  ${glyphs.border === "round" ? "⎇ " : ""}${branch}`}</Text> : null}
                   <Text dimColor>{`  ${right}`}</Text>
                 </Box>
               </Box>
@@ -663,7 +666,7 @@ function RunDetail(props: {
       <Box flexWrap="wrap" marginTop={1}>
         {graph.map((column, at) => (
           <Box key={at} alignItems="flex-start">
-            {at > 0 ? <Box marginTop={1}><Text dimColor>{" ── "}</Text></Box> : null}
+            {at > 0 ? <Box marginTop={1}><Text dimColor>{glyphs.border === "round" ? " ──▶ " : " --> "}</Text></Box> : null}
             <Box flexDirection="column">
               {column.map((node, row) => (
                 <Box key={row} borderStyle="round" borderColor={node.state === "running" ? "cyan" : node.state === "waiting" || node.skipped ? "gray" : node.ok ? "green" : "red"} paddingX={1}>
@@ -784,7 +787,7 @@ export function pipeline(entry: HistoryEntry): GraphNode[][] {
 }
 
 function graphWidth(columns: GraphNode[][]): number {
-  return columns.reduce((total, column) => total + Math.max(...column.map((node) => node.label.length + (node.detail?.length ?? 0) + 6)) + 4, 0);
+  return columns.reduce((total, column) => total + Math.max(...column.map((node) => node.label.length + (node.detail?.length ?? 0) + 6)) + 5, 0);
 }
 
 /** A past step as the sentence the rest of Wisp would use for it. */

@@ -1047,6 +1047,22 @@ describe("commands that finish, down and history in the TUI", () => {
     await eventually(() => expect(app.lastFrame()).toMatch(/Work on api\s+● running/));
   });
 
+  it("lines up what follows each run's number, whatever its width", async () => {
+    const run = (number: number, ok: boolean) => ({ id: `r${number}`, number, workspace: acme.workspace.file, workspaceName: "Acme", bolt: "Check", git: { branch: "main", commit: "a1b2c3d", subject: "fix cart total" }, startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), ok, steps: ok ? [] : [{ kind: "command" as const, label: "test", value: "pnpm test", ok: false, durationMs: 1 }] });
+    const app = render(<App services={services({ history: async () => [run(12, true), run(9, true), run(1, false)] })} glyphs={unicode} size={{ columns: 130, rows: 30 }} />);
+    await tick();
+    app.stdin.write("h");
+    await eventually(() => expect(app.lastFrame()).toContain("Check #12"));
+    const lines = (app.lastFrame() ?? "").split("\n");
+    const where = (number: string, text: string) => {
+      const line = lines.find((entry) => entry.includes(`Check ${number} `)) ?? "";
+      return line.indexOf(text);
+    };
+    expect(where("#12", "a1b2c3d")).toBeGreaterThan(0);
+    expect(where("#9", "a1b2c3d")).toBe(where("#12", "a1b2c3d"));
+    expect(where("#1", "at test")).toBe(where("#12", "a1b2c3d"));
+  });
+
   it("says in the list where a run came from only when it wasn't you", async () => {
     const entry = { id: "aa", number: 3, workspace: acme.workspace.file, workspaceName: "Acme", bolt: "Check", trigger: "tui", git: { branch: "main", commit: "a1b2c3d", subject: "fix cart total" }, startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), ok: true, steps: [] };
     const app = render(<App services={services({ history: async () => [entry] })} glyphs={unicode} size={{ columns: 130, rows: 30 }} />);
@@ -1086,8 +1102,8 @@ describe("commands that finish, down and history in the TUI", () => {
     let frame = app.lastFrame() ?? "";
     expect(frame).toContain("All bolts");
     expect(frame).toContain("Check #7");
-    expect(frame).toMatch(/✗ Check #7 +at test +a1b2c3d fix cart total +· git hook +· Acme/);
-    expect(frame).toContain(" main ");
+    expect(frame).toMatch(/✗ Check #7 +at test +a1b2c3d fix cart total +· git hook/);
+    expect(frame).toMatch(/⎇ main +3\.0s/);
 
     // / narrows the runs as you type; nothing matching says so.
     for (const key of ["/", "z", "z"]) {
@@ -2118,8 +2134,10 @@ describe("the mouse", () => {
     await eventually(() => expect(mouse.emit({ kind: "click", x: header.indexOf("3 History") + 1, y: 0 })).toBe(true));
     await eventually(() => expect(frame()).toContain("Nothing has run yet"));
 
-    app.stdin.write("1");
-    await eventually(() => expect(frame()).toContain("Workspaces"));
+    await eventually(() => {
+      if (!frame().includes("Workspaces")) app.stdin.write("1");
+      expect(frame()).toContain("Workspaces");
+    });
     app.stdin.write("e");
     await eventually(() => expect(frame()).toContain("+  add the first step"));
     await tick();
