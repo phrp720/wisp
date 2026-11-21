@@ -277,8 +277,8 @@ function BoltDetails(props: {
   const { read, bolt, state, last, here, glyphs, full, room, reads, runs, containers, scroll, scrollLimit } = props;
   const { workspace } = read;
   const lines = stepLines({ read, bolt, reads, runs, containers, glyphs });
-  const needs = flow(read, bolt, reads);
-  const neededBy = usedBy(read, bolt, reads);
+  const needs = flow(read, bolt);
+  const neededBy = usedBy(read, bolt);
   const typed = here ? shortest(bolt, workspace.bolts) : `${slugify(workspace.name)} ${shortest(bolt, workspace.bolts)}`;
 
   const above = full ? 1 + (bolt.notes ? 1 : 0) + (needs.length > 1 ? 1 : 0) + 2 : (bolt.notes ? 1 : 0) + 1;

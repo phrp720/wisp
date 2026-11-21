@@ -9,7 +9,7 @@ import { HelpPanel } from "./panels.js";
 import { spell } from "./spells.js";
 import { since } from "./state.js";
 import { TONE } from "./tones.js";
-import { groupMarks, matchesAll, shortUrl, windowed, type Services } from "./model.js";
+import { matchesAll, shortUrl, windowed, type Services } from "./model.js";
 import { FilterLine, filterLog, MatchLine } from "./logfilter.js";
 import { useMouse } from "./mouse.js";
 
@@ -250,6 +250,7 @@ export function HistoryScreen(props: HistoryScreenProps) {
         onRetry={() => onRetry(opened)}
         onRerun={() => onRerun(opened)}
         onHelp={() => setHelp(true)}
+        {...(onJump ? { onJump } : {})}
         {...(onHint ? { onHint } : {})}
       />
     );
@@ -400,9 +401,10 @@ function RunDetail(props: {
   onRetry: () => void;
   onRerun: () => void;
   onHelp: () => void;
+  onJump?: (input: string) => void;
   onHint?: (hint: string) => void;
 }) {
-  const { entry, services, glyphs, height, columns, onBack, onRetry, onRerun, onHelp, onHint } = props;
+  const { entry, services, glyphs, height, columns, onBack, onRetry, onRerun, onHelp, onJump, onHint } = props;
   const all = useMemo(() => allSteps(entry), [entry]);
   const runningAt = all.findIndex((step) => step.state === "running");
   const firstFailed = runningAt >= 0 ? runningAt : Math.max(0, entry.steps.findIndex((step) => !step.ok && !step.skipped));
@@ -483,8 +485,7 @@ function RunDetail(props: {
   const rows: { key: string; step?: number; lines?: number; node: ReactNode }[] = [];
   const longest = Math.max(1, ...all.map((step) => step.durationMs));
   // As wide as the longest step, so a step's time sits beside it rather than across the screen.
-  const marks = groupMarks(all, glyphs);
-  const labelWidth = Math.min(Math.max(24, columns - 34), Math.max(16, ...all.map((step, at) => (marks[at] ?? "").length + describeHistoryStep(step).length + 2)));
+  const labelWidth = Math.min(Math.max(24, columns - 34), Math.max(16, ...all.map((step) => describeHistoryStep(step).length + 2)));
   let matches = 0;
   let matchingSteps = 0;
   let reading = false;
@@ -505,7 +506,7 @@ function RunDetail(props: {
       node: (
         <Text wrap="truncate-end">
           <Text color={TONE.accent}>{isSelected ? glyphs.pointer : " "}</Text> {isOpen ? "▾" : "▸"} <Mark ok={step.ok} skipped={step.skipped} running={step.state === "running"} waiting={step.state === "waiting"} glyphs={glyphs} />{" "}
-          <Text bold={isSelected} color={isSelected ? TONE.accent : undefined} dimColor={step.state === "waiting" && !isSelected}>{fit(`${marks[at] ?? ""}${describeHistoryStep(step)}`, labelWidth)}</Text>
+          <Text bold={isSelected} color={isSelected ? TONE.accent : undefined} dimColor={step.state === "waiting" && !isSelected}>{fit(describeHistoryStep(step), labelWidth)}</Text>
           {step.state ? (
             <Text color={step.state === "running" ? "cyan" : undefined} dimColor={step.state === "waiting"}>{`  ${(step.state === "running" ? "running" : "waiting").padEnd(18)}  `}</Text>
           ) : (
@@ -557,7 +558,9 @@ function RunDetail(props: {
   });
 
   const graph = pipeline(entry);
-  const graphRows = graph.length > 1 ? Math.max(1, Math.ceil(graphWidth(graph) / Math.max(20, columns - 6))) : 0;
+  const drawn = graph.flat().length > 1;
+  const tallest = Math.max(1, ...graph.map((column) => column.length));
+  const graphRows = drawn ? Math.max(1, Math.ceil(graphWidth(graph) / Math.max(20, columns - 6))) * tallest : 0;
   const room = Math.max(3, height - 8 - graphRows * 3 - (filtering || typing ? 1 : 0));
   const selectedRow = Math.max(0, rows.findIndex((row) => row.step === selected));
   // The view follows the selected step, until you scroll yourself: then it stays where you
@@ -592,7 +595,7 @@ function RunDetail(props: {
       setTop(Math.min(most, Math.max(0, first + event.by * 3)));
       return true;
     }
-    let line = event.y - 1 - (headLines.current ?? 5 + (graph.length > 1 ? graphRows * 3 : 0));
+    let line = event.y - 1 - (headLines.current ?? 5 + (drawn ? graphRows * 3 : 0));
     if (line < 0) return true;
     for (const row of visible) {
       const lines = row.lines ?? 1;
@@ -626,7 +629,8 @@ function RunDetail(props: {
       return setQuery((text) => text + input.slice(1));
     }
     if (key.escape && queryRef.current) return setQuery(() => "");
-    if (key.escape || key.leftArrow || input === "q") return onBack();
+    if (key.escape || key.leftArrow || input === "q" || input === "3") return onBack();
+    if (onJump && (input === "1" || input === "2")) return onJump(input);
     if (input === "r" && !entry.ok && !entry.running) return onRetry();
     if (input === "R") return onRerun();
     if (input === "?") return onHelp();
@@ -665,16 +669,20 @@ function RunDetail(props: {
         <Text dimColor>{`   ${entry.workspaceName}`}</Text>
       </Text>
       <Summary entry={entry} />
-      {graph.length > 1 ? (
+      {drawn ? (
       <Box flexWrap="wrap" marginTop={1}>
-        {graph.map((node, at) => (
-          <Box key={at} alignItems="center">
-            {at > 0 ? <Text dimColor>{" ── "}</Text> : null}
-            <Box borderStyle="round" borderColor={node.state === "running" ? "cyan" : node.state === "waiting" || node.skipped ? "gray" : node.ok ? "green" : "red"} paddingX={1}>
-              <Text wrap="truncate-end">
-                <Mark ok={node.ok} skipped={node.skipped} running={node.state === "running"} waiting={node.state === "waiting"} glyphs={glyphs} /> {node.label}
-                {node.detail ? <Text dimColor>{` ${node.detail}`}</Text> : null}
-              </Text>
+        {graph.map((column, at) => (
+          <Box key={at} alignItems="flex-start">
+            {at > 0 ? <Box marginTop={1}><Text dimColor>{" ── "}</Text></Box> : null}
+            <Box flexDirection="column">
+              {column.map((node, row) => (
+                <Box key={row} borderStyle="round" borderColor={node.state === "running" ? "cyan" : node.state === "waiting" || node.skipped ? "gray" : node.ok ? "green" : "red"} paddingX={1}>
+                  <Text wrap="truncate-end">
+                    <Mark ok={node.ok} skipped={node.skipped} running={node.state === "running"} waiting={node.state === "waiting"} glyphs={glyphs} /> {node.label}
+                    {node.detail ? <Text dimColor>{` ${node.detail}`}</Text> : null}
+                  </Text>
+                </Box>
+              ))}
             </Box>
           </Box>
         ))}
@@ -741,43 +749,52 @@ export interface GraphNode {
 }
 
 /**
- * A run as a pipeline: one node per step — but a dependency's steps as one node, the way
- * a CI draws a reused workflow as one box with its jobs inside.
+ * A run as a pipeline, in columns by when things could start: a box per bolt when the run
+ * went through several, a box per step when it ran one. What ran at the same time stacks.
  */
-export function pipeline(entry: HistoryEntry): GraphNode[] {
-  // Like a CI's graph of jobs: one box per bolt the run went through — the ones it needed,
-  // then its own — each with its steps counted inside. Steps themselves are the list below.
-  const nodes: (GraphNode & { key: string; steps: number; ms: number; done: number })[] = [];
-  for (const step of allSteps(entry)) {
+export function pipeline(entry: HistoryEntry): GraphNode[][] {
+  const steps = allSteps(entry);
+  const stageOf = (step: HistoryStep, at: number) => step.stage ?? at + 1;
+  const owners = [...new Set(steps.map((step) => step.bolt ?? baseLabel(entry.bolt)))];
+  const nodes: (GraphNode & { key: string; stage: number; steps: number; ms: number; done: number })[] = [];
+  steps.forEach((step, at) => {
     const owner = step.bolt ? (step.workspace ? `${step.workspace} › ${step.bolt}` : step.bolt) : baseLabel(entry.bolt);
-    let node = nodes.find((candidate) => candidate.key === owner);
+    const key = owners.length > 1 ? owner : `${at}`;
+    let node = nodes.find((candidate) => candidate.key === key);
     if (!node) {
-      node = { key: owner, label: owner, ok: true, skipped: true, steps: 0, ms: 0, done: 0 };
+      node = { key, label: owners.length > 1 ? owner : step.label, ok: true, skipped: true, stage: stageOf(step, at), steps: 0, ms: 0, done: 0 };
       nodes.push(node);
     }
+    node.stage = Math.min(node.stage, stageOf(step, at));
     node.steps += 1;
     if (step.state === "running") node.state = "running";
-    if (step.state) continue;
+    if (step.state) return;
     node.done += 1;
     node.ms += step.durationMs;
     node.ok = node.ok && step.ok;
     node.skipped = Boolean(node.skipped && step.skipped);
-  }
-  return nodes.map(({ label, ok, skipped, steps, ms, done, state: running }) => {
-    const state = running ?? (done < steps ? "running" : undefined);
-    const waiting = done === 0 && !running;
-    return {
-      label,
-      detail: `${steps} step${steps === 1 ? "" : "s"}${ms > 0 ? ` ${formatDuration(ms)}` : ""}`,
-      ok,
-      ...(skipped && !state ? { skipped } : {}),
-      ...(waiting ? { state: "waiting" as const } : state ? { state } : {}),
-    };
   });
+  const stages = [...new Set(nodes.map((node) => node.stage))].sort((left, right) => left - right);
+  return stages.map((stage) =>
+    nodes
+      .filter((node) => node.stage === stage)
+      .map(({ label, ok, skipped, steps: count, ms, done, state: running }) => {
+        const state = running ?? (done < count ? "running" : undefined);
+        const waiting = done === 0 && !running;
+        const detail = owners.length > 1 ? `${count} step${count === 1 ? "" : "s"}${ms > 0 ? ` ${formatDuration(ms)}` : ""}` : ms > 0 ? formatDuration(ms) : "";
+        return {
+          label,
+          ...(detail ? { detail } : {}),
+          ok,
+          ...(skipped && !state ? { skipped } : {}),
+          ...(waiting ? { state: "waiting" as const } : state ? { state } : {}),
+        };
+      }),
+  );
 }
 
-function graphWidth(nodes: GraphNode[]): number {
-  return nodes.reduce((total, node) => total + node.label.length + (node.detail?.length ?? 0) + 10, 0);
+function graphWidth(columns: GraphNode[][]): number {
+  return columns.reduce((total, column) => total + Math.max(...column.map((node) => node.label.length + (node.detail?.length ?? 0) + 6)) + 4, 0);
 }
 
 /** A past step as the sentence the rest of Wisp would use for it. */

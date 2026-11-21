@@ -11,19 +11,19 @@ Each command says which it is. That decides whether Wisp **waits for it**.
 | **Afterwards** | it keeps running: watch it on Running, stop it with `x` or `wisp down` | it's over, ✓ or ✗, with its output kept in History |
 | **Already running** | left alone, not started twice | runs again, every time |
 
-One bolt can mix both. This one starts the database and the API, builds the UI, then
-serves it:
+One bolt can mix both. This one starts the database, then the API; meanwhile it builds the
+UI, then serves it, and opens the page once both are up:
 
 ```json
 {
   "label": "Dev",
   "targets": [
-    { "compose": "compose.yaml" },
-    { "run": "npm run dev", "cwd": "api" },
-    { "wait": "localhost:5050" },
-    { "run": "npm run build", "cwd": "ui", "finishes": true },
-    { "run": "npm run start", "cwd": "ui" },
-    { "url": "http://localhost:3000" }
+    { "compose": "compose.yaml", "label": "db" },
+    { "run": "npm run dev", "cwd": "api", "label": "api", "after": "db" },
+    { "run": "npm run build", "cwd": "ui", "label": "build", "finishes": true },
+    { "run": "npm run start", "cwd": "ui", "label": "ui", "after": "build" },
+    { "wait": "localhost:3000", "label": "up", "after": "ui" },
+    { "url": "http://localhost:3000", "after": ["up", "api"] }
   ]
 }
 ```
@@ -33,22 +33,36 @@ what you type: `npm run build` finishes, `npm run dev` keeps running.
 
 ## When a step fails
 
-The run stops there: nothing after it runs. The tests fail, nothing deploys:
+The run stops there: steps already going finish, and nothing new starts. The tests fail,
+nothing deploys:
 
 ```json
 {
   "label": "Release",
   "targets": [
-    { "bolt": "Check" },
-    { "run": "pnpm build", "finishes": true },
-    { "run": "./deploy.sh", "finishes": true }
+    { "bolt": "Check", "label": "check" },
+    { "run": "pnpm build", "label": "build", "after": "check", "finishes": true },
+    { "run": "./deploy.sh", "after": "build", "finishes": true }
   ]
 }
 ```
 
-A bolt it depends on that fails stops it too. To carry on anyway, give the bolt
+A bolt it runs that fails stops it too. To carry on anyway, give the bolt
 `"keepGoing": true`: a failure is reported, and the rest still runs. In the dashboard, press
 `e` on the bolt and change its **On failure** row.
+
+## When a step hangs
+
+A command that should finish can hang instead: a test stuck on the network, a backup
+waiting on a lock. Give it a `"timeout"`:
+
+```json
+{ "run": "pnpm test", "finishes": true, "timeout": "10m" }
+```
+
+If it takes longer, Wisp stops it and everything it started, and the step fails like any
+other: the run stops, and you're [told](./settings#notifications). Without a timeout, Wisp
+waits as long as it takes. In the dashboard, it's the command's **Timeout** row.
 
 ## History
 

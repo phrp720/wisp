@@ -7,6 +7,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { getPlatform, type Platform } from "../platform/index.js";
 import { runInTmux, runInZellij } from "../platform/multiplexer.js";
 import { MULTIPLEXERS } from "../platform/terminals.js";
+import { describeDuration } from "./duration.js";
 import { getOpenWithDefaults } from "./config.js";
 import { composeStopArgs, composeUpArgs, type Container } from "./docker.js";
 import { detectEnvironment, type Environment } from "./environment.js";
@@ -15,7 +16,7 @@ import { fillTarget, fillText, type InputValues } from "./inputs.js";
 import { notifyRunEnd } from "./notify.js";
 import { gitState, newHistoryId, recordHistory, stepLogFile, stepLogPath, type HistoryEntry, type HistoryStep } from "./history.js";
 import { currentOS, expandHome, stateDir, withLock } from "./paths.js";
-import { listRuns, newRunId, pidFileFor, recordWindowRun, runningFor, startRun, stopRun, tidyState, trimLog, type RunStatus } from "./processes.js";
+import { listRuns, newRunId, pidFileFor, recordWindowRun, runningFor, startRun, stopHung, stopRun, tidyState, trimLog, type RunStatus } from "./processes.js";
 import { restartLoop, shellInvocation, windowInvocation } from "./shell.js";
 import { normalizeUrl, sameUrl } from "./url.js";
 import { describeWait, waitFor } from "./wait.js";
@@ -49,12 +50,12 @@ export interface RunDeps {
   platform?: Platform;
   environment?: Environment;
   defaults?: OpenWithDefaults;
-  /** Finds the workspace a cross-workspace dependency names. */
-  findWorkspace?: (ref: string) => Promise<Workspace>;
 }
 
 /** One step of a plan, the workspace it belongs to, and the bolt that put it there. */
 export interface PlannedStep {
+  key: string;
+  deps: string[];
   target: SwitchTarget;
   workspace: Workspace;
   /** The bolt it comes from carries on after one of its steps fails. */
@@ -76,7 +77,7 @@ export async function switchToWorkspace(
 ): Promise<SwitchResult> {
   const bolt = options.bolt ? resolveBolt(workspace, options.bolt) : undefined;
 
-  const steps: PlannedStep[] = bolt ? fillPlan(await planBolt(workspace, bolt, deps), options.inputs ?? {}) : [];
+  const steps: PlannedStep[] = bolt ? fillPlan(await planBolt(workspace, bolt), options.inputs ?? {}) : [];
   const result = await runPlan(workspace, steps, { ...options, label: bolt?.label ?? "" }, deps);
   return { ...result, ...(bolt ? { bolt } : {}) };
 }
@@ -86,14 +87,10 @@ export async function switchToWorkspace(
  * by step against the bolt as it is now. A bolt edited since is refused rather than
  * half-matched: retrying the wrong steps is worse than retrying none.
  */
-export async function planRetry(
-  workspace: Workspace,
-  entry: HistoryEntry,
-  deps: Pick<RunDeps, "findWorkspace"> = {},
-): Promise<PlannedStep[]> {
+export async function planRetry(workspace: Workspace, entry: HistoryEntry): Promise<PlannedStep[]> {
   if (entry.ok) throw new WispError(`That run of "${entry.bolt}" passed — there is nothing to retry`, "NOTHING_TO_RETRY");
   const label = entry.bolt.replace(/ \((retry|down)\)$/, "");
-  const plan = fillPlan(await planBolt(workspace, resolveBolt(workspace, label), deps.findWorkspace ? { findWorkspace: deps.findWorkspace } : {}), entry.inputs ?? {});
+  const plan = fillPlan(await planBolt(workspace, resolveBolt(workspace, label)), entry.inputs ?? {});
   // A retry's own history holds only the steps it retried: match those by label instead.
   const steps = entry.steps;
   const byOrder = plan.length === steps.length && plan.every((step, at) => step.target.label === steps[at]?.label);
@@ -145,15 +142,22 @@ export async function runPlan(
     started: [],
   };
 
-  const results: TargetResult[] = [];
+  const results: (TargetResult | undefined)[] = steps.map(() => undefined);
+  const indexOf = new Map(steps.map((step, at) => [step.key, at]));
+  const waitsOn = steps.map((step) => step.deps.flatMap((key) => (indexOf.has(key) ? [indexOf.get(key) as number] : [])));
+  const inlineAt = steps.map((step) => !dryRun && attached(step, context));
+  const sideways = alongsideOthers(waitsOn, inlineAt);
+  const width = Math.max(0, ...steps.filter((_step, at) => sideways.has(at)).map((step) => step.target.label.length));
+  const runningLogs = new Map<number, string>();
+  const stageAt = stagesOf(steps);
   let halted: string | undefined;
   options.onPlan?.(steps.map((step) => step.target));
 
   const owned = (result: TargetResult, at: number): HistoryStep => {
     const owner = steps[at]?.bolt;
-    return { ...toHistoryStep(result), ...(owner && owner !== options.label.replace(/ \((retry|down)\)$/, "") ? { bolt: owner } : {}) };
+    return { ...toHistoryStep(result), stage: stageAt[at] ?? 1, ...(owner && owner !== options.label.replace(/ \((retry|down)\)$/, "") ? { bolt: owner } : {}) };
   };
-  const entry = (done: { ok: boolean; running: boolean; log?: string | undefined }): HistoryEntry => ({
+  const entry = (done: { ok: boolean; running: boolean }): HistoryEntry => ({
     id: historyId as string,
     workspace: workspace.file,
     workspaceName: workspace.name,
@@ -163,15 +167,17 @@ export async function runPlan(
     startedAt: startedAt.toISOString(),
     finishedAt: new Date().toISOString(),
     ok: done.ok,
-    steps: results.map(owned),
+    steps: steps.flatMap((_step, at) => (results[at] ? [owned(results[at] as TargetResult, at)] : [])),
     ...(done.running
       ? {
           running: true,
           pid: process.pid,
           total: steps.length,
-          pending: steps.slice(results.length).map((step, offset) => {
-            const waiting = owned({ ...step.target, ok: false }, results.length + offset);
-            return offset === 0 && done.log ? { ...waiting, log: done.log } : waiting;
+          pending: steps.flatMap((step, at) => {
+            if (results[at]) return [];
+            const waiting = owned({ ...step.target, ok: false }, at);
+            const log = runningLogs.get(at);
+            return [log ? { ...waiting, running: true, log } : waiting];
           }),
         }
       : {}),
@@ -179,62 +185,67 @@ export async function runPlan(
   let saving: Promise<void> = Promise.resolve();
   const save = (next: HistoryEntry) => (saving = saving.then(() => recordHistory(next)).catch(() => undefined));
 
-  const runOne = async (step: PlannedStep, index: number, alongside: PlannedStep[]): Promise<TargetResult> => {
-    const inline = !dryRun && attached(step, context);
-    options.onStep?.(step.target, { attached: inline });
-    const began = Date.now();
-    const shared = alongside.length > 1 && inline ? sideBySide(context, step.target, alongside) : { context, flush: () => undefined };
-    const outcome = dryRun ? preview(step, context) : await execute(step, index, shared.context);
-    shared.flush();
-    const result: TargetResult = { ...outcome, durationMs: Date.now() - began };
-    // Cut short by a stop, not broken: say so, rather than a signal's exit code.
-    if (options.signal?.aborted && !result.ok && !result.skipped) {
-      result.error = "stopped";
-      halted = "the run was stopped";
-    }
-    if (result.run && !result.note?.startsWith("already running")) context.started.push({ id: result.run });
+  const active = new Map<number, Promise<void>>();
+  const settle = (at: number, result: TargetResult) => {
+    results[at] = result;
     options.onResult?.(result);
-    return result;
+  };
+  const start = (at: number) => {
+    const step = steps[at] as PlannedStep;
+    const run = async () => {
+      const inline = inlineAt[at] as boolean;
+      if (inline && historyId) runningLogs.set(at, stepLogFile(historyId, at));
+      if (record && historyId) await save(entry({ ok: false, running: true }));
+      options.onStep?.(step.target, { attached: inline });
+      const began = Date.now();
+      const shared = inline && sideways.has(at) ? sideBySide(context, step.target, width) : { context, flush: () => undefined };
+      const outcome = dryRun ? preview(step, context) : await execute(step, at, shared.context);
+      shared.flush();
+      const result: TargetResult = { ...outcome, durationMs: Date.now() - began };
+      // Cut short by a stop, not broken: say so, rather than a signal's exit code.
+      if (options.signal?.aborted && !result.ok && !result.skipped) {
+        result.error = "stopped";
+        halted ??= "the run was stopped";
+      }
+      if (result.run && !result.note?.startsWith("already running")) context.started.push({ id: result.run });
+      runningLogs.delete(at);
+      if (!result.ok && !result.skipped && !step.keepGoing) halted ??= step.target.kind === "wait" ? "an earlier wait gave up" : `"${step.target.label}" failed`;
+      settle(at, result);
+    };
+    active.set(
+      at,
+      run().finally(() => active.delete(at)),
+    );
   };
 
   try {
-    let index = 0;
-    while (index < steps.length) {
-      const first = steps[index] as PlannedStep;
-      let end = index + 1;
-      if (first.target.together !== undefined) while (end < steps.length && steps[end]?.target.together === first.target.together) end += 1;
-      const batch = steps.slice(index, end);
-
-      if (options.signal?.aborted && !halted) halted = "the run was stopped";
-      if (halted) {
-        for (const step of batch) {
-          const result: TargetResult = { ...step.target, ok: false, skipped: true, note: `not reached — ${halted}` };
-          results.push(result);
-          options.onResult?.(result);
+    for (;;) {
+      if (options.signal?.aborted) halted ??= "the run was stopped";
+      let moved = false;
+      for (let at = 0; at < steps.length; at += 1) {
+        if (results[at] || active.has(at)) continue;
+        if (halted) {
+          settle(at, { ...(steps[at] as PlannedStep).target, ok: false, skipped: true, note: `not reached — ${halted}` });
+          moved = true;
+          continue;
         }
-        index = end;
-        continue;
-      }
-
-      const inline = !dryRun && attached(first, context);
-      if (record && historyId) await save(entry({ ok: false, running: true, log: inline ? stepLogFile(historyId, index) : undefined }));
-      const outcomes = batch.length === 1 ? [await runOne(first, index, batch)] : await Promise.all(batch.map((step, offset) => runOne(step, index + offset, batch)));
-      results.push(...outcomes);
-
-      for (const [offset, result] of outcomes.entries()) {
-        const step = batch[offset] as PlannedStep;
-        if (!result.ok && !result.skipped && !halted && !step.keepGoing) {
-          halted = step.target.kind === "wait" ? "an earlier wait gave up" : `"${step.target.label}" failed`;
+        if ((waitsOn[at] as number[]).every((dep) => results[dep] !== undefined)) {
+          start(at);
+          moved = true;
         }
       }
-      index = end;
+      if (active.size === 0 && results.every((result) => result !== undefined)) break;
+      if (active.size === 0 && !moved) halted ??= "what it waits for never finished";
+      if (active.size === 0) continue;
+      await Promise.race(active.values());
     }
   } catch (error) {
     if (record && historyId) await save(entry({ ok: false, running: false }));
     throw error;
   }
 
-  const ok = results.every((result) => result.ok || result.skipped === true) && !halted;
+  const finished = results as TargetResult[];
+  const ok = finished.every((result) => result.ok || result.skipped === true) && !halted;
 
   if (record && historyId) {
     const where = await git;
@@ -244,7 +255,7 @@ export async function runPlan(
   }
 
   if (!dryRun && steps.length > 0) {
-    const failed = results.find((result) => !result.ok && !result.skipped);
+    const failed = finished.find((result) => !result.ok && !result.skipped);
     await notifyRunEnd(
       {
         ok,
@@ -259,11 +270,32 @@ export async function runPlan(
     ).catch(() => undefined);
   }
 
-  return { workspace, targets: results, dryRun, ok, plan: steps, ...(historyId ? { historyId } : {}), ...(inputs ? { inputs } : {}) };
+  return { workspace, targets: finished, dryRun, ok, plan: steps, ...(historyId ? { historyId } : {}), ...(inputs ? { inputs } : {}) };
 }
 
-function sideBySide(context: Context, target: SwitchTarget, alongside: PlannedStep[]): { context: Context; flush: () => void } {
-  const width = Math.max(...alongside.map((step) => step.target.label.length));
+function alongsideOthers(waitsOn: number[][], inline: boolean[]): Set<number> {
+  const before = waitsOn.map(() => new Set<number>());
+  const reach = (at: number, seen: Set<number>): Set<number> => {
+    for (const dep of waitsOn[at] ?? []) {
+      if (seen.has(dep)) continue;
+      seen.add(dep);
+      reach(dep, seen);
+    }
+    return seen;
+  };
+  waitsOn.forEach((_deps, at) => reach(at, before[at] as Set<number>));
+  const found = new Set<number>();
+  for (let one = 0; one < inline.length; one += 1) {
+    for (let two = one + 1; two < inline.length; two += 1) {
+      if (!inline[one] || !inline[two] || before[one]?.has(two) || before[two]?.has(one)) continue;
+      found.add(one);
+      found.add(two);
+    }
+  }
+  return found;
+}
+
+function sideBySide(context: Context, target: SwitchTarget, width: number): { context: Context; flush: () => void } {
   const prefix = `${target.label.padEnd(width)} │ `;
   const echo = context.options.echo ?? false;
   let open = "";
@@ -294,7 +326,7 @@ function toHistoryStep(result: TargetResult): HistoryStep {
     ok: result.ok,
     ...(result.skipped ? { skipped: true } : {}),
     ...(result.finishes ? { finishes: true } : {}),
-    ...(result.together !== undefined ? { together: result.together } : {}),
+    ...(result.after ? { after: result.after } : {}),
     ...(result.error ? { error: result.error } : {}),
     ...(result.note ? { note: result.note } : {}),
     durationMs: result.durationMs ?? 0,
@@ -346,80 +378,82 @@ function platformOf(context: Context): Platform {
  * bolt already being expanded is a cycle, and is refused before anything has opened.
  * Each step remembers whether its own bolt keeps going after a failure.
  */
-export async function planBolt(
-  workspace: Workspace,
-  bolt: Bolt,
-  options: { findWorkspace?: (ref: string) => Promise<Workspace> } = {},
-): Promise<PlannedStep[]> {
-  const seenAssets = new Set<string>();
-  const expanded = new Set<string>();
+export async function planBolt(workspace: Workspace, bolt: Bolt): Promise<PlannedStep[]> {
   const plan: PlannedStep[] = [];
-  const groups = new Map<string, number>();
+  const finished = new Map<string, string[]>();
+  const firstOf = new Map<string, string>();
 
-  const expand = async (owner: Workspace, current: Bolt, stack: string[]): Promise<void> => {
+  const expand = async (owner: Workspace, current: Bolt, stack: string[], startAfter: string[]): Promise<string[]> => {
     const key = `${owner.file}#${current.id}`;
     if (stack.includes(key)) {
       const names = [...stack.slice(stack.indexOf(key)), key].map((entry) => entry.split("#bolt:")[1] ?? entry);
       throw new WispError(`These bolts need each other: ${names.join(" → ")}`, "CYCLE");
     }
-    if (expanded.has(key)) return;
-    expanded.add(key);
+    const known = finished.get(key);
+    if (known) return known;
+    if (current.broken) throw new WispError(current.broken, "BROKEN_BOLT");
 
     const byId = new Map(collectTargets(owner).map((target) => [target.id, target]));
-    let group: number | undefined;
-    const push = (target: SwitchTarget) => {
-      const placed = owner === workspace ? target : { ...target, workspace: owner.name };
+    const byName = new Map<string, number>();
+    current.steps.forEach((step, at) => {
+      if (step.name) byName.set(step.name, at);
+    });
+    const doneBy = new Map<number, string[]>();
+    const all: string[] = [];
+    const left = new Set(current.steps.map((_step, at) => at));
+
+    while (left.size > 0) {
+      const at = [...left].find((index) => (current.steps[index]?.after ?? []).every((name) => !left.has(byName.get(name) ?? -1)));
+      if (at === undefined) throw new WispError(`"${current.label}" can't run: its steps wait for each other`, "BROKEN_BOLT");
+      left.delete(at);
+      const step = current.steps[at] as BoltStep;
+      const after = step.after ?? [];
+      const waitsFor = after.length > 0 ? [...new Set(after.flatMap((name) => doneBy.get(byName.get(name) ?? -1) ?? []))] : startAfter;
+      const stepKey = `${key}#${at}`;
+
+      if (step.kind === "bolt") {
+        const keys = await expand(owner, resolveBolt(owner, step.bolt), [...stack, key], waitsFor);
+        doneBy.set(at, keys.length > 0 ? keys : waitsFor);
+        all.push(...keys);
+        continue;
+      }
+
+      const target =
+        step.kind === "wait"
+          ? ({ kind: "wait", id: `wait:${stepKey}`, label: describeWait(step.wait), value: describeWait(step.wait), wait: step.wait } satisfies SwitchTarget)
+          : step.kind === "compose"
+            ? owner.trusted
+              ? composeTarget(step, "up")
+              : undefined
+            : byId.get(step.id);
+      if (!target) {
+        doneBy.set(at, waitsFor);
+        continue;
+      }
+      const assetKey = `${owner.file}#${target.id}`;
+      const seen = target.kind === "wait" ? undefined : firstOf.get(assetKey);
+      if (seen) {
+        doneBy.set(at, [seen]);
+        continue;
+      }
+      if (target.kind !== "wait") firstOf.set(assetKey, stepKey);
       plan.push({
-        target: group === undefined ? placed : { ...placed, together: group },
+        key: stepKey,
+        deps: waitsFor,
+        target: { ...target, ...(step.name ? { name: step.name } : {}), ...(after.length > 0 ? { after } : {}) },
         workspace: owner,
         keepGoing: current.keepGoing ?? false,
         bolt: current.label,
       });
-    };
-
-    for (const step of current.steps) {
-      if (step.together === undefined) group = undefined;
-      else {
-        const groupKey = `${key}#${step.together}`;
-        if (!groups.has(groupKey)) groups.set(groupKey, groups.size);
-        group = groups.get(groupKey);
-      }
-
-      if (step.kind === "wait") {
-        const label = describeWait(step.wait);
-        push({ kind: "wait", id: `wait:${plan.length}`, label, value: label, wait: step.wait });
-        continue;
-      }
-
-      // A dependency's steps go here, where it is listed — before the steps after it.
-      if (step.kind === "bolt") {
-        const target = step.workspace ? await otherWorkspace(step.workspace, options.findWorkspace) : owner;
-        await expand(target, resolveBolt(target, step.bolt), [...stack, key]);
-        continue;
-      }
-
-      if (step.kind === "compose") {
-        // Withheld until the file is trusted, like a command.
-        if (!owner.trusted) continue;
-        const target = composeTarget(step, "up");
-        const assetKey = `${owner.file}#${target.id}`;
-        if (seenAssets.has(assetKey)) continue;
-        seenAssets.add(assetKey);
-        push(target);
-        continue;
-      }
-
-      // Absent: withheld for want of trust, or for another OS. Either way, not opened.
-      const target = byId.get(step.id);
-      if (!target) continue;
-      const assetKey = `${owner.file}#${target.id}`;
-      if (seenAssets.has(assetKey)) continue;
-      seenAssets.add(assetKey);
-      push(target);
+      doneBy.set(at, [stepKey]);
+      all.push(stepKey);
     }
+
+    finished.set(key, all);
+    return all;
   };
 
-  await expand(workspace, bolt, []);
+  await expand(workspace, bolt, [], []);
   return plan;
 }
 
@@ -434,13 +468,6 @@ export function composeTarget(step: { file: string; services?: string[] }, actio
     value: `docker compose -f ${step.file} ${action}`,
     compose: { file: step.file, services, action },
   };
-}
-
-async function otherWorkspace(ref: string, find: ((ref: string) => Promise<Workspace>) | undefined): Promise<Workspace> {
-  if (!find) {
-    throw new WispError(`A dependency names the workspace "${ref}", which cannot be looked up here`, "NOT_FOUND");
-  }
-  return find(ref);
 }
 
 /** What a dry run reports: the plan, with where each thing would go. */
@@ -611,7 +638,7 @@ function describeRoute(target: SwitchTarget, step: PlannedStep, context: Context
     const route = routeFor(target, context);
     if (route.kind === "terminal") return `in ${route.terminal}`;
     if (route.kind === "background") return route.reason ?? "in the background";
-    if (route.kind === "inline") return target.finishes ? "here, and waited for" : "here, attached";
+    if (route.kind === "inline") return target.finishes ? `here, and waited for${target.timeout ? ` up to ${describeDuration(target.timeout)}` : ""}` : "here, attached";
     return `in a new ${route.kind} window`;
   } catch (error) {
     return describe(error);
@@ -663,9 +690,10 @@ async function runCommand(step: PlannedStep, index: number, context: Context): P
       return code === 0 ? { ...target, ok: true } : { ...target, ok: false, error: `exited with code ${code}` };
     }
     const log = context.historyId ? await stepLogPath(context.historyId, index) : undefined;
-    const code = await runAttached(invocation, target, context, log);
+    const { code, timedOut } = await runAttached(invocation, target, context, log);
     if (log) await trimLog(log).catch(() => false);
     const kept = log ? { log } : {};
+    if (timedOut) return { ...target, ok: false, error: `ran over its ${describeDuration(target.timeout ?? 0)} timeout, so Wisp stopped it`, ...kept };
     return code === 0 ? { ...target, ok: true, ...kept } : { ...target, ok: false, error: `exited with code ${code}`, ...kept };
   }
 
@@ -722,7 +750,7 @@ async function runCompose(step: PlannedStep, index: number, context: Context): P
   const launch = { ...target, cwd: dirname(compose.file) };
   let code: number;
   try {
-    code = await runAttached({ file: "docker", args }, launch, context, log);
+    code = (await runAttached({ file: "docker", args }, launch, context, log)).code;
     if (log) await trimLog(log).catch(() => false);
   } catch (error) {
     const failure = error as NodeJS.ErrnoException;
@@ -763,9 +791,9 @@ function supervised(invocation: Invocation, target: SwitchTarget): Invocation {
  * A command attached to the caller: its output kept in the run's log, handed to
  * `onOutput`, and — when echoing — printed here too, with this terminal's keyboard.
  */
-function runAttached(invocation: Invocation, target: SwitchTarget, context: Context, log?: string): Promise<number> {
+function runAttached(invocation: Invocation, target: SwitchTarget, context: Context, log?: string): Promise<{ code: number; timedOut: boolean }> {
   const echo = context.options.echo ?? false;
-  if (context.options.signal?.aborted) return Promise.resolve(130);
+  if (context.options.signal?.aborted) return Promise.resolve({ code: 130, timedOut: false });
   return new Promise((resolvePromise, reject) => {
     const file = log ? createWriteStream(log, { flags: "a", mode: 0o600 }) : undefined;
     const child = spawn(invocation.file, invocation.args, {
@@ -795,16 +823,40 @@ function runAttached(invocation: Invocation, target: SwitchTarget, context: Cont
     const stop = () => killTree(child, !echo);
     context.options.signal?.addEventListener("abort", stop, { once: true });
 
-    child.once("error", (error) => {
-      attachedChildren.delete(child);
-      file?.end();
-      reject(error);
+    let timedOut = false;
+    let forced: NodeJS.Timeout | undefined;
+    const limit =
+      target.timeout && child.pid !== undefined
+        ? setTimeout(() => {
+            timedOut = true;
+            const force = stopHung(child.pid as number);
+            forced = setTimeout(() => {
+              force();
+              child.stdout?.destroy();
+              child.stderr?.destroy();
+            }, 5000);
+          }, target.timeout * 1000)
+        : undefined;
+    child.once("exit", () => {
+      if (!timedOut) return;
+      child.stdout?.destroy();
+      child.stderr?.destroy();
     });
-    child.once("close", (code, signal) => {
+    const settle = () => {
+      clearTimeout(limit);
+      clearTimeout(forced);
       attachedChildren.delete(child);
       context.options.signal?.removeEventListener("abort", stop);
       file?.end();
-      resolvePromise(code ?? (signal ? 130 : 1));
+    };
+
+    child.once("error", (error) => {
+      settle();
+      reject(error);
+    });
+    child.once("close", (code, signal) => {
+      settle();
+      resolvePromise({ code: code ?? (signal ? 130 : 1), timedOut });
     });
   });
 }
@@ -851,7 +903,7 @@ export async function downBolt(
   deps: RunDeps = {},
 ): Promise<DownResult> {
   const plan = options.deps
-    ? await planBolt(workspace, bolt, deps.findWorkspace ? { findWorkspace: deps.findWorkspace } : {})
+    ? await planBolt(workspace, bolt)
     : await planBolt(workspace, { ...bolt, steps: bolt.steps.filter((step) => step.kind !== "bolt") });
 
   const commands = plan.filter((step) => step.target.kind === "command");
@@ -866,12 +918,20 @@ export async function downBolt(
   const owners = options.deps ? uniqueBolts(plan) : [{ workspace, bolt: bolt.label }];
   const teardownSteps: PlannedStep[] = plan
     .filter((step) => step.target.kind === "compose" && step.target.compose)
-    .map((step) => ({ ...step, keepGoing: false, target: composeTarget(step.target.compose!, "stop") }));
+    .map((step) => ({ ...step, key: `${step.key}#stop`, deps: [], keepGoing: false, target: composeTarget(step.target.compose!, "stop") }));
+  const stopping = teardownSteps.map((step) => step.key);
   for (const owner of owners) {
     const source = owner.workspace.bolts.find((entry) => entry.label === owner.bolt);
     if (!source?.down?.length) continue;
-    const steps = await planBolt(owner.workspace, { ...source, steps: source.down, keepGoing: false });
-    teardownSteps.push(...steps.map((step) => ({ ...step, target: step.target.kind === "command" ? { ...step.target, finishes: true } : step.target })));
+    const steps = await planBolt(owner.workspace, { ...source, steps: source.down.filter((step) => step.kind !== "bolt"), keepGoing: false });
+    teardownSteps.push(
+      ...steps.map((step) => ({
+        ...step,
+        key: `${step.key}#down`,
+        deps: [...stopping, ...step.deps.map((key) => `${key}#down`)],
+        target: step.target.kind === "command" ? { ...step.target, finishes: true } : step.target,
+      })),
+    );
   }
 
   if (teardownSteps.length === 0) return { stopped };
@@ -889,29 +949,48 @@ export async function downBolt(
   return { stopped, teardown };
 }
 
+export function stagesOf(items: { key: string; deps: string[] }[]): number[] {
+  const at = new Map(items.map((item, index) => [item.key, index]));
+  const known = new Map<number, number>();
+  const stage = (index: number, path: Set<number>): number => {
+    const cached = known.get(index);
+    if (cached !== undefined) return cached;
+    if (path.has(index)) return 1;
+    const deps = (items[index]?.deps ?? []).flatMap((key) => (at.has(key) ? [at.get(key) as number] : []));
+    const value = deps.length === 0 ? 1 : 1 + Math.max(...deps.map((dep) => stage(dep, new Set([...path, index]))));
+    known.set(index, value);
+    return value;
+  };
+  return items.map((_item, index) => stage(index, new Set()));
+}
+
+export function stagesOfTargets(targets: { name?: string; after?: string[] }[]): number[] {
+  return stagesOf(targets.map((target, index) => ({ key: target.name ?? `#${index}`, deps: target.after ?? [] })));
+}
+
 export function fillPlan(plan: PlannedStep[], values: InputValues): PlannedStep[] {
   if (Object.keys(values).length === 0) return plan;
   return plan.map((step) => ({ ...step, target: fillTarget(step.target, values) }));
 }
 
-async function boltsOf(workspace: Workspace, bolt: Bolt, deps: Pick<RunDeps, "findWorkspace">): Promise<Bolt[]> {
-  const plan = await planBolt(workspace, bolt, deps.findWorkspace ? { findWorkspace: deps.findWorkspace } : {});
+async function boltsOf(workspace: Workspace, bolt: Bolt): Promise<Bolt[]> {
+  const plan = await planBolt(workspace, bolt);
   const found = [bolt, ...uniqueBolts(plan).map((owner) => owner.workspace.bolts.find((entry) => entry.label === owner.bolt))];
   return [...new Set(found.filter((entry): entry is Bolt => entry !== undefined))];
 }
 
-export async function questionsFor(workspace: Workspace, bolt: Bolt, deps: Pick<RunDeps, "findWorkspace"> = {}, values: InputValues = {}): Promise<string[]> {
+export async function questionsFor(workspace: Workspace, bolt: Bolt, values: InputValues = {}): Promise<string[]> {
   const questions: string[] = [];
-  for (const owner of await boltsOf(workspace, bolt, deps)) {
+  for (const owner of await boltsOf(workspace, bolt)) {
     const question = owner.confirm ? fillText(owner.confirm, values) : undefined;
     if (question && !questions.includes(question)) questions.push(question);
   }
   return questions;
 }
 
-export async function inputsFor(workspace: Workspace, bolt: Bolt, deps: Pick<RunDeps, "findWorkspace"> = {}): Promise<InputSpec[]> {
+export async function inputsFor(workspace: Workspace, bolt: Bolt): Promise<InputSpec[]> {
   const specs: InputSpec[] = [];
-  for (const owner of await boltsOf(workspace, bolt, deps)) {
+  for (const owner of await boltsOf(workspace, bolt)) {
     for (const spec of owner.inputs ?? []) if (!specs.some((known) => known.name === spec.name)) specs.push(spec);
   }
   return specs;
@@ -1016,10 +1095,7 @@ export function resolveBolt(workspace: Workspace, ref: string): Bolt {
   );
 }
 
-/**
- * The steps a bolt lists, without expanding dependencies — for showing a bolt rather than
- * running it. A dependency appears as one step naming the bolt it runs.
- */
+/** The steps a bolt lists, without its needs — for showing a bolt rather than running it. */
 export function collectBoltTargets(workspace: Workspace, bolt: Bolt): SwitchTarget[] {
   return listSteps(workspace, bolt.steps);
 }
@@ -1030,8 +1106,15 @@ export function collectDownTargets(workspace: Workspace, bolt: Bolt): SwitchTarg
 }
 
 function listSteps(workspace: Workspace, steps: BoltStep[]): SwitchTarget[] {
+  return stepTargets(workspace, steps).filter((target): target is SwitchTarget => target !== undefined);
+}
+
+export function stepTargets(workspace: Workspace, steps: BoltStep[]): (SwitchTarget | undefined)[] {
   const byId = new Map(collectTargets(workspace).map((target) => [target.id, target]));
-  return steps.flatMap((step) => listStep(step, byId, workspace).map((target) => (step.together === undefined ? target : { ...target, together: step.together })));
+  return steps.map((step) => {
+    const target = listStep(step, byId, workspace)[0];
+    return target ? { ...target, ...(step.name ? { name: step.name } : {}), ...(step.after && step.after.length > 0 ? { after: step.after } : {}) } : undefined;
+  });
 }
 
 function listStep(step: BoltStep, byId: Map<string, SwitchTarget>, workspace: Workspace): SwitchTarget[] {
@@ -1040,8 +1123,7 @@ function listStep(step: BoltStep, byId: Map<string, SwitchTarget>, workspace: Wo
       return [{ kind: "wait", id: "wait", label: describeWait(step.wait), value: describeWait(step.wait), wait: step.wait }];
     }
     if (step.kind === "bolt") {
-      const label = step.workspace ? `${step.workspace} › ${step.bolt}` : step.bolt;
-      return [{ kind: "bolt", id: `bolt:${step.bolt.toLowerCase()}`, label, value: label }];
+      return [{ kind: "bolt", id: `bolt:${step.bolt.toLowerCase()}`, label: step.bolt, value: step.bolt }];
     }
     if (step.kind === "compose") return workspace.trusted ? [composeTarget(step, "up")] : [];
     const target = byId.get(step.id);
@@ -1064,6 +1146,7 @@ export function collectTargets(workspace: Workspace): SwitchTarget[] {
         if (command.cwd) target.cwd = command.cwd;
         if (command.background) target.background = true;
         if (command.finishes) target.finishes = true;
+        if (command.timeout) target.timeout = command.timeout;
         if (command.restart) target.restart = command.restart;
         if (command.shell) target.shell = command.shell;
         if (command.env) target.env = command.env;

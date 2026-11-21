@@ -11,10 +11,10 @@ The database, then the API, then the page once the API answers:
 {
   "label": "Dev",
   "targets": [
-    { "compose": "compose.yaml", "services": ["postgres"] },
-    { "run": "pnpm dev", "cwd": "apps/api" },
-    { "wait": "http://localhost:3000" },
-    { "url": "http://localhost:3000" }
+    { "compose": "compose.yaml", "services": ["postgres"], "label": "db" },
+    { "run": "pnpm dev", "cwd": "apps/api", "label": "api", "after": "db" },
+    { "wait": "http://localhost:3000", "label": "up", "after": "api" },
+    { "url": "http://localhost:3000", "after": "up" }
   ]
 }
 ```
@@ -24,18 +24,16 @@ left alone.
 
 ## Check before every push
 
-Lint, types and tests at the same time, then the build:
+Lint, types and tests at the same time, then the build once all three pass:
 
 ```json
 {
   "label": "Verify",
   "targets": [
-    { "together": [
-      { "run": "pnpm lint", "finishes": true },
-      { "run": "pnpm typecheck", "finishes": true },
-      { "run": "pnpm test", "finishes": true }
-    ] },
-    { "run": "pnpm build", "finishes": true }
+    { "run": "pnpm lint", "label": "lint", "finishes": true },
+    { "run": "pnpm typecheck", "label": "types", "finishes": true },
+    { "run": "pnpm test", "label": "test", "finishes": true },
+    { "run": "pnpm build", "after": ["lint", "types", "test"], "finishes": true }
   ]
 }
 ```
@@ -53,9 +51,9 @@ Which environment, then one question before it goes:
   "inputs": { "env": { "ask": "Deploy where?", "choices": ["staging", "production"], "default": "staging" } },
   "confirm": "Deploy to {{env}}?",
   "targets": [
-    { "bolt": "Verify" },
-    { "run": "./deploy.sh {{env}}", "finishes": true },
-    { "url": "https://{{env}}.acme.com" }
+    { "bolt": "Verify", "label": "verify" },
+    { "run": "./deploy.sh {{env}}", "label": "deploy", "after": "verify", "finishes": true },
+    { "url": "https://{{env}}.acme.com", "after": "deploy" }
   ]
 }
 ```
@@ -94,8 +92,8 @@ no tool can stop: if your script prints the secret, it lands in the log.
 {
   "label": "Backup",
   "targets": [
-    { "run": "pg_dump acme > ~/backups/acme-$(date +%F).sql", "finishes": true },
-    { "run": "find ~/backups -name 'acme-*' -mtime +14 -delete", "finishes": true }
+    { "run": "pg_dump acme > ~/backups/acme-$(date +%F).sql", "label": "dump", "finishes": true, "timeout": "30m" },
+    { "run": "find ~/backups -name 'acme-*' -mtime +14 -delete", "after": "dump", "finishes": true }
   ]
 }
 ```
@@ -106,8 +104,8 @@ Add it to cron with `crontab -e`:
 0 3 * * * wisp use ~/dev/acme/.wisp.json Backup
 ```
 
-If it fails, Wisp tells you: on screen, and on a server through `wisp notify --webhook`, to
-Slack, Discord or ntfy. Each run is in `wisp history`.
+If it fails, or hangs past its 30 minutes, Wisp tells you: on screen, and on a server
+through `wisp notify --webhook`, to Slack, Discord or ntfy. Each run is in `wisp history`.
 
 ## Open your morning
 

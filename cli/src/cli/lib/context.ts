@@ -5,7 +5,7 @@ import { WispError } from "../../core/errors.js";
 import { expandHome } from "../../core/paths.js";
 import { PROJECT_FILE, findProjectFile, readProjectFile } from "../../core/project.js";
 import { matchBolt } from "../../core/switch.js";
-import type { Workspace, WorkspaceRead } from "../../core/types.js";
+import type { WorkspaceRead } from "../../core/types.js";
 import { discoverWorkspaces, matchWorkspace, resolveWorkspace, slugify } from "../../core/workspaces.js";
 
 /**
@@ -54,11 +54,6 @@ export async function currentProject(): Promise<WorkspaceRead> {
 export async function maybeProject(): Promise<WorkspaceRead | undefined> {
   const file = await findProjectFile();
   return file ? readProjectFile(file) : undefined;
-}
-
-/** How a dependency on another workspace is looked up while a bolt runs. */
-export async function findWorkspaceForDependency(ref: string): Promise<Workspace> {
-  return resolveWorkspace(ref, await everything()).workspace;
 }
 
 /**

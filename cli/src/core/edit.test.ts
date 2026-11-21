@@ -21,7 +21,7 @@ import {
   guessFinishes,
   setBoltNotes,
   setConfirm,
-  toggleTogether,
+  setAfter,
   setInput,
   removeInput,
   buildInput,
@@ -85,6 +85,33 @@ describe("editing a workspace without writing JSON", () => {
     expect(buildStep("run", { run: "pnpm dev", label: "api", cwd: "apps/api" }).step).toEqual({ run: "pnpm dev", cwd: "apps/api", label: "api" });
   });
 
+  it("renames a bolt and every step that runs it", async () => {
+    await writeFile(
+      file,
+      JSON.stringify({
+        name: "Acme",
+        bolts: [
+          { label: "Services", targets: [{ compose: "compose.yaml" }] },
+          { label: "Dev", targets: [{ bolt: "services", label: "db" }, { run: "pnpm dev", after: "db" }], down: [{ bolt: "Services" }] },
+          { label: "Web", targets: [{ folder: "web" }] },
+        ],
+      }),
+    );
+    await renameBolt(file, "Services", "Database");
+    const bolts = JSON.parse(await readFile(file, "utf8")).bolts;
+    expect(bolts.map((bolt: { label: string }) => bolt.label)).toEqual(["Database", "Dev", "Web"]);
+    expect(bolts[1].targets[0]).toEqual({ bolt: "Database", label: "db" });
+    expect(bolts[1].down).toEqual([{ bolt: "Database" }]);
+    expect(bolts[2]).toEqual({ label: "Web", targets: [{ folder: "web" }] });
+  });
+
+  it("writes a timeout only on a command that finishes, as it was typed", () => {
+    expect(buildStep("run", { run: "pnpm test", finishes: "finishes", timeout: "10m" }).step).toEqual({ run: "pnpm test", finishes: true, timeout: "10m" });
+    expect(buildStep("run", { run: "pnpm test", finishes: "finishes", timeout: "90" }).step).toEqual({ run: "pnpm test", finishes: true, timeout: 90 });
+    expect(buildStep("run", { run: "pnpm dev", finishes: "running", timeout: "10m" }).step).toEqual({ run: "pnpm dev" });
+    expect(buildStep("run", { run: "pnpm test", finishes: "finishes", timeout: "soon" }).errors["timeout"]).toMatch(/30s, 10m or 1h/);
+  });
+
   it("writes a command that finishes as such, without a restart policy, which only fits one that keeps running", () => {
     expect(buildStep("run", { run: "pnpm build", finishes: "finishes", restart: "always" }).step).toEqual({ run: "pnpm build", finishes: true });
     expect(buildStep("run", { run: "pnpm dev", finishes: "running", restart: "on-failure" }).step).toEqual({ run: "pnpm dev", restart: "on-failure" });
@@ -138,35 +165,32 @@ describe("editing a workspace without writing JSON", () => {
     expect(read.workspace.bolts.map((bolt) => bolt.label)).toEqual(["Run the tests"]);
   });
 
-  it("runs steps together and apart: t joins the one before or leaves the group, K and J respect groups", async () => {
-    const runs = async () => {
-      const targets = JSON.parse(await readFile(file, "utf8")).bolts[0].targets as Record<string, unknown>[];
-      return targets.map((target) => (Array.isArray(target["together"]) ? (target["together"] as { run: string }[]).map((step) => step.run) : String(target["run"] ?? target["folder"])));
-    };
+  it("sets what a step waits for, labelling the steps it waits for, and keeps that right through renames, moves and removals", async () => {
+    const written = async () => JSON.parse(await readFile(file, "utf8")).bolts[0].targets as Record<string, unknown>[];
     await removeStep(file, "Work on api", 0);
-    for (const run of ["a", "b", "c", "d"]) await addStep(file, "Work on api", { run, finishes: true });
-    expect(await toggleTogether(file, "Work on api", 1)).toBe(1);
-    expect(await toggleTogether(file, "Work on api", 2)).toBe(2);
-    expect(await runs()).toEqual([["a", "b", "c"], "d"]);
-    expect(await boltSteps(file, "Work on api")).toHaveLength(4);
-    expect((await readProjectFile(file)).workspace.bolts[0]!.steps.map((step) => step.together)).toEqual([0, 0, 0, undefined]);
+    for (const run of ["pnpm install", "pnpm lint", "pnpm test", "pnpm build"]) await addStep(file, "Work on api", { run, finishes: true });
+    await setAfter(file, "Work on api", 1, [0]);
+    await setAfter(file, "Work on api", 2, [0]);
+    await setAfter(file, "Work on api", 3, [1, 2]);
+    expect((await written()).map((step) => [step["label"], step["after"]])).toEqual([
+      ["install", undefined],
+      ["lint", "install"],
+      ["test", "install"],
+      [undefined, ["lint", "test"]],
+    ]);
+    expect((await readProjectFile(file)).workspace.bolts[0]!.broken).toBeUndefined();
 
-    expect(await moveStep(file, "Work on api", 1, -1)).toBe(0);
-    expect(await runs()).toEqual([["b", "a", "c"], "d"]);
-    expect(await moveStep(file, "Work on api", 3, -1)).toBe(0);
-    expect(await runs()).toEqual(["d", ["b", "a", "c"]]);
-    expect(await moveStep(file, "Work on api", 3, 1)).toBe(3);
-    expect(await runs()).toEqual(["d", ["b", "a"], "c"]);
-
-    expect(await toggleTogether(file, "Work on api", 2)).toBe(2);
-    expect(await runs()).toEqual(["d", "b", "a", "c"]);
-    await toggleTogether(file, "Work on api", 0);
-    expect(await runs()).toEqual([["d", "b"], "a", "c"]);
-
-    await addStep(file, "Work on api", { run: "e" }, 1);
-    expect(await runs()).toEqual([["d", "e", "b"], "a", "c"]);
-    await removeStep(file, "Work on api", 0);
-    expect(await runs()).toEqual([["e", "b"], "a", "c"]);
+    await replaceStep(file, "Work on api", 0, { run: "pnpm install", label: "deps", finishes: true });
+    expect((await written()).map((step) => step["after"])).toEqual([undefined, "deps", "deps", ["lint", "test"]]);
+    expect(await moveStep(file, "Work on api", 3, -1)).toBe(2);
+    await removeStep(file, "Work on api", 3);
+    expect((await written()).map((step) => [step["label"], step["after"]])).toEqual([
+      ["deps", undefined],
+      ["lint", "deps"],
+      [undefined, "lint"],
+    ]);
+    await setAfter(file, "Work on api", 2, []);
+    expect((await written())[2]).not.toHaveProperty("after");
   });
 
   it("adds, renames and removes inputs: a rename follows into the steps and the question", async () => {

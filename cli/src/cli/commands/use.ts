@@ -1,11 +1,11 @@
 import { recordProject } from "../../core/config.js";
 import { listHistory, type HistoryEntry } from "../../core/history.js";
 import { WispError } from "../../core/errors.js";
-import { matchBolt, planRetry, resolveBolt, runPlan, switchToWorkspace, type RunDeps } from "../../core/switch.js";
+import { matchBolt, planRetry, resolveBolt, runPlan, stagesOf, switchToWorkspace, type PlannedStep } from "../../core/switch.js";
 import { beforeRun } from "../lib/ask.js";
 import type { RunMode, SwitchOptions, SwitchResult, SwitchTarget, TargetResult, Workspace } from "../../core/types.js";
 import { bold, cyan, dim, green, kindLabel, plural, red, title, yellow } from "../format.js";
-import { emitJson, findWorkspaceForDependency, resolveRun } from "../lib/context.js";
+import { emitJson, resolveRun } from "../lib/context.js";
 import type { CommandDef } from "../lib/define.js";
 import { diagnosticSummary, named as showNamed, printWithheld, resultLine, trustLine } from "../lib/render.js";
 import { tildify } from "../../core/paths.js";
@@ -124,9 +124,7 @@ export const use: CommandDef<UseOptions> = {
     // its own header — so a long run reads as it goes, not all at once at the end.
     let lastWasOutput = false;
     const attachedSteps = new Set<string>();
-    let planned: SwitchTarget[] = [];
-    let headedGroup: number | undefined;
-    let listedGroup: number | undefined;
+    const dryRun = options.dryRun ?? false;
     const runOptions: SwitchOptions = {
       // A git hook says so in its environment; anything else typed this.
       trigger: process.env["WISP_TRIGGER"] ?? "cli",
@@ -138,40 +136,24 @@ export const use: CommandDef<UseOptions> = {
       ...(json
         ? {}
         : {
-            onPlan: (targets: SwitchTarget[]) => {
-              planned = targets;
-            },
             onStep: (target: SwitchTarget, info: { attached: boolean }) => {
               if (!info.attached) return;
-              if (target.together !== undefined) {
-                attachedSteps.add(target.id);
-                if (target.together === headedGroup) return;
-                headedGroup = target.together;
-                const members = planned.filter((entry) => entry.together === target.together).map((entry) => entry.label);
-                console.log(`\n${bold("▸")} ${bold(members.join(", "))} ${dim("together")}`);
-                lastWasOutput = true;
-                return;
-              }
               const detail = target.label === target.value ? "" : ` ${dim(target.value)}`;
               console.log(`\n${bold("▸")} ${bold(target.label)}${detail}`);
               lastWasOutput = true;
               attachedSteps.add(target.id);
             },
             onResult: (target: TargetResult) => {
+              if (dryRun) return;
               if (lastWasOutput) console.log();
               lastWasOutput = false;
               // Its command was just printed above its output: the result line need not
               // say it again — what happened, and how long it took, is enough.
-              if (attachedSteps.has(target.id)) return console.log(compactLine(target));
-              if (target.together === undefined) return console.log(resultLine(target));
-              if (target.together !== listedGroup) console.log(`  ${dim("together")}`);
-              listedGroup = target.together;
-              console.log(`  ${resultLine(target)}`);
+              console.log(attachedSteps.has(target.id) ? compactLine(target) : resultLine(target));
             },
           }),
     };
-    const find = { findWorkspace: findWorkspaceForDependency };
-    const result = last ? await retryLast(workspace, label, last, runOptions, find) : await switchToWorkspace(workspace, { ...runOptions, ...(bolt ? { bolt } : {}) }, find);
+    const result = last ? await retryLast(workspace, label, last, runOptions) : await switchToWorkspace(workspace, { ...runOptions, ...(bolt ? { bolt } : {}) });
 
     const untrusted = waitingForTrust(read, result.bolt?.label ?? label);
 
@@ -204,6 +186,8 @@ export const use: CommandDef<UseOptions> = {
       }
       return;
     }
+
+    if (result.dryRun && result.plan) printPlan(result.plan, result.targets);
 
     // Headless, the links are the one thing you still need, so they are said again plainly
     // at the end, where a terminal will let you click or copy them.
@@ -262,9 +246,9 @@ async function lastRun(workspace: Workspace, label: string): Promise<HistoryEntr
   return last;
 }
 
-async function retryLast(workspace: Workspace, label: string, last: HistoryEntry, options: SwitchOptions, deps: RunDeps): Promise<SwitchResult> {
-  const again = await planRetry(workspace, last, deps);
-  return runPlan(workspace, again, { ...options, label: `${label} (retry)`, trigger: "retry" }, deps);
+async function retryLast(workspace: Workspace, label: string, last: HistoryEntry, options: SwitchOptions): Promise<SwitchResult> {
+  const again = await planRetry(workspace, last);
+  return runPlan(workspace, again, { ...options, label: `${label} (retry)`, trigger: "retry" });
 }
 
 /** A result line for a step whose command and output were just shown: the outcome and time. */
@@ -281,3 +265,18 @@ function formatMs(ms: number): string {
   return `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`;
 }
 
+function printPlan(plan: PlannedStep[], targets: TargetResult[]): void {
+  const stages = stagesOf(plan);
+  const bolts = new Set(plan.map((step) => `${step.workspace.file}#${step.bolt}`));
+  let heading: string | undefined;
+  targets.forEach((target, at) => {
+    const step = plan[at] as PlannedStep;
+    const indent = bolts.size > 1 ? "  " : "";
+    if (bolts.size > 1 && step.bolt !== heading) {
+      heading = step.bolt;
+      console.log(`  ${dim("⚡")}${bold(step.bolt)}${step.target.workspace ? dim(` (${step.target.workspace})`) : ""}`);
+    }
+    const after = target.after ? dim(` · after ${target.after.join(", ")}`) : "";
+    console.log(`${indent}${dim(String(stages[at]).padStart(3))}${resultLine(target).slice(1)}${after}`);
+  });
+}

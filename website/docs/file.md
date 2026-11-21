@@ -12,11 +12,11 @@ to start, in order; that is the whole idea. Every field is in the [File referenc
       "label": "Work on api",
       "notes": "The API with its database, opened in the browser",
       "targets": [
-        { "compose": "compose.yaml", "services": ["postgres"] },
+        { "compose": "compose.yaml", "services": ["postgres"], "label": "db" },
         { "folder": "apps/api" },
-        { "run": "pnpm dev", "cwd": "apps/api" },
-        { "wait": "http://localhost:3000" },
-        { "url": "http://localhost:3000" }
+        { "run": "pnpm dev", "cwd": "apps/api", "label": "api", "after": "db" },
+        { "wait": "http://localhost:3000", "label": "up", "after": "api" },
+        { "url": "http://localhost:3000", "after": "up" }
       ]
     }
   ]
@@ -51,13 +51,12 @@ You rarely write it by hand. `wisp init` reads the project, at its root and one 
 |---|---|---|
 | Command | `{ "run": "pnpm dev", "cwd": "apps/api" }` | starts it and keeps it running; with `"finishes": true`, [waits for it to finish](./runs) |
 | Docker services | `{ "compose": "compose.yaml", "services": ["postgres"] }` | done when they're healthy |
-| Another bolt | `{ "bolt": "Database" }` | runs it first |
+| Another bolt | `{ "bolt": "Database" }` | [runs it as one step](#bolts-in-bolts) |
 | Wait | `{ "wait": "localhost:5432" }` · `{ "wait": "http://localhost:3000" }` · `{ "wait": 3 }` | a port, a website, or seconds |
 | Link | `{ "url": "https://staging.acme.com" }` | on macOS, focuses the tab if it's already open |
 | Folder | `{ "folder": "apps/api" }` | in your file manager, or your editor |
 | File | `{ "file": "docs/runbook.md" }` | |
 | App | `{ "app": "Slack" }` | |
-| Together | `{ "together": [ … ] }` | [starts several steps at once](#steps-at-the-same-time) |
 
 Any step can have a `"label"`, the name Wisp shows for it.
 
@@ -79,45 +78,62 @@ Any step can have a `"label"`, the name Wisp shows for it.
 - `shell`: commands run in your own shell on macOS and Linux and PowerShell on Windows;
   `"sh"`, `"pwsh"` or `"cmd"` says otherwise.
 
-## Bolts that need bolts
+## Order
 
-`{ "bolt": "Database" }` runs another bolt first, like the database before the API.
-
-- It runs once per run, however many bolts need it.
-- What's already running is left alone, not started twice.
-- Another project's bolt: `{ "bolt": "Database", "workspace": "infra" }`.
-
-## Commands that finish
-
-A command keeps running by default, like a server. Give one that finishes `"finishes": true`
-(a test, a build, a backup) and Wisp waits for it before the next step. A failed step stops
-the run, unless the bolt says `"keepGoing": true`. See
-[keeps running, or finishes?](./runs#keeps-running-or-finishes)
-
-## Steps at the same time
-
-`together` starts its steps at once, and the next step waits for all of them. Checks that
-don't depend on each other finish sooner:
+Steps start right away, all at once, unless a step says what it waits for. `"after"` names
+other steps of the bolt by their `label`, and the step starts once they have all finished:
 
 ```json
 {
   "label": "Check",
   "targets": [
-    { "together": [
-      { "run": "pnpm lint", "finishes": true },
-      { "run": "pnpm typecheck", "finishes": true },
-      { "run": "pnpm test", "finishes": true }
-    ] },
-    { "run": "pnpm build", "finishes": true }
+    { "run": "pnpm install", "label": "install", "finishes": true },
+    { "run": "pnpm lint", "label": "lint", "after": "install", "finishes": true },
+    { "run": "pnpm test", "label": "test", "after": "install", "finishes": true },
+    { "run": "pnpm build", "after": ["lint", "test"], "finishes": true }
   ]
 }
 ```
 
-If one fails, the others still finish, so you see every failure, and then the run stops.
-Their output comes line by line, each line starting with its step's label, and each step's
-log in History stays its own. It works for any step but a bolt: start two servers, or wait
-for the database and the cache at once. In the dashboard's editor, `t` runs a step together
-with the one before it, or on its own again.
+Lint and test run side by side once the install is done, and the build waits for both.
+Steps running at the same time print their output line by line, each line starting with
+its step's label; each step's log in History stays its own. `wisp check` refuses a bolt
+whose `after` names no step, or whose steps wait for each other.
+
+In the dashboard's editor, each step has a **Depends on** list to tick.
+
+## Bolts in bolts
+
+A bolt can run another as one of its steps, like the database before the API:
+
+```json
+{
+  "label": "Work on api",
+  "targets": [
+    { "bolt": "Database", "label": "db" },
+    { "run": "pnpm dev", "cwd": "apps/api", "after": "db" }
+  ]
+}
+```
+
+- It starts like any step: right away, or once what it's `after` is done. A step that
+  waits for it waits for all of its steps.
+- It runs once per run, however many steps run it, and what's already running is left
+  alone.
+- It's a bolt of the same file. Bolts never reach into another workspace, so each file
+  stands on its own, and renaming a bolt renames the steps that run it. To start another
+  project anyway, say so in a command:
+  `{ "run": "wisp use ~/dev/infra/.wisp.json Database", "finishes": true }`.
+
+In the dashboard's editor, it's **Run a bolt** among the steps, with this workspace's bolts
+to pick from.
+
+## Commands that finish
+
+A command keeps running by default, like a server. Give one that finishes `"finishes": true`
+(a test, a build, a backup) and Wisp waits for it before the steps that wait for it. A
+failed step stops the run, unless the bolt says `"keepGoing": true`. See
+[keeps running, or finishes?](./runs#keeps-running-or-finishes)
 
 ## Asking first
 
@@ -178,7 +194,7 @@ isn't a process:
 
 A file holds bolts and nothing else: each step is written inside the bolt that takes it.
 When several bolts need the same steps (start the database, say), put them in a bolt of
-their own and run it first from the others:
+their own and run it from the others:
 
 ```json
 {
@@ -190,7 +206,7 @@ their own and run it first from the others:
 }
 ```
 
-It runs once per run, however many steps need it.
+It runs once per run, however many bolts run it.
 
 ## Several operating systems
 

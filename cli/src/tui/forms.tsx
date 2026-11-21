@@ -15,6 +15,7 @@ export interface FieldSpec {
   placeholder?: string;
   /** A choice rather than text: ←/→ or space to change it. */
   choices?: { value: string; label: string }[];
+  multi?: boolean;
   when?: (values: Record<string, string>) => boolean;
   guess?: (values: Record<string, string>) => string | undefined;
 }
@@ -60,10 +61,16 @@ export function Form({ title, intro, fields, initial = {}, submitLabel = "Save",
   const visible = (values: Record<string, string>) => fields.filter((field) => !field.when || field.when(values));
   const start = () => {
     const values: Record<string, string> = {};
-    for (const field of fields) values[field.key] = initial[field.key] ?? field.choices?.[0]?.value ?? "";
+    for (const field of fields) values[field.key] = initial[field.key] ?? (field.multi ? "" : (field.choices?.[0]?.value ?? ""));
     return guessed(values);
   };
   const valuesRef = useRef<Record<string, string>>(start());
+  const pickRef = useRef<Record<string, number>>({});
+  const [picks, setPicks] = useState<Record<string, number>>({});
+  const setPick = (key: string, at: number) => {
+    pickRef.current = { ...pickRef.current, [key]: at };
+    setPicks(pickRef.current);
+  };
   const indexRef = useRef(0);
   // Where the cursor is in each text field; it starts at the end of what is there.
   const cursorsRef = useRef<Record<string, number>>(Object.fromEntries(Object.entries(valuesRef.current).map(([key, value]) => [key, value.length])));
@@ -129,6 +136,14 @@ export function Form({ title, intro, fields, initial = {}, submitLabel = "Save",
     if (key.return) return setIndex(index + 1);
     const field = shown[index] as FieldSpec;
 
+    if (field.choices && field.multi) {
+      const at = pickRef.current[field.key] ?? 0;
+      const rows = withAll(field.choices);
+      if (key.leftArrow || key.rightArrow) return setPick(field.key, (at + (key.leftArrow ? -1 : 1) + rows.length) % rows.length);
+      const row = rows[at];
+      if (input === " " && row) change(field, { ...values, [field.key]: row.all ? everyOrNone(values[field.key] ?? "", field.choices) : toggled(values[field.key] ?? "", row.value) });
+      return;
+    }
     if (field.choices) {
       const at = field.choices.findIndex((choice) => choice.value === values[field.key]);
       if (key.leftArrow || key.rightArrow || input === " ") {
@@ -169,7 +184,13 @@ export function Form({ title, intro, fields, initial = {}, submitLabel = "Save",
       const values = valuesRef.current;
       const value = values[field.key] ?? "";
       // Line 0 is the label, then the value (one line), or the options (one a line).
-      if (field.choices) {
+      if (field.choices && field.multi) {
+        const row = withAll(field.choices)[spot.y - 1];
+        if (row) {
+          setPick(field.key, spot.y - 1);
+          change(field, { ...values, [field.key]: row.all ? everyOrNone(value, field.choices) : toggled(value, row.value) });
+        }
+      } else if (field.choices) {
         const chosen = field.choices[spot.y - 1];
         if (chosen) change(field, { ...values, [field.key]: chosen.value });
       } else {
@@ -185,13 +206,26 @@ export function Form({ title, intro, fields, initial = {}, submitLabel = "Save",
   const said = preview?.(values);
   const shown = visible(values);
   const onButton = index >= shown.length;
-  const needed = 3 + (intro ? 1 : 0) + shown.reduce((sum, entry) => sum + 2 + (entry.choices ? entry.choices.length : 1) + 1, 0) + (said ? 1 : 0) + (editing ? 2 : 0);
+  const needed = 3 + (intro ? 1 : 0) + shown.reduce((sum, entry) => sum + 2 + (entry.choices ? (entry.multi ? withAll(entry.choices).length : entry.choices.length) : 1) + 1, 0) + (said ? 1 : 0) + (editing ? 2 : 0);
   const compact = needed > height;
+  const sizes = shown.map((entry, at) => 1 + (entry.choices ? (entry.multi ? withAll(entry.choices).length : entry.choices.length) : 1) + (errors[entry.key] || (editing && at === index && (entry.hint || entry.choices)) ? 2 : 0));
+  const room = height - 3 - (intro ? 2 : 0) - (said ? 1 : 0) - (editing ? 2 : 0);
+  const focus = Math.min(index, shown.length - 1);
+  let from = 0;
+  while (from < focus && sizes.slice(from, focus + 1).reduce((sum, size) => sum + size, 0) > room) from += 1;
+  let to = focus + 1;
+  while (to < shown.length && sizes.slice(from, to + 1).reduce((sum, size) => sum + size, 0) <= room) to += 1;
+  const above = compact ? from : 0;
+  const below = compact ? shown.length - Math.max(to, focus + 1) : 0;
   return (
     <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor={editing ? TONE.accent : "gray"} paddingX={1} overflow="hidden">
-      <Text bold color={editing ? TONE.accent : undefined}>{title}</Text>
+      <Text wrap="truncate-end">
+        <Text bold color={editing ? TONE.accent : undefined}>{title}</Text>
+        {above > 0 ? <Text dimColor>{`  ↑ ${above} more`}</Text> : null}
+      </Text>
       {intro ? <Text dimColor wrap="wrap">{intro}</Text> : null}
       {shown.map((entry, at) => {
+        if (at < above || at >= shown.length - below) return null;
         const active = editing && at === index;
         const value = values[entry.key] ?? "";
         const edge = <Text color={TONE.accent}>{active ? `${bar} ` : "  "}</Text>;
@@ -202,7 +236,23 @@ export function Form({ title, intro, fields, initial = {}, submitLabel = "Save",
               <Text bold={active} color={active ? TONE.accent : undefined}>{entry.label}</Text>
               {entry.required ? <Text color={TONE.failed}>{" *"}</Text> : null}
             </Text>
-            {entry.choices ? (
+            {entry.choices && entry.multi ? (
+              withAll(entry.choices).map((option, at) => {
+                const all = option.all;
+                const tickedCount = (entry.choices ?? []).filter((choice) => value.split(",").includes(choice.value)).length;
+                const ticked = all ? tickedCount === (entry.choices ?? []).length : value.split(",").includes(option.value);
+                const some = all && tickedCount > 0 && !ticked;
+                const here = active && at === (picks[entry.key] ?? 0);
+                const box = ticked ? (glyphs.border === "round" ? "■" : "[x]") : glyphs.border === "round" ? "□" : "[ ]";
+                return (
+                  <Text key={all ? "__all" : option.value} wrap="truncate-end">
+                    {edge}
+                    <Text color={here ? TONE.accent : undefined} bold={here} dimColor={!ticked && !here}>{`${box} ${option.label}`}</Text>
+                    {some ? <Text dimColor>{`  ${tickedCount} of ${(entry.choices ?? []).length}`}</Text> : null}
+                  </Text>
+                );
+              })
+            ) : entry.choices ? (
               entry.choices.map((option) => {
                 const chosen = option.value === value;
                 return (
@@ -227,10 +277,10 @@ export function Form({ title, intro, fields, initial = {}, submitLabel = "Save",
             )}
             {errors[entry.key] ? (
               <Text color={TONE.failed}>{`${active ? bar : " "} ${errors[entry.key]}`}</Text>
-            ) : active && entry.hint ? (
+            ) : active && (entry.hint || entry.choices) ? (
               <Text>
                 {edge}
-                <Text dimColor>{entry.choices ? `${entry.hint} — ←→ to change` : entry.hint}</Text>
+                <Text dimColor>{[entry.hint, entry.multi ? "←→ move · space ticks" : entry.choices ? "←→ to change" : ""].filter(Boolean).join(" — ")}</Text>
               </Text>
             ) : null}
           </Box>
@@ -250,6 +300,7 @@ export function Form({ title, intro, fields, initial = {}, submitLabel = "Save",
               {saving ? " saving… " : onButton ? ` ▸ ${submitLabel} ` : ` [ ${submitLabel} ] `}
             </Text>
           </Box>
+          {below > 0 ? <Text dimColor>{`   ↓ ${below} more`}</Text> : null}
           {keys ? <Text dimColor>{`   ↑↓ fields · ⏎ next · ctrl+s ${submitLabel.toLowerCase()} · esc cancel`}</Text> : null}
         </Box>
       ) : null}
@@ -509,4 +560,19 @@ export function Choice(props: { yes: string; no: string; danger?: boolean; onAns
       <Text dimColor>{CONFIRM_KEYS}</Text>
     </Box>
   );
+}
+
+function toggled(value: string, option: string): string {
+  const ticked = value.split(",").filter(Boolean);
+  return (ticked.includes(option) ? ticked.filter((entry) => entry !== option) : [...ticked, option]).join(",");
+}
+
+function everyOrNone(value: string, choices: { value: string }[]): string {
+  const ticked = value.split(",").filter(Boolean);
+  return choices.every((choice) => ticked.includes(choice.value)) ? "" : choices.map((choice) => choice.value).join(",");
+}
+
+function withAll(choices: { value: string; label: string }[]): { value: string; label: string; all: boolean }[] {
+  const rows = choices.map((choice) => ({ ...choice, all: false }));
+  return choices.length > 1 ? [{ value: "", label: "all", all: true }, ...rows] : rows;
 }

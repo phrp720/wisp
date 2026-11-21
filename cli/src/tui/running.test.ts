@@ -82,7 +82,7 @@ describe("the Running list", () => {
       running: true,
       total: 3,
       pending: [
-        { kind: "command", label: "build", value: "pnpm build", ok: false, durationMs: 0, bolt: "Build", log: "/logs/2.log" },
+        { kind: "command", label: "build", value: "pnpm build", ok: false, durationMs: 0, bolt: "Build", running: true, log: "/logs/2.log" },
         { kind: "command", label: "web", value: "pnpm dev", ok: false, durationMs: 0 },
       ],
     };

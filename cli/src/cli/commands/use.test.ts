@@ -157,17 +157,28 @@ describe("a bolt with inputs", () => {
   });
 });
 
-describe("steps that run together", () => {
-  it("lists them under one line in a dry run", async () => {
+describe("a dry run of steps that wait for others", () => {
+  it("numbers them by when they can start, says what each waits for, and heads each bolt", async () => {
     const mine = join(dir, "home", "workspaces", "Checks.json");
     await mkdir(join(dir, "home", "workspaces"), { recursive: true });
-    await writeFile(mine, JSON.stringify({ name: "Checks", bolts: [{ label: "Check", targets: [{ together: [{ run: "true", label: "lint", finishes: true }, { run: "true", label: "test", finishes: true }] }, { run: "true", label: "build", finishes: true }] }] }));
+    await writeFile(
+      mine,
+      JSON.stringify({
+        name: "Checks",
+        bolts: [
+          { label: "Database", targets: [{ run: "true", label: "db" }] },
+          { label: "Check", targets: [{ bolt: "Database", label: "db" }, { run: "true", label: "lint", after: "db", finishes: true }, { run: "true", label: "test", after: "db", finishes: true }, { run: "true", label: "build", after: ["lint", "test"], finishes: true }] },
+        ],
+      }),
+    );
     await use.run([mine, "Check"], { dryRun: true });
-    const lines = printed.join("\n").split("\n");
-    const at = lines.findIndex((line) => line.includes("together"));
-    expect(at).toBeGreaterThan(0);
-    expect(lines[at + 1]).toMatch(/^ {4}✓ .*lint/);
-    expect(lines[at + 2]).toMatch(/^ {4}✓ .*test/);
-    expect(lines[at + 3]).toMatch(/^ {2}✓ .*build/);
+    const lines = printed.join("\n").split("\n").map((line) => line.replace(/\u001b\[[0-9;]*m/g, ""));
+    const at = (text: string) => lines.findIndex((line) => line.includes(text));
+    expect(lines[at("⚡Database")]).toBe("  ⚡Database");
+    expect(lines[at("db — true")]).toMatch(/^ {4}1 ✓ run +db/);
+    expect(lines[at("⚡Check")]).toBe("  ⚡Check");
+    expect(lines[at("lint — true")]).toMatch(/^ {4}2 ✓ run +lint/);
+    expect(lines[at("test — true")]).toMatch(/^ {4}2 ✓ run +test/);
+    expect(lines[at("build — true")]).toMatch(/^ {4}3 ✓ run +build.* · after lint, test$/);
   });
 });

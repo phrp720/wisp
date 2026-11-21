@@ -74,8 +74,8 @@ forms; no JSON to touch. It works the same over SSH and in tmux.
 
 ## A bolt
 
-One task's steps, in order. It lives in a `.wisp.json` next to your code, so the whole team
-has it:
+One task's steps. Steps start at once unless they say what they wait for (`after`). It lives
+in a `.wisp.json` next to your code, so the whole team has it:
 
 ```json
 {
@@ -84,11 +84,11 @@ has it:
     {
       "label": "Work on api",
       "targets": [
-        { "compose": "compose.yaml", "services": ["postgres"] },
+        { "compose": "compose.yaml", "services": ["postgres"], "label": "db" },
         { "folder": "apps/api" },
-        { "run": "pnpm dev", "cwd": "apps/api" },
-        { "wait": "http://localhost:3000" },
-        { "url": "http://localhost:3000" }
+        { "run": "pnpm dev", "cwd": "apps/api", "label": "api", "after": "db" },
+        { "wait": "http://localhost:3000", "label": "up", "after": "api" },
+        { "url": "http://localhost:3000", "after": "up" }
       ]
     }
   ]
@@ -96,7 +96,7 @@ has it:
 ```
 
 Steps can run commands, start Docker services, wait for a port or a website, run another
-bolt first, run side by side, and open links, folders, files and apps. Every field is in the
+bolt, and open links, folders, files and apps. Every field is in the
 [File reference](https://willowisp.dev/docs/reference).
 
 ## Checks, builds, deploys

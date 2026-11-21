@@ -82,6 +82,8 @@ export interface Command extends AssetBase {
   cwd?: string;
   background?: boolean;
   finishes?: boolean;
+  /** Seconds a command that finishes may take before Wisp stops it and calls it failed. */
+  timeout?: number;
   /** Brought back when it stops: after a crash, or whenever. Absent: left stopped. */
   restart?: RestartPolicy;
   /** Which shell `run` is written for. Absent means the platform's usual one. */
@@ -108,13 +110,14 @@ export type WaitSpec =
 export type BoltStep = (
   | { kind: "asset"; id: string }
   | { kind: "wait"; wait: WaitSpec }
-  | { kind: "bolt"; bolt: string; workspace?: string }
+  | { kind: "bolt"; bolt: string }
   /**
    * Services of a compose file: started with `up --wait`, so the step is done when they are
    * healthy; stopped by `wisp down`; shown with their state, health and logs.
    */
   | { kind: "compose"; file: string; services?: string[] }
-) & { together?: number };
+) & { name?: string; after?: string[] };
+
 
 /**
  * A named action over some of a workspace's assets: "API development", "Doc writing".
@@ -128,6 +131,7 @@ export interface Bolt {
   notes?: string;
   color?: string;
   steps: BoltStep[];
+  broken?: string;
   keepGoing?: boolean;
   confirm?: string;
   inputs?: InputSpec[];
@@ -296,6 +300,7 @@ export interface SwitchTarget {
   cwd?: string;
   background?: boolean;
   finishes?: boolean;
+  timeout?: number;
   restart?: RestartPolicy;
   shell?: ShellKind;
   env?: Record<string, string>;
@@ -306,7 +311,8 @@ export interface SwitchTarget {
   workspace?: string;
   /** For a compose step: which file, which services, and whether it starts or stops them. */
   compose?: { file: string; services: string[]; action: "up" | "stop" };
-  together?: number;
+  name?: string;
+  after?: string[];
 }
 
 export interface TargetResult extends SwitchTarget {

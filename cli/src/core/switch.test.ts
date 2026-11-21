@@ -72,27 +72,18 @@ describe("matchBolt", () => {
 });
 
 describe("planBolt", () => {
-  it("expands dependencies in place, once each", async () => {
+  it("plans a bolt step's steps where it is, once each, and has each step wait for what it says", async () => {
     const ws = workspace({
       bolts: [
-        { label: "db", targets: [{ run: "postgres" }, { wait: "5432" }] },
-        { label: "api", targets: [{ bolt: "db" }, { run: "pnpm dev" }] },
-        { label: "all", targets: [{ bolt: "db" }, { bolt: "api" }, { url: "localhost:3000" }] },
+        { label: "db", targets: [{ run: "postgres", label: "postgres" }, { wait: "5432", label: "ready", after: "postgres" }] },
+        { label: "api", targets: [{ bolt: "db", label: "db" }, { run: "pnpm dev", after: "db" }] },
+        { label: "all", targets: [{ bolt: "db", label: "db" }, { bolt: "api", label: "api" }, { url: "localhost:3000", after: ["db", "api"] }] },
       ],
     });
     const plan = await planBolt(ws, resolveBolt(ws, "all"));
+    const key = (label: string) => plan.find((step) => step.target.label === label)?.key;
     expect(plan.map((step) => step.target.label)).toEqual(["postgres", "port 5432", "pnpm dev", "localhost:3000"]);
-  });
-
-  it("runs a bolt from another workspace, and labels its steps with where they came from", async () => {
-    const infra = workspace({ name: "infra", bolts: [{ label: "db", targets: [{ run: "postgres" }] }] }, "/work/infra/.wisp.json");
-    const api = workspace({ bolts: [{ label: "api", targets: [{ bolt: "db", workspace: "infra" }, { run: "pnpm dev" }] }] });
-
-    const plan = await planBolt(api, resolveBolt(api, "api"), { findWorkspace: async () => infra });
-    expect(plan.map((step) => [step.target.label, step.target.workspace, step.workspace.name])).toEqual([
-      ["postgres", "infra", "infra"],
-      ["pnpm dev", undefined, "acme"],
-    ]);
+    expect(plan.map((step) => step.deps)).toEqual([[], [key("postgres")], [key("postgres"), key("port 5432")], [key("postgres"), key("port 5432"), key("pnpm dev")]]);
   });
 
   it("refuses a cycle before anything runs", async () => {
@@ -123,7 +114,7 @@ describe("questionsFor", () => {
 
   it("puts the run's values in the question", async () => {
     const ws = workspace({ bolts: [{ label: "Deploy", inputs: { env: {} }, confirm: "Deploy to {{env}}?", targets: [{ run: "deploy {{env}}" }] }] });
-    expect(await questionsFor(ws, resolveBolt(ws, "Deploy"), {}, { env: "production" })).toEqual(["Deploy to production?"]);
+    expect(await questionsFor(ws, resolveBolt(ws, "Deploy"), { env: "production" })).toEqual(["Deploy to production?"]);
   });
 });
 
@@ -225,7 +216,7 @@ describe("switchToWorkspace", () => {
 
   it("stops after a wait that gives up, and says what it did not reach", async () => {
     const ws = workspace({
-      bolts: [{ label: "go", targets: [{ wait: { port: 1, timeout: 0.3 } }, { url: "acme.com" }] }],
+      bolts: [{ label: "go", targets: [{ wait: { port: 1, timeout: 0.3 }, label: "ready" }, { url: "acme.com", after: "ready" }] }],
     });
     const platform = recorder();
     const result = await switchToWorkspace(ws, { bolt: "go" }, { platform, environment: desktop, defaults: {} });

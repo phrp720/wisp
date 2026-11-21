@@ -9,7 +9,7 @@ it started, look back at past runs. It works the same at your desk, over SSH and
 
 - **`1` Bolts:** your projects (and your own workspaces) on the left, their bolts on the
   right, and under them the selected bolt, whole: its steps with what each runs and whether
-  it's up, the bolts it needs opened up in place, how its last run went, what needs it, and
+  it's up, the bolts it runs opened up in place, how its last run went, what runs it, and
   the command that runs it from a terminal. `⏎` runs it right there: each step ticks off in
   that box, with the output of the one running, while the list stays where it is. `x` stops
   the run, `r` retries from a failed step, and `esc` hides the result.
@@ -42,11 +42,11 @@ terminal app that uses the mouse. Rather select freely? Turn it off in [Settings
 ## No JSON needed
 
 `a` adds a bolt and `e` edits one. The editor has two sides: on the left, the bolt (its
-name, notes, what a failure does, whether it asks first and its inputs, then its steps
-in order), and on the right, the form for whatever is selected there. `⏎` edits it, `ctrl+s` saves, `esc` goes back. New steps are picked from a list
-(Start, Wait, Open) and filled in the same way; `a` adds one after the selected step, `d`
-removes it, `K` `J` move it, and `t` runs it [together](./file#steps-at-the-same-time) with
-the one before it, or on its own again. On a narrow terminal it shows one side at a time. `E` opens
+name, notes, what a failure does, whether it asks first and its inputs, then its steps), and on the right, the form for whatever is selected there. `⏎` edits it, `ctrl+s` saves, `esc` goes back. New steps are picked from a list
+(Start, Wait, Open; another bolt is under Start) and filled in the same way, each with a
+**Depends on** list of the other steps to tick (none ticked: it starts right away; **all**
+ticks or clears them all). `a` adds one after the selected
+step, already depending on it; `d` removes it and `K` `J` move it. On a narrow terminal it shows one side at a time. `E` opens
 the file itself if you'd rather.
 
 ![Making a bolt in the dashboard: name it, then add a command, a wait and a website through short forms, then run it](/demo/editor.gif)

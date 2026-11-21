@@ -8,7 +8,7 @@ import { tildify } from "../../core/paths.js";
 import { downBolt, inputsFor, keepsRunning, matchBolt, questionsFor, resolveBolt, switchToWorkspace } from "../../core/switch.js";
 import type { Bolt, WorkspaceRead } from "../../core/types.js";
 import { ago, bold, cyan, dim, green, kindLabel, plural, red, title, yellow } from "../format.js";
-import { emitJson, everything, findWorkspaceForDependency, maybeProject, resolveRun } from "../lib/context.js";
+import { emitJson, everything, maybeProject, resolveRun } from "../lib/context.js";
 import type { CommandDef } from "../lib/define.js";
 import { beforeRun } from "../lib/ask.js";
 import { named, resultLine } from "../lib/render.js";
@@ -40,7 +40,6 @@ export const down: CommandDef<{ deps?: boolean; dryRun?: boolean; json?: boolean
       read.workspace,
       bolt,
       { deps: options.deps ?? false, dryRun: options.dryRun ?? false, echo: !options.json },
-      { findWorkspace: findWorkspaceForDependency },
     );
 
     if (options.json) {
@@ -77,15 +76,14 @@ export const restart: CommandDef<{ deps?: boolean; yes?: boolean; input?: string
       process.exitCode = 1;
       return;
     }
-    const find = { findWorkspace: findWorkspaceForDependency };
-    const stopped = await downBolt(read.workspace, bolt, { deps: options.deps ?? false, echo: true }, find);
+    const stopped = await downBolt(read.workspace, bolt, { deps: options.deps ?? false, echo: true });
     console.log(`${green("down")} ${title(read.workspace)} ${dim("·")} ${bold(bolt.label)} ${dim(`— ${plural(stopped.stopped.length, "command")} stopped`)}`);
 
     // Give stopped servers a moment to let go of their ports.
     if (stopped.stopped.length > 0) await new Promise((done) => setTimeout(done, 500));
 
     console.log(`${green("running")} ${title(read.workspace)} ${dim("·")} ${bold(bolt.label)}`);
-    const result = await switchToWorkspace(read.workspace, { bolt: bolt.id, inputs, echo: true, watched: process.stdout.isTTY === true || process.stderr.isTTY === true, onResult: (step) => console.log(resultLine(step)) }, find);
+    const result = await switchToWorkspace(read.workspace, { bolt: bolt.id, inputs, echo: true, watched: process.stdout.isTTY === true || process.stderr.isTTY === true, onResult: (step) => console.log(resultLine(step)) });
     if (!result.ok) process.exitCode = 1;
   },
 };
@@ -146,7 +144,7 @@ async function showEntry(entry: HistoryEntry, options: { log?: string; json?: bo
     const markStep = !step.ok ? (step.skipped ? dim("–") : red("✗")) : step.skipped ? dim("–") : green("✓");
     const time = step.durationMs >= 1000 ? dim(` ${(step.durationMs / 1000).toFixed(1)}s`) : "";
     const detail = step.error ? ` ${red(step.error)}` : step.note ? ` ${dim(step.note)}` : "";
-    const log = `${step.together !== undefined ? dim(" · together") : ""}${step.log ? dim(`  [--log ${index + 1}]`) : ""}`;
+    const log = `${step.after ? dim(` · after ${step.after.join(", ")}`) : ""}${step.log ? dim(`  [--log ${index + 1}]`) : ""}`;
     console.log(`  ${dim(String(index + 1).padStart(2))} ${markStep} ${dim(kindLabel(step.kind))} ${named(step.label, step.value)}${time}${detail}${log}`);
   });
   (entry.pending ?? []).forEach((step, offset) => {
@@ -263,9 +261,9 @@ WISP_TRIGGER=hook exec wisp use '${here.workspace.file.replace(/'/g, `'\\''`)}' 
     console.log(`${green("✓")} ${name} runs ${bold(bolt.label)} ${dim(`— ${tildify(path)}`)}`);
     const running = keepsRunning(here, bolt);
     if (running.length > 0) console.log(yellow(`! ${running.map((label) => `"${label}"`).join(", ")} ${running.length === 1 ? "keeps" : "keep"} running, so ${running.length === 1 ? "its" : "their"} result can't stop the ${name}. Mark ${running.length === 1 ? "it" : "them"} "finishes": true.`));
-    const questions = await questionsFor(here.workspace, bolt, { findWorkspace: findWorkspaceForDependency });
+    const questions = await questionsFor(here.workspace, bolt);
     if (questions.length > 0) console.log(yellow(`! it asks before it runs (${questions.join(" ")}); from the hook it runs without asking`));
-    const unanswerable = (await inputsFor(here.workspace, bolt, { findWorkspace: findWorkspaceForDependency })).filter((spec) => spec.default === undefined);
+    const unanswerable = (await inputsFor(here.workspace, bolt)).filter((spec) => spec.default === undefined);
     if (unanswerable.length > 0) console.log(yellow(`! a hook can't answer ${unanswerable.map((spec) => spec.name).join(", ")}: give ${unanswerable.length === 1 ? "it a default" : "them defaults"}, or the ${name} stops`));
     if (!here.workspace.trusted && here.withheld.length > 0) console.log(yellow("! its commands wait for `wisp trust` — until then the hook stops, rather than pass without checking"));
   },

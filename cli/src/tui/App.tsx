@@ -437,7 +437,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
           onStep: (target, info) => {
             update((state) => ({ ...state, steps: markFirst(state.steps, target, (step) => ({ ...step, state: "running" })) }));
             // An attached command's output takes the pane; a window's stays in the window.
-            if (info.attached) update((state) => ({ ...state, output: [], outputOf: target.label }));
+            if (info.attached) update((state) => ({ ...state, output: state.steps.some((step) => step.state === "running" && step.target.id !== target.id) ? state.output : [], outputOf: target.label }));
           },
           onOutput: (_target, chunk) =>
             update((state) => {
@@ -571,13 +571,13 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
       .catch((error: unknown) => setMessage(describe(error)));
   };
   const askStop = (read: WorkspaceRead, target: Bolt) => {
-    const needs = flow(read, target, reads).filter((name) => name !== target.label);
+    const needs = flow(read, target).filter((name) => name !== target.label);
     if (needs.length === 0) return stopBolt(read, target, false);
     // Other bolts with something up that need the same ones: stopping those would break them.
     const sharedWith = reads.flatMap((other) =>
       other.workspace.bolts
         .filter((candidate) => candidate.label !== target.label && runs.some((run) => run.alive && run.workspace === other.workspace.file && run.bolt === candidate.label))
-        .filter((candidate) => flow(other, candidate, reads).some((name) => needs.includes(name) && name !== candidate.label))
+        .filter((candidate) => flow(other, candidate).some((name) => needs.includes(name) && name !== candidate.label))
         .map((candidate) => candidate.label),
     );
     setView({ kind: "stop-bolt", file: read.workspace.file, bolt: target.label, needs, sharedWith });
@@ -1079,7 +1079,6 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
             return owner ? `${owner.icon && glyphs.border === "round" ? `${owner.icon} ` : ""}${owner.name}` : undefined;
           })()}
           others={(reads.find((read) => read.workspace.file === view.file)?.workspace.bolts ?? []).map((entry) => entry.label).filter((label) => label !== view.bolt)}
-          elsewhere={reads.filter((read) => read.workspace.file !== view.file).flatMap((read) => read.workspace.bolts.map((entry) => ({ workspace: read.workspace.name, bolt: entry.label })))}
           adding={Boolean(view.adding)}
           editing={services.editing}
           glyphs={glyphs}

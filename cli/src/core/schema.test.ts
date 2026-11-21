@@ -40,13 +40,13 @@ describe("the published schema", async () => {
       icon: "🏢",
       color: "#6d4aff",
       bolts: [
-        { label: "Database", keepGoing: true, targets: [{ run: "docker compose up -d", finishes: true }, { wait: "5432" }], down: [{ run: "docker compose stop" }] },
+        { label: "Database", keepGoing: true, targets: [{ run: "docker compose up -d", label: "up", finishes: true }, { wait: "5432", after: "up" }], down: [{ run: "docker compose stop" }] },
         {
           label: "Work on api",
           color: "#4a9dff",
           targets: [
-            { bolt: "Database", workspace: "infra" },
-            { bolt: "Database" },
+            { bolt: "Database", label: "db" },
+            { folder: "apps/api", after: "db" },
             { compose: "deployments/development/docker-compose.yml", services: ["postgres"] },
             { folder: "apps/api" },
             { label: "web", folder: "apps/web", os: ["linux", "windows"] },
@@ -57,7 +57,8 @@ describe("the published schema", async () => {
             { label: "Editor", app: { macos: "Visual Studio Code", linux: "code" } },
             { label: "dev", run: "pnpm dev", cwd: "apps/api", env: { PORT: 3000 }, shell: "sh", background: true },
             { label: "build", run: { macos: "make", windows: "nmake" } },
-            { run: "pnpm test", env: { CI: true } },
+            { run: "pnpm test", env: { CI: true }, finishes: true, timeout: "10m" },
+            { run: "pnpm e2e", finishes: true, timeout: 900 },
             { wait: 3 },
             { wait: "localhost:5432" },
             { wait: { url: "http://localhost:3000", timeout: 90 } },
@@ -70,7 +71,7 @@ describe("the published schema", async () => {
           targets: [{ run: "./deploy.sh {{env}} {{tag}}", finishes: true }, { wait: "https://{{env}}.acme.com/health" }, { url: "https://{{env}}.acme.com" }],
         },
         { label: "Restore", confirm: true, targets: [{ run: "./restore.sh", finishes: true }] },
-        { label: "Check", targets: [{ together: [{ run: "pnpm lint", finishes: true }, { run: "pnpm test", finishes: true }, { wait: "localhost:5432" }] }, { run: "pnpm build", finishes: true }] },
+        { label: "Check", targets: [{ run: "pnpm lint", label: "lint", finishes: true }, { run: "pnpm test", label: "test", finishes: true }, { wait: "localhost:5432" }, { run: "pnpm build", after: ["lint", "test"], finishes: true }] },
       ],
     };
 
@@ -90,6 +91,7 @@ describe("the published schema", async () => {
 
   it("flags what the reader would warn about", () => {
     expect(valid({ nmae: "typo" })).not.toBe(true);
+    expect(valid({ bolts: [{ label: "x", targets: [{ run: "a", finishes: true, timeout: "soon" }] }] })).not.toBe(true);
     expect(valid({ apps: [{ app: { beos: "x" } }] })).not.toBe(true);
     expect(valid({ commands: [{ run: "x", shell: "fish" }] })).not.toBe(true);
     expect(valid({ bolts: [{ label: "x", targets: [{ wait: "soon" }] }] })).not.toBe(true);
@@ -101,8 +103,10 @@ describe("the published schema", async () => {
     expect(valid({ bolts: [{ label: "x", inputs: { note: { default: "a --force" } }, targets: [] }] })).not.toBe(true);
     expect(valid({ bolts: [{ label: "x", inputs: { tag: { default: "-rf" } }, targets: [] }] })).not.toBe(true);
     expect(valid({ bolts: [{ label: "x", inputs: { city: { choices: ["München", 3, "eu west"] } }, targets: [] }] })).toBe(true);
-    expect(valid({ bolts: [{ label: "x", targets: [{ together: [{ bolt: "Database" }] }] }] })).not.toBe(true);
-    expect(valid({ bolts: [{ label: "x", targets: [{ together: [] }] }] })).not.toBe(true);
+    expect(valid({ bolts: [{ label: "x", targets: [{ bolt: "Database", run: "a" }] }] })).not.toBe(true);
+    expect(valid({ bolts: [{ label: "x", targets: [{ run: "a", after: 3 }] }] })).not.toBe(true);
+    expect(valid({ bolts: [{ label: "x", needs: ["Database"], targets: [] }] })).not.toBe(true);
+    expect(valid({ bolts: [{ label: "x", targets: [{ bolt: "Database", workspace: "infra" }] }] })).not.toBe(true);
   });
 
   it("validates Wisp's own project file", async () => {

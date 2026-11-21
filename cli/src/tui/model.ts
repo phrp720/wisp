@@ -8,7 +8,6 @@ import type { Bolt, InputSpec, NotifySettings, NotifyWhen, SwitchResult, SwitchT
 
 export type NotifyChoice = NotifySettings & { when: NotifyWhen };
 import type { Unreadable } from "../core/workspaces.js";
-import type { Glyphs } from "./glyphs.js";
 
 /** Everything the TUI shows: the workspaces, in the order the list shows them. */
 export interface Library {
@@ -116,7 +115,7 @@ export interface Editing {
   replaceStep(file: string, bolt: string, index: number, step: RawStep): Promise<void>;
   removeStep(file: string, bolt: string, index: number): Promise<void>;
   moveStep(file: string, bolt: string, index: number, by: -1 | 1): Promise<number>;
-  toggleTogether(file: string, bolt: string, index: number): Promise<number>;
+  setAfter(file: string, bolt: string, index: number, on: number[]): Promise<void>;
   createPersonalWorkspace(name: string): Promise<string>;
   /** Delete one of your own workspaces' files. */
   removePersonalWorkspace(file: string): Promise<void>;
@@ -280,14 +279,4 @@ export function matchesAll(query: string, ...texts: (string | undefined)[]): boo
   if (words.length === 0) return true;
   const haystack = texts.filter(Boolean).join(" ").toLowerCase();
   return words.every((word) => haystack.includes(word));
-}
-
-export function groupMarks(steps: { together?: number }[], glyphs: Glyphs): string[] {
-  const [top, middle, bottom] = glyphs.border === "round" ? ["┌ ", "│ ", "└ "] : ["+ ", "| ", "+ "];
-  return steps.map((step, at) => {
-    if (step.together === undefined) return "";
-    const before = steps[at - 1]?.together === step.together;
-    const after = steps[at + 1]?.together === step.together;
-    return !before ? top : after ? middle : bottom;
-  });
 }

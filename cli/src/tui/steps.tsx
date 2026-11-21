@@ -2,13 +2,14 @@ import { Box, Text } from "ink";
 import type { ReactNode } from "react";
 
 import { containerMood, type Container } from "../core/docker.js";
+import { describeDuration } from "../core/duration.js";
 import { tildify } from "../core/paths.js";
 import type { RunStatus } from "../core/processes.js";
-import { collectBoltTargets } from "../core/switch.js";
+import { stagesOfTargets, stepTargets } from "../core/switch.js";
 import type { Bolt, SwitchTarget, WorkspaceRead } from "../core/types.js";
 import type { Glyphs } from "./glyphs.js";
 import { TONE } from "./tones.js";
-import { describeStep, groupMarks, shortUrl } from "./model.js";
+import { describeStep, shortUrl } from "./model.js";
 
 /** One line of a bolt's steps, already laid out. */
 export interface Line {
@@ -18,68 +19,65 @@ export interface Line {
 
 type Status = { text: string; color: string } | undefined;
 
-export function usedBy(read: WorkspaceRead, bolt: Bolt, reads: WorkspaceRead[]): string[] {
-  return reads.flatMap((other) =>
-    other.workspace.bolts
-      .filter((candidate) => candidate.steps.some((step) => step.kind === "bolt" && step.bolt.toLowerCase() === bolt.label.toLowerCase() && (step.workspace ? sameWorkspace(other, step.workspace, read) : other === read)))
-      .map((candidate) => (other === read ? candidate.label : `${other.workspace.name} › ${candidate.label}`)),
-  );
+export function usedBy(read: WorkspaceRead, bolt: Bolt): string[] {
+  return read.workspace.bolts.filter((candidate) => candidate.steps.some((step) => step.kind === "bolt" && step.bolt.toLowerCase() === bolt.label.toLowerCase())).map((candidate) => candidate.label);
 }
 
-/** The bolts in the order a run goes through them: what it needs, deepest first, then itself. */
-export function flow(read: WorkspaceRead, bolt: Bolt, reads: WorkspaceRead[], seen = new Set<string>()): string[] {
+/** The bolts in the order a run goes through them: the ones it runs, deepest first, then itself. */
+export function flow(read: WorkspaceRead, bolt: Bolt, seen = new Set<string>()): string[] {
   const order: string[] = [];
   for (const step of bolt.steps) {
     if (step.kind !== "bolt") continue;
-    const found = findBolt(read, step.bolt, step.workspace, reads);
-    if (!found) continue;
-    const key = `${found.read.workspace.file}#${found.bolt.label}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    for (const name of flow(found.read, found.bolt, reads, seen)) if (!order.includes(name)) order.push(name);
+    const found = findBolt(read, step.bolt);
+    if (!found || seen.has(found.label)) continue;
+    seen.add(found.label);
+    for (const name of flow(read, found, seen)) if (!order.includes(name)) order.push(name);
   }
   order.push(bolt.label);
   return order;
 }
 
-/** Every step, numbered, each needed bolt opened up beneath its own number. */
+/** Every step, numbered by when it can start, each bolt it runs opened up beneath it. */
 export function stepLines(context: { read: WorkspaceRead; bolt: Bolt; reads: WorkspaceRead[]; runs: RunStatus[]; containers: Container[]; glyphs: Glyphs }): Line[] {
   const { glyphs } = context;
   const lines: Line[] = [];
   const done = new Set<string>();
 
-  const walk = (read: WorkspaceRead, bolt: Bolt, prefix: string, depth: number) => {
+  const walk = (read: WorkspaceRead, bolt: Bolt, depth: number, tag: string) => {
     const indent = "   ".repeat(depth);
-    const targets = collectBoltTargets(read.workspace, bolt);
+    const aligned = stepTargets(read.workspace, bolt.steps);
     const withheld = new Set(read.withheld.map((item) => item.id));
-    // Steps the file is not yet allowed to run are not in the targets; they are said anyway,
-    // where the file lists them, so the order on screen is the order in the file.
-    const held = read.withheld.filter((item) => bolt.steps.some((step) => step.kind === "asset" && step.id === item.id));
-    const all: (SwitchTarget & { held?: boolean })[] = [...targets, ...held.filter((item) => !targets.some((target) => target.id === item.id)).map((item) => ({ kind: item.kind, label: item.label, id: item.id, value: item.value, ...(item.cwd ? { cwd: item.cwd } : {}), held: true }))];
+    const heldById = new Map(read.withheld.map((item) => [item.id, item]));
+    const all: (SwitchTarget & { held?: boolean })[] = bolt.steps.flatMap((step, at) => {
+      const target = aligned[at];
+      if (target) return [target];
+      const item = step.kind === "asset" ? heldById.get(step.id) : step.kind === "compose" ? heldById.get(`compose:${step.file}`) : undefined;
+      if (!item) return [];
+      return [{ kind: item.kind, label: item.label, id: item.id, value: item.value, ...(item.cwd ? { cwd: item.cwd } : {}), ...(step.name ? { name: step.name } : {}), ...(step.after && step.after.length > 0 ? { after: step.after } : {}), held: true }];
+    });
+    const stages = stagesOfTargets(all);
 
-    const marks = groupMarks(all, glyphs);
     all.forEach((target, index) => {
-      const number = `${prefix}${index + 1}`;
-      const key = `${read.workspace.file}#${bolt.label}#${number}`;
-      const shown = `${indent}${depth === 0 ? `${number}.`.padStart(3) : number} `;
+      const key = `${read.workspace.file}#${bolt.label}#${tag}${index}`;
+      const shown = `${indent}${`${tag}${stages[index]}.`.padStart(3)} `;
+      const after = target.after ? <Text dimColor>{`  after ${target.after.join(", ")}`}</Text> : null;
       if (target.kind === "bolt") {
-        const found = findBolt(read, target.label, target.workspace, context.reads);
-        const where = found && found.read !== context.read ? ` (${found.read.workspace.name})` : "";
-        const twice = found ? done.has(`${found.read.workspace.file}#${found.bolt.label}`) : false;
+        const found = findBolt(read, target.label);
+        const twice = found ? done.has(`${read.workspace.file}#${found.label}`) : false;
         lines.push({
           key,
           node: (
             <Text wrap="truncate-end">
               <Text dimColor>{shown}</Text>
-              <Text color={found?.bolt.color ?? TONE.accent} bold>{`${glyphs.bolt}${target.label}`}</Text>
-              <Text dimColor>{where}</Text>
-              <Text dimColor>{!found ? "  — no bolt by that name" : twice ? "  — already run above, not again" : " first"}</Text>
+              <Text color={found?.color ?? TONE.accent} bold>{`${glyphs.bolt}${found?.label ?? target.label}`}</Text>
+              {!found ? <Text dimColor>  — no bolt by that name</Text> : twice ? <Text dimColor>  — already run above, not again</Text> : null}
+              {after}
             </Text>
           ),
         });
         if (found && !twice) {
-          done.add(`${found.read.workspace.file}#${found.bolt.label}`);
-          walk(found.read, found.bolt, `${number}.`, depth + 1);
+          done.add(`${read.workspace.file}#${found.label}`);
+          walk(read, found, depth + 1, tag);
         }
         return;
       }
@@ -91,8 +89,8 @@ export function stepLines(context: { read: WorkspaceRead; bolt: Bolt; reads: Wor
             <Box flexGrow={1} minWidth={0}>
               <Text wrap="truncate-end">
                 <Text dimColor>{shown}</Text>
-                <Text>{`${marks[index]}${describeStep(target)}`}</Text>
-                {marks[index] && all[index - 1]?.together !== target.together ? <Text dimColor>  together</Text> : null}
+                <Text>{describeStep(target)}</Text>
+                {after}
               </Text>
             </Box>
             {status ? <Text color={status.color}>{`  ${status.text}`}</Text> : null}
@@ -114,11 +112,11 @@ export function stepLines(context: { read: WorkspaceRead; bolt: Bolt; reads: Wor
   };
 
   done.add(`${context.read.workspace.file}#${context.bolt.label}`);
-  walk(context.read, context.bolt, "", 0);
+  walk(context.read, context.bolt, 0, "");
   if (context.bolt.down && context.bolt.down.length > 0) {
     lines.push({ key: "down:gap", node: <Text> </Text> });
     lines.push({ key: "down", node: <Text dimColor>When you take it down (x), after stopping what it started:</Text> });
-    walk(context.read, { ...context.bolt, steps: context.bolt.down }, "↓", 0);
+    walk(context.read, { ...context.bolt, steps: context.bolt.down }, 0, "↓");
   }
   return lines;
 }
@@ -133,6 +131,7 @@ function details(target: SwitchTarget, read: WorkspaceRead): string {
         target.value !== target.label ? target.value : "",
         where,
         target.restart === "always" ? "always restarted" : target.restart === "on-failure" ? "restarted if it crashes" : "",
+        target.timeout ? `stopped after ${describeDuration(target.timeout)}` : "",
         target.env && Object.keys(target.env).length > 0 ? `${Object.keys(target.env).length} env var${Object.keys(target.env).length === 1 ? "" : "s"}` : "",
       ]
         .filter(Boolean)
@@ -169,19 +168,7 @@ function statusOf(target: SwitchTarget, read: WorkspaceRead, runs: RunStatus[], 
   return undefined;
 }
 
-function findBolt(read: WorkspaceRead, name: string, workspace: string | undefined, reads: WorkspaceRead[]): { read: WorkspaceRead; bolt: Bolt } | undefined {
-  const where = workspace ? reads.find((candidate) => sameWorkspace(candidate, workspace, read)) : read;
-  const bolt = where?.workspace.bolts.find((candidate) => candidate.label.toLowerCase() === name.toLowerCase() || candidate.id === name);
-  return where && bolt ? { read: where, bolt } : undefined;
-}
-
-/** A dependency's `workspace` names another workspace: by name, or by the path to its file or folder. */
-function sameWorkspace(candidate: WorkspaceRead, ref: string, from: WorkspaceRead): boolean {
-  const file = candidate.workspace.file;
-  const lowered = ref.toLowerCase();
-  if (candidate.workspace.name.toLowerCase() === lowered) return true;
-  const base = from.workspace.file.replace(/\/[^/]+$/, "");
-  const resolved = ref.startsWith("/") ? ref : ref.startsWith("~") ? ref : `${base}/${ref}`.replace(/\/\.\//g, "/");
-  return file === resolved || file.replace(/\/[^/]+$/, "") === resolved.replace(/\/$/, "") || tildify(file) === ref;
+function findBolt(read: WorkspaceRead, name: string): Bolt | undefined {
+  return read.workspace.bolts.find((candidate) => candidate.label.toLowerCase() === name.toLowerCase() || candidate.id === name);
 }
 

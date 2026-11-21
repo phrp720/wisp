@@ -539,17 +539,19 @@ export function bolts(detected: Detected, random: () => number = Math.random): D
     // services to be healthy, shows each container, and stops them again on `down`.
     out.push({ label: "Services", targets: [{ compose: detected.compose?.file ?? composeFileName(detected) }] });
   }
-  const needsServices = services.length > 0 ? [{ bolt: "Services" }] : [];
+  const servicesStep = services.length > 0 ? [{ bolt: "Services", label: "services" }] : [];
+  const afterServices = services.length > 0 ? { after: "services" } : {};
 
   for (const app of detected.apps) {
     const url = app.port ? `http://localhost:${app.port}` : undefined;
+    const server = `${app.name} ${app.command.split(" ").pop()}`;
     out.push({
       label: `Work on ${app.name}`,
       targets: [
-        ...needsServices,
+        ...servicesStep,
         ...(app.dir ? [{ folder: app.dir }] : []),
-        { run: app.command, ...(app.dir ? { cwd: app.dir } : {}), label: `${app.name} ${app.command.split(" ").pop()}` },
-        ...(url ? [{ wait: url }, { url }] : []),
+        { run: app.command, ...(app.dir ? { cwd: app.dir } : {}), label: server, ...afterServices },
+        ...(url ? [{ wait: url, label: "up", after: server }, { url, after: "up" }] : []),
       ],
     });
   }
@@ -557,7 +559,7 @@ export function bolts(detected: Detected, random: () => number = Math.random): D
   if (detected.everything) {
     out.push({
       label: detected.everything.label,
-      targets: [...needsServices, ...detected.everything.steps.map((step) => ({ run: step.run, label: step.label }))],
+      targets: [...servicesStep, ...detected.everything.steps.map((step) => ({ run: step.run, label: step.label, ...afterServices }))],
     });
   }
 

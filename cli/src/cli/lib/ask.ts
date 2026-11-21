@@ -3,7 +3,6 @@ import { checkValue, parseGiven, type InputValues } from "../../core/inputs.js";
 import { inputsFor, questionsFor } from "../../core/switch.js";
 import type { Bolt, InputSpec, Workspace } from "../../core/types.js";
 import { choose, Prompter } from "../prompt.js";
-import { findWorkspaceForDependency } from "./context.js";
 
 export interface AskOptions {
   yes?: boolean;
@@ -13,12 +12,11 @@ export interface AskOptions {
 }
 
 export async function beforeRun(workspace: Workspace, bolt: Bolt, options: AskOptions, recorded?: InputValues): Promise<InputValues | undefined> {
-  const find = { findWorkspace: findWorkspaceForDependency };
   const interactive = !options.json && process.stdin.isTTY === true && process.stdout.isTTY === true;
   const values: InputValues = { ...recorded };
 
   if (!recorded) {
-    const specs = await inputsFor(workspace, bolt, find);
+    const specs = await inputsFor(workspace, bolt);
     Object.assign(values, parseGiven(options.input ?? [], specs, bolt.label));
     const missing = specs.filter((spec) => values[spec.name] === undefined);
     for (const spec of missing) {
@@ -37,7 +35,7 @@ export async function beforeRun(workspace: Workspace, bolt: Bolt, options: AskOp
   }
   if (options.dryRun) return values;
 
-  const questions = await questionsFor(workspace, bolt, find, values);
+  const questions = await questionsFor(workspace, bolt, values);
   if (questions.length === 0 || options.yes) return values;
   if (!interactive) throw new WispError(`"${bolt.label}" asks before it runs: ${questions.join(" ")}`, "CONFIRM_NEEDED");
   const prompt = new Prompter();

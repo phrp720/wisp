@@ -431,6 +431,24 @@ export function stopTree(pid: number, shim = false): boolean {
   return stopped || tree.length > 0;
 }
 
+export function stopHung(pid: number): () => void {
+  if (currentOS() === "win32") {
+    spawnSync("taskkill", ["/pid", String(pid), "/T", "/F"], { windowsHide: true });
+    return () => undefined;
+  }
+  signal(pid, "SIGSTOP");
+  const tree = descendants(pid);
+  const own = ownGroup();
+  const groups = new Set(tree.map((entry) => entry.pgid).filter((pgid) => pgid > 1 && pgid !== own && pgid !== pid));
+  signal(pid, "SIGKILL");
+  for (const entry of [...tree].reverse()) signal(entry.pid);
+  for (const pgid of groups) signal(-pgid);
+  return () => {
+    for (const entry of tree) signal(entry.pid, "SIGKILL");
+    for (const pgid of groups) signal(-pgid, "SIGKILL");
+  };
+}
+
 function signal(target: number, kind: NodeJS.Signals = "SIGTERM"): boolean {
   try {
     process.kill(target, kind);

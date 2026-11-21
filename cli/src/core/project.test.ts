@@ -138,7 +138,7 @@ describe("commands and trust", () => {
     const untrusted = read(main);
     expect(untrusted.workspace.commands).toEqual([]);
     expect(untrusted.withheld.map((item) => item.id)).toEqual(["command:dev"]);
-    expect(untrusted.workspace.bolts[0]!.steps).toEqual([{ kind: "asset", id: "command:dev" }]);
+    expect(untrusted.workspace.bolts[0]!.steps).toEqual([expect.objectContaining({ kind: "asset", id: "command:dev" })]);
 
     const trusted = read(main, { trust: "trusted" });
     expect(trusted.workspace.commands).toHaveLength(1);
@@ -189,18 +189,43 @@ describe("bolts", () => {
     expect(parseWait(0)).toBeUndefined();
   });
 
-  it("keeps dependencies as steps, and reports one naming a missing bolt", () => {
+  it("reads a timeout on a command that finishes, and says when one is wrong or does nothing", () => {
     const { workspace, diagnostics } = read({
       bolts: [
-        { label: "api", targets: [{ bolt: "db" }, { bolt: "cache", workspace: "infra" }] },
+        {
+          label: "go",
+          targets: [
+            { run: "pnpm test", label: "test", finishes: true, timeout: "10m" },
+            { run: "pnpm build", label: "build", finishes: true, timeout: 90 },
+            { run: "pnpm lint", label: "lint", finishes: true, timeout: "soon" },
+            { run: "pnpm dev", label: "dev", timeout: "1h" },
+          ],
+        },
+      ],
+    }, { trust: "trusted" });
+    expect(workspace.commands.map((command) => [command.label, command.timeout])).toEqual([
+      ["test", 600],
+      ["build", 90],
+      ["lint", undefined],
+      ["dev", undefined],
+    ]);
+    expect(diagnostics).toContainEqual(expect.objectContaining({ level: "warning", message: '"soon" is not a timeout — it is ignored' }));
+    expect(diagnostics).toContainEqual(expect.objectContaining({ level: "warning", message: '"timeout" only applies to a command that finishes — it is ignored' }));
+  });
+
+  it("reads bolt steps with what they wait for, and refuses one naming a missing bolt or another workspace", () => {
+    const { workspace, diagnostics } = read({
+      bolts: [
+        { label: "api", targets: [{ bolt: "db", label: "db" }, { bolt: "web", after: "db" }, { bolt: "cache", workspace: "infra" }] },
         { label: "db", targets: [] },
         { label: "web", targets: [{ bolt: "nope" }] },
       ],
     });
     expect(workspace.bolts[0]!.steps).toEqual([
-      { kind: "bolt", bolt: "db" },
-      { kind: "bolt", bolt: "cache", workspace: "infra" },
+      { kind: "bolt", bolt: "db", name: "db" },
+      { kind: "bolt", bolt: "web", after: ["db"] },
     ]);
+    expect(diagnostics).toContainEqual(expect.objectContaining({ level: "error", message: expect.stringContaining('"wisp use <its .wisp.json> cache"') }));
     expect(diagnostics).toContainEqual(expect.objectContaining({ message: expect.stringContaining('"nope"') }));
   });
 
@@ -266,25 +291,30 @@ describe("bolts", () => {
     expect(diagnostics.filter((entry) => entry.message.includes("{{env}}") || entry.message.includes("{{tag}}"))).toEqual([]);
   });
 
-  it("reads steps to run together, and refuses a bolt or an empty list inside", () => {
-    const { workspace, declaredCommands, diagnostics } = read({
+  it("reads what each step waits for, and refuses to run a bolt whose waiting can't work", () => {
+    const { workspace, diagnostics } = read({
       bolts: [
-        { label: "Database", targets: [{ run: "db" }] },
         {
           label: "Check",
           targets: [
-            { together: [{ run: "pnpm lint", finishes: true }, { run: "pnpm test", finishes: true }, { bolt: "Database" }] },
-            { together: [{ url: "localhost:3000" }] },
-            { together: [] },
-            { run: "pnpm build", finishes: true },
+            { run: "pnpm install", label: "install", finishes: true },
+            { run: "pnpm lint", label: "lint", after: "install", finishes: true },
+            { run: "pnpm test", label: "test", after: ["install"], finishes: true },
+            { run: "pnpm build", after: ["lint", "test"], finishes: true },
           ],
         },
+        { label: "Typo", targets: [{ run: "a", label: "a" }, { run: "b", after: "nope" }] },
+        { label: "Loop", targets: [{ run: "a", label: "a", after: "b" }, { run: "b", label: "b", after: "a" }] },
+        { label: "Twice", targets: [{ run: "a", label: "x" }, { run: "b", label: "x" }, { run: "c", after: "x" }] },
       ],
     });
-    expect(workspace.bolts[1]!.steps.map((step) => step.together)).toEqual([0, 0, undefined, undefined]);
-    expect(declaredCommands.map((command) => command.run)).toEqual(["db", "pnpm lint", "pnpm test", "pnpm build"]);
-    expect(diagnostics).toContainEqual(expect.objectContaining({ level: "error", at: "bolts[1].targets[0].together", message: expect.stringContaining("a bolt can't run inside together") }));
-    expect(diagnostics).toContainEqual(expect.objectContaining({ level: "error", at: "bolts[1].targets[2].together" }));
+    const [check, typo, loop, twice] = workspace.bolts;
+    expect(check!.steps.map((step) => step.after)).toEqual([undefined, ["install"], ["install"], ["lint", "test"]]);
+    expect(check!.broken).toBeUndefined();
+    expect(typo!.broken).toMatch(/"Typo" can't run: waits for "nope", but no step has that label/);
+    expect(loop!.broken).toMatch(/wait for each other: a → b → a|wait for each other: b → a → b/);
+    expect(twice!.broken).toMatch(/more than one step has that label/);
+    expect(diagnostics.filter((entry) => entry.at.startsWith("bolts[0]"))).toEqual([]);
   });
 
   it("refuses a second bolt of the same name", () => {

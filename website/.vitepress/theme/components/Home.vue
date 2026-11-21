@@ -65,7 +65,7 @@ function svgAttrs(attrs: Record<string, unknown>): Record<string, unknown> {
 }
 
 const more = [
-  { icon: "needs", title: "Projects that need each other", text: "Your API needs the shared database? Wisp starts the database first, then the API." },
+  { icon: "needs", title: "Bolts in bolts", text: "Your API needs the database? Run the Database bolt as a step: it starts once, however many bolts run it." },
   { icon: "docker", title: "Docker, without the waiting", text: "Starts your compose services and waits until they're healthy before the next step." },
   { icon: "restart", title: "Servers that come back", text: "Your dev server crashed? It restarts on its own, and you see that it did." },
   { icon: "notify", title: "Told when it fails", text: "The nightly backup broke? A notification on your screen, or a message in Slack, Discord or ntfy." },
@@ -126,11 +126,11 @@ const more = [
   <span class="key">"bolts"</span>: [{
     <span class="key">"label"</span>: <span class="str">"Work on api"</span>,
     <span class="key">"targets"</span>: [
-      { <span class="key">"bolt"</span>: <span class="str">"Database"</span> },
+      { <span class="key">"bolt"</span>: <span class="str">"Database"</span>, <span class="key">"label"</span>: <span class="str">"db"</span> },
       { <span class="key">"folder"</span>: <span class="str">"apps/api"</span> },
-      { <span class="key">"run"</span>: <span class="str">"pnpm dev"</span>, <span class="key">"cwd"</span>: <span class="str">"apps/api"</span> },
-      { <span class="key">"wait"</span>: <span class="str">"http://localhost:3000"</span> },
-      { <span class="key">"url"</span>: <span class="str">"http://localhost:3000"</span> }
+      { <span class="key">"run"</span>: <span class="str">"pnpm dev"</span>, <span class="key">"label"</span>: <span class="str">"api"</span>, <span class="key">"after"</span>: <span class="str">"db"</span> },
+      { <span class="key">"wait"</span>: <span class="str">":3000"</span>, <span class="key">"label"</span>: <span class="str">"up"</span>, <span class="key">"after"</span>: <span class="str">"api"</span> },
+      { <span class="key">"url"</span>: <span class="str">"localhost:3000"</span>, <span class="key">"after"</span>: <span class="str">"up"</span> }
     ]
   }]
 <span class="dim">}</span></pre>

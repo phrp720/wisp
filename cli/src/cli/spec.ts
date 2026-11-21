@@ -36,7 +36,7 @@ bolt in \`wisp show\`, \`wisp pick\`, tab completion and the TUI.
 
 ## Bolt steps
 
-\`targets\` is an ordered list. Each entry is one of:
+\`targets\` lists the bolt's steps. Each entry is one of:
 
 | Step | Example | Does |
 |---|---|---|
@@ -46,11 +46,39 @@ bolt in \`wisp show\`, \`wisp pick\`, tab completion and the TUI.
 | app | \`{ "app": "Slack" }\` | launches or focuses an app |
 | command | \`{ "run": "pnpm dev", "cwd": "apps/api", "env": { "PORT": 3000 } }\` | runs a shell command |
 | wait | \`{ "wait": 3 }\`, \`{ "wait": "localhost:5432" }\`, \`{ "wait": "http://localhost:3000" }\` | pauses until seconds pass, a port accepts, or a url answers (60s timeout; object form \`{ "wait": { "port": 5432, "timeout": 120 } }\`) |
-| dependency | \`{ "bolt": "Database" }\`, \`{ "bolt": "Database", "workspace": "infra" }\` | runs another bolt first, once per run; skips commands already running |
 | docker | \`{ "compose": "compose.yaml", "services": ["postgres"] }\` | \`docker compose up --wait\`: done when the services are healthy; \`wisp down\` stops them; shown with state, health and logs |
-| together | \`{ "together": [{ "run": "pnpm lint", "finishes": true }, { "run": "pnpm test", "finishes": true }] }\` | starts its steps at the same time; the next step waits for all of them. Any step but a bolt. If one fails, the run stops once they have all finished. Their output is printed line by line, each line prefixed with the step's label; each step's log stays its own |
+| bolt | \`{ "bolt": "Database" }\` | runs another bolt of this file as one step; done when all its steps are |
 
-Any inline step may also carry \`"label"\` and \`"os"\`.
+Any step may also carry \`"label"\`, \`"os"\` and \`"after"\`.
+
+## Order: after
+
+**Steps start right away, at the same time, unless they say what they wait for.** Like
+Tekton's \`runAfter\`: \`"after"\` names the labels of steps in the same bolt, and the step
+starts once all of them have finished. Anything that must happen in order needs it:
+
+\`\`\`json
+{ "label": "Work on api", "targets": [
+  { "bolt": "Database", "label": "db" },
+  { "run": "pnpm dev", "label": "api", "after": "db" },
+  { "wait": "http://localhost:3000", "label": "up", "after": "api" },
+  { "url": "http://localhost:3000", "after": "up" }
+] }
+\`\`\`
+
+- \`"after": "lint"\` or \`["lint", "test"]\`: waits for each. Left out, the step starts
+  with the bolt. A step can wait for any number of steps, and many can wait for one.
+- A bolt step is one step like any other: it starts when what it waits for is done, and a
+  step that waits for it waits for all of its steps. A bolt runs once per run, however many
+  steps run it, and what is already running is left alone.
+- A bolt step names a bolt of the same file only, so renaming one renames the steps that
+  run it. To start another project, use a command:
+  \`{ "run": "wisp use ~/dev/infra/.wisp.json Database", "finishes": true }\`.
+- A \`after\` naming no step of the bolt, a label two steps share, or steps that wait for
+  each other make the bolt refuse to run, with the reason (\`wisp check\` shows it).
+- Steps that run at the same time print their output line by line, each line prefixed with
+  the step's label; each step's log stays its own. \`--dry-run\` numbers the steps by when
+  they can start: the same number means the same time.
 
 ## Commands that finish, and failures
 
@@ -59,15 +87,19 @@ command with \`"finishes": true\` is waited for, attached, with its output kept:
 build, a backup, a deploy. One bolt can mix both:
 
 \`\`\`json
-{ "label": "Check", "targets": [{ "bolt": "Database" }, { "run": "pnpm lint", "finishes": true }, { "run": "pnpm test", "finishes": true }] }
+{ "label": "Check", "targets": [{ "bolt": "Database", "label": "db" }, { "run": "pnpm lint", "label": "lint", "after": "db", "finishes": true }, { "run": "pnpm test", "after": "lint", "finishes": true }] }
 \`\`\`
 
-- A failed step stops the run: nothing after it runs, and a failed bolt it depends on stops
-  it too. \`"keepGoing": true\` on a bolt reports a failure and runs the rest anyway.
+- A failed step stops the run: steps already running finish, and nothing new starts. \`"keepGoing": true\` on a bolt reports a failure and runs
+  the rest anyway.
+- \`"timeout": "10m"\` (or \`"30s"\`, \`"1h"\`, or seconds) on a command that finishes: if it takes
+  longer, Wisp stops it and everything it started, and the step fails ("ran over its 10m
+  timeout"). Without one, Wisp waits as long as it takes. A command that keeps running takes
+  no timeout (\`wisp check\` warns).
 - A command that keeps running is never started twice; one that finishes runs every time.
 - Every run is in \`wisp history\`, with each step's duration and output, from the moment
-  it starts. Until it ends it has \`"running": true\`, and \`pending\` lists the steps still
-  to come, the first being the one in progress (its \`log\` fills as it goes).
+  it starts. Until it ends it has \`"running": true\`, and \`pending\` lists the steps not
+  done yet; the ones in progress have \`"running": true\` and a \`log\` that fills as it goes.
   \`"interrupted": true\` means Wisp stopped before the run did.
 - \`wisp hook pre-push Check\` runs it before every push and blocks the push if it fails.
   Its commands should finish: one that keeps running cannot block a push.
@@ -122,8 +154,7 @@ for the bolts it depends on too), then runs its \`down\` steps:
 \`\`\`
 
 A file holds bolts and nothing else: every step is written inside the bolt that takes it.
-To reuse steps, put them in a bolt of their own and run it from others with
-\`{ "bolt": "Database" }\`.
+To reuse steps, put them in a bolt of their own and run it from others as a \`{ "bolt": … }\` step.
 
 ## Commands
 
@@ -213,8 +244,8 @@ take input defaults), \`--json\`.
 
 \`wisp\` at a terminal opens it. Everything above can be done there without writing JSON:
 a folder with no file is offered a setup; \`e\` edits the selected bolt through forms
-(add, change, move, remove steps, and \`t\` runs one together with the one before; its name,
-notes, what a failure does, its question and its inputs), or, on the workspace
+(add, change, move, remove steps, each with what it depends on; its name, notes, what a
+failure does, its question, what it needs and its inputs), or, on the workspace
 list, the workspace's name, icon and notes; \`a\` adds a bolt, \`N\` a personal workspace; the selected bolt is shown whole below the list, its dependencies opened up, and \`⏎\` runs it in that same box, step by step;
 \`p\` (or \`2\`) shows what is running, grouped by the bolt that started it, with live
 output (\`[\` and \`]\` switch to a command's details and past runs); \`h\` (or \`3\`) the

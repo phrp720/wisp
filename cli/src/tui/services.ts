@@ -16,7 +16,7 @@ import { downBolt, inputsFor, planRetry, questionsFor, resolveBolt, runPlan, swi
 import { forgetHistory, listHistory } from "../core/history.js";
 import { trustProject } from "../core/trust.js";
 import { which } from "../core/which.js";
-import { discoverWorkspaces, resolveWorkspace } from "../core/workspaces.js";
+import { discoverWorkspaces } from "../core/workspaces.js";
 import { everything } from "../cli/lib/context.js";
 import { describeStep, type Services, type SetupSuggestion } from "./model.js";
 import { composeTarget } from "../core/switch.js";
@@ -64,7 +64,6 @@ export function realServices(hooks: { suspend: () => void; resume: () => void })
           ...(callbacks.onOutput ? { onOutput: callbacks.onOutput } : {}),
           ...(callbacks.signal ? { signal: callbacks.signal } : {}),
         },
-        { findWorkspace: async (ref) => resolveWorkspace(ref, await everything()).workspace },
       );
     },
 
@@ -82,15 +81,14 @@ export function realServices(hooks: { suspend: () => void; resume: () => void })
           ...(callbacks.onOutput ? { onOutput: callbacks.onOutput } : {}),
           ...(callbacks.signal ? { signal: callbacks.signal } : {}),
         },
-        { findWorkspace: async (ref) => resolveWorkspace(ref, await everything()).workspace },
       ),
 
-    planRetry: (read, entry) => planRetry(read.workspace, entry, { findWorkspace: async (ref) => resolveWorkspace(ref, await everything()).workspace }),
-    questions: (read, bolt, values = {}) => questionsFor(read.workspace, resolveBolt(read.workspace, bolt), { findWorkspace: async (ref) => resolveWorkspace(ref, await everything()).workspace }, values),
-    inputs: (read, bolt) => inputsFor(read.workspace, resolveBolt(read.workspace, bolt), { findWorkspace: async (ref) => resolveWorkspace(ref, await everything()).workspace }),
+    planRetry: (read, entry) => planRetry(read.workspace, entry),
+    questions: (read, bolt, values = {}) => questionsFor(read.workspace, resolveBolt(read.workspace, bolt), values),
+    inputs: (read, bolt) => inputsFor(read.workspace, resolveBolt(read.workspace, bolt)),
 
     down: (read, bolt, options = {}) =>
-      downBolt(read.workspace, bolt, options.deps ? { deps: true } : {}, { findWorkspace: async (ref) => resolveWorkspace(ref, await everything()).workspace }),
+      downBolt(read.workspace, bolt, options.deps ? { deps: true } : {}),
 
     history: () => listHistory(),
     forgetRuns: async (ids) => void (await forgetHistory({ ids })),
@@ -191,7 +189,7 @@ export function realServices(hooks: { suspend: () => void; resume: () => void })
       replaceStep: edit.replaceStep,
       removeStep: edit.removeStep,
       moveStep: edit.moveStep,
-      toggleTogether: edit.toggleTogether,
+      setAfter: edit.setAfter,
       createPersonalWorkspace: edit.createPersonalWorkspace,
       removePersonalWorkspace: edit.removePersonalWorkspace,
       forgetProject: async (file) => {

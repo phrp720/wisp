@@ -42,6 +42,7 @@ for it) and `os` (see [Several operating systems](#several-operating-systems)).
 |---|---|
 | `run` | the command line; pipes and `&&` work. One per OS when they differ |
 | `finishes` | `true` for a command that ends, like a test or a build: Wisp [waits for it](./runs) and keeps its output. Left out, it keeps running, like a server |
+| `timeout` | with `finishes`: how long it may take, like `"30s"`, `"10m"`, `"1h"` or a number of seconds. Longer, and Wisp stops it and the step fails. Left out, Wisp waits as long as it takes |
 | `cwd` | the folder to run it in, relative to the file; left out, the project's folder |
 | `env` | environment variables, on top of yours |
 | `restart` | `"on-failure"` after a crash, `"always"` whenever it exits, `"no"` (the default). Waits 1s, 2s, 4s… up to 30s between tries; gives up after 10 in a row |
@@ -63,11 +64,10 @@ Starts the services and waits until they're healthy. Leave out `services` for al
 
 ```json
 { "bolt": "Database" }
-{ "bolt": "Database", "workspace": "infra" }
 ```
 
-Runs that bolt first, once per run however many bolts need it. `workspace` points at
-another project's bolt.
+Runs a bolt of the same file as one step: done when all its steps are. It runs once per
+run, however many steps run it. See [bolts in bolts](./file#bolts-in-bolts).
 
 ### Wait
 
@@ -111,14 +111,15 @@ Paths are relative to the file. Folders open in your file manager or the editor 
 
 A name, a macOS bundle id (`com.tinyspeck.slackmacgap`), or a command on PATH.
 
-### Together
+### After
+
+Any step can say which steps of its bolt it waits for, by their `label`:
 
 ```json
-{ "together": [{ "run": "pnpm lint", "finishes": true }, { "wait": "localhost:5432" }] }
+{ "run": "pnpm build", "after": ["lint", "test"], "finishes": true }
 ```
 
-Starts its steps at the same time; the next step waits for all of them. Any step but
-another bolt. See [steps at the same time](./file#steps-at-the-same-time).
+Left out, it starts right away, with the bolt. See [order](./file#order).
 
 In your [personal workspaces](./file#personal-workspaces), a folder or file step can also say
 `"openWith": "WebStorm"`. A project's file can't: everyone chooses their own editor.

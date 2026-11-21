@@ -214,7 +214,25 @@
         "finishes": {
           "type": "boolean",
           "default": false,
-          "description": "Wait for it to finish before the next step, and keep its output: a build, a test, a backup. Without it, the command keeps running: Wisp starts it and moves on, like a server."
+          "description": "Wait for it to finish, and keep its output: a build, a test, a backup. Steps that wait for it start once it has finished. Without it, the command keeps running: Wisp starts it and moves on, like a server."
+        },
+        "timeout": {
+          "description": "For a command that finishes: if it takes longer, Wisp stops it and everything it started, and the step fails. Seconds, or text like \"30s\", \"10m\", \"1h\". Without it, Wisp waits as long as it takes.",
+          "oneOf": [
+            {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            {
+              "type": "string",
+              "pattern": "^\\s*\\d+(\\.\\d+)?\\s*[smh]?\\s*$"
+            }
+          ],
+          "examples": [
+            "10m",
+            30,
+            "1h"
+          ]
         },
         "cwd": {
           "$ref": "#/$defs/commandProperties/cwd"
@@ -233,6 +251,9 @@
         },
         "restart": {
           "$ref": "#/$defs/commandProperties/restart"
+        },
+        "after": {
+          "$ref": "#/$defs/after"
         }
       }
     },
@@ -284,7 +305,7 @@
       ]
     },
     "step": {
-      "description": "One step of a bolt: something to open or run, a wait, Docker services, or another bolt to run first.",
+      "description": "One step of a bolt: something to open or run, a wait, Docker services, or another bolt. Steps start right away unless they say what they wait for with \"after\".",
       "oneOf": [
         {
           "type": "object",
@@ -302,6 +323,9 @@
             },
             "os": {
               "$ref": "#/$defs/os"
+            },
+            "after": {
+              "$ref": "#/$defs/after"
             }
           }
         },
@@ -325,6 +349,9 @@
               "type": "string",
               "minLength": 1,
               "description": "The app that opens it. Only in a personal workspace: a shared file does not choose anyone's editor."
+            },
+            "after": {
+              "$ref": "#/$defs/after"
             }
           }
         },
@@ -348,6 +375,9 @@
               "type": "string",
               "minLength": 1,
               "description": "The app that opens it. Only in a personal workspace: a shared file does not choose anyone's editor."
+            },
+            "after": {
+              "$ref": "#/$defs/after"
             }
           }
         },
@@ -366,6 +396,9 @@
             },
             "os": {
               "$ref": "#/$defs/os"
+            },
+            "after": {
+              "$ref": "#/$defs/after"
             }
           }
         },
@@ -396,6 +429,32 @@
                 "minLength": 1
               },
               "description": "Only these services. All of them when left out."
+            },
+            "after": {
+              "$ref": "#/$defs/after"
+            },
+            "label": {
+              "$ref": "#/$defs/label"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "bolt"
+          ],
+          "description": "Runs another bolt of this file as a step: it starts when what this step waits for is done, and steps that wait for it wait for all of it. Each bolt runs once per run, however many steps run it.",
+          "properties": {
+            "bolt": {
+              "type": "string",
+              "minLength": 1
+            },
+            "label": {
+              "$ref": "#/$defs/label"
+            },
+            "after": {
+              "$ref": "#/$defs/after"
             }
           }
         },
@@ -408,42 +467,12 @@
           "properties": {
             "wait": {
               "$ref": "#/$defs/wait"
-            }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "bolt"
-          ],
-          "properties": {
-            "bolt": {
-              "type": "string",
-              "minLength": 1,
-              "description": "Another bolt to run first: once per run, and skipped where its commands are already running."
             },
-            "workspace": {
-              "type": "string",
-              "minLength": 1,
-              "description": "The workspace that bolt is in, when it is not this one."
-            }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "together"
-          ],
-          "description": "Steps that start at the same time, like lint and tests. The next step waits for all of them; if one fails, the run stops once they have all finished.",
-          "properties": {
-            "together": {
-              "type": "array",
-              "minItems": 1,
-              "items": {
-                "$ref": "#/$defs/groupMember"
-              }
+            "after": {
+              "$ref": "#/$defs/after"
+            },
+            "label": {
+              "$ref": "#/$defs/label"
             }
           }
         }
@@ -475,17 +504,25 @@
         "color": {
           "$ref": "#/$defs/color"
         },
-        "targets": {
-          "type": "array",
-          "description": "What this bolt starts, in the order it starts it.",
-          "items": {
-            "$ref": "#/$defs/step"
-          }
-        },
         "keepGoing": {
           "type": "boolean",
           "default": false,
           "description": "Carry on after a step fails: report it, and run the steps after it anyway. Without it, a failed step stops the rest."
+        },
+        "confirm": {
+          "description": "Ask before it runs, for a bolt with consequences: a deploy, a restore. The question to ask, or true for \"Run <label>?\". Bolts that run it ask too. Without a terminal, it runs only with --yes.",
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "examples": [
+                "Deploy to production?"
+              ]
+            },
+            {
+              "type": "boolean"
+            }
+          ]
         },
         "inputs": {
           "type": "object",
@@ -544,20 +581,12 @@
             }
           ]
         },
-        "confirm": {
-          "description": "Ask before it runs, for a bolt with consequences: a deploy, a restore. The question to ask, or true for \"Run <label>?\". Bolts that run it ask too. Without a terminal, it runs only with --yes.",
-          "oneOf": [
-            {
-              "type": "string",
-              "minLength": 1,
-              "examples": [
-                "Deploy to production?"
-              ]
-            },
-            {
-              "type": "boolean"
-            }
-          ]
+        "targets": {
+          "type": "array",
+          "description": "What this bolt starts, in the order it starts it.",
+          "items": {
+            "$ref": "#/$defs/step"
+          }
         },
         "down": {
           "type": "array",
@@ -568,133 +597,20 @@
         }
       }
     },
-    "groupMember": {
-      "description": "A step inside together: anything but another bolt.",
+    "after": {
+      "description": "The labels of the steps of this bolt this one waits for; it starts once they have all finished. Left out, it starts right away.",
       "oneOf": [
         {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "url"
-          ],
-          "properties": {
-            "label": {
-              "$ref": "#/$defs/label"
-            },
-            "url": {
-              "type": "string",
-              "minLength": 1
-            },
-            "os": {
-              "$ref": "#/$defs/os"
-            }
-          }
+          "type": "string",
+          "minLength": 1
         },
         {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "folder"
-          ],
-          "properties": {
-            "label": {
-              "$ref": "#/$defs/label"
-            },
-            "folder": {
-              "$ref": "#/$defs/pathProperty"
-            },
-            "os": {
-              "$ref": "#/$defs/os"
-            },
-            "openWith": {
-              "type": "string",
-              "minLength": 1,
-              "description": "The app that opens it. Only in a personal workspace: a shared file does not choose anyone's editor."
-            }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "file"
-          ],
-          "properties": {
-            "label": {
-              "$ref": "#/$defs/label"
-            },
-            "file": {
-              "$ref": "#/$defs/pathProperty"
-            },
-            "os": {
-              "$ref": "#/$defs/os"
-            },
-            "openWith": {
-              "type": "string",
-              "minLength": 1,
-              "description": "The app that opens it. Only in a personal workspace: a shared file does not choose anyone's editor."
-            }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "app"
-          ],
-          "properties": {
-            "label": {
-              "$ref": "#/$defs/label"
-            },
-            "app": {
-              "$ref": "#/$defs/appValue"
-            },
-            "os": {
-              "$ref": "#/$defs/os"
-            }
-          }
-        },
-        {
-          "$ref": "#/$defs/command",
-          "description": "A command written inline. Waits for `wisp trust` like any other."
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "compose"
-          ],
-          "properties": {
-            "compose": {
-              "type": "string",
-              "minLength": 1,
-              "description": "A docker compose file, relative to this file. Its services are started with `up --wait` (the step is done when they are healthy), shown with their state and logs, and stopped by `wisp down`. Waits for `wisp trust`, like a command.",
-              "examples": [
-                "compose.yaml",
-                "deployments/development/docker-compose.yml"
-              ]
-            },
-            "services": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "minLength": 1
-              },
-              "description": "Only these services. All of them when left out."
-            }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "wait"
-          ],
-          "properties": {
-            "wait": {
-              "$ref": "#/$defs/wait"
-            }
-          }
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
         }
       ]
     }

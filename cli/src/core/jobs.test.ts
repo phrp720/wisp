@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Platform } from "../platform/types.js";
 import type { Environment } from "./environment.js";
 import { forgetHistory, getHistory, listHistory, recordHistory, withWorkspaceNames, type HistoryEntry } from "./history.js";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 
 import { listRuns, stopRun } from "./processes.js";
 import { windowInvocation } from "./shell.js";
@@ -56,15 +56,15 @@ function recorder(): Platform & { calls: string[] } {
 const desktop: Environment = { os: "darwin", gui: true, ssh: false };
 
 describe("commands that finish, and failures", () => {
-  it("wait for each command that finishes, in order, stop at the first failure, and keep it all", async () => {
+  it("run a step after what it waits for, stop at the first failure, and keep it all", async () => {
     const ws = workspace({
       bolts: [
         {
           label: "Check",
           targets: [
             { run: "echo linting", label: "lint", finishes: true },
-            { run: "echo 'tests broke' >&2; exit 3", label: "test", finishes: true },
-            { run: "echo deploying", label: "deploy", finishes: true },
+            { run: "echo 'tests broke' >&2; exit 3", label: "test", after: "lint", finishes: true },
+            { run: "echo deploying", label: "deploy", after: "test", finishes: true },
           ],
         },
       ],
@@ -93,12 +93,12 @@ describe("commands that finish, and failures", () => {
     expect(await readFile(entry!.steps[1]!.log!, "utf8")).toBe("tests broke\n");
   });
 
-  it("start what keeps running the way it always starts, and stop when a bolt they depend on fails", async () => {
+  it("start what keeps running the way it always starts, and not run a bolt whose need failed", async () => {
     const ws = workspace({
       bolts: [
         { label: "Database", targets: [{ run: "postgres", label: "db" }] },
         { label: "Build", targets: [{ run: "exit 1", label: "compile", finishes: true }] },
-        { label: "Test", targets: [{ bolt: "Database" }, { bolt: "Build" }, { run: "echo testing", label: "test", finishes: true }] },
+        { label: "Test", targets: [{ bolt: "Database", label: "db" }, { bolt: "Build", label: "build" }, { run: "echo testing", label: "test", after: ["db", "build"], finishes: true }] },
       ],
     });
     const platform = recorder();
@@ -113,15 +113,39 @@ describe("commands that finish, and failures", () => {
   });
 
   it("stop at the first failure, whatever failed", async () => {
-    const ws = workspace({ bolts: [{ label: "go", targets: [{ folder: "missing" }, { url: "acme.com" }] }] });
+    const ws = workspace({ bolts: [{ label: "go", targets: [{ folder: "missing", label: "src" }, { url: "acme.com", after: "src" }] }] });
     const platform = recorder();
     const result = await switchToWorkspace(ws, { bolt: "go" }, { platform, environment: desktop, defaults: {} });
     expect(result.targets.map((step) => [step.ok, step.skipped ?? false])).toEqual([[false, false], [false, true]]);
     expect(platform.calls).toEqual([]);
   });
 
+  it("start every step that waits for nothing at once, let them finish, and start nothing new after a failure", async () => {
+    const ws = workspace({
+      bolts: [
+        {
+          label: "go",
+          targets: [
+            { run: "sleep 0.2; exit 1", label: "broken", finishes: true },
+            { run: "sleep 0.6; echo slow", label: "slow", finishes: true },
+            { run: "echo after", label: "next", after: "slow", finishes: true },
+          ],
+        },
+      ],
+    });
+    const began = Date.now();
+    const result = await switchToWorkspace(ws, { bolt: "go" }, { platform: recorder(), environment: desktop, defaults: {} });
+    expect(Date.now() - began).toBeLessThan(2000);
+    expect(result.targets.map((step) => [step.label, step.ok, step.skipped ?? false])).toEqual([
+      ["broken", false, false],
+      ["slow", true, false],
+      ["next", false, true],
+    ]);
+    expect(result.targets[2]!.note).toBe('not reached — "broken" failed');
+  });
+
   it("keep going after a failure when the bolt says so", async () => {
-    const ws = workspace({ bolts: [{ label: "go", keepGoing: true, targets: [{ folder: "missing" }, { url: "acme.com" }] }] });
+    const ws = workspace({ bolts: [{ label: "go", keepGoing: true, targets: [{ folder: "missing", label: "src" }, { url: "acme.com", after: "src" }] }] });
     const platform = recorder();
     const result = await switchToWorkspace(ws, { bolt: "go" }, { platform, environment: desktop, defaults: {} });
     expect(result.ok).toBe(false);
@@ -205,7 +229,7 @@ describe("down", () => {
     const ws = workspace({
       bolts: [
         { label: "Database", targets: [{ run: "sleep 30", label: "db", background: true }], down: [{ run: `touch '${marker}'`, label: "compose stop" }] },
-        { label: "api", targets: [{ bolt: "Database" }, { run: "sleep 30", label: "server", background: true }], down: [{ run: "true", label: "cleanup" }] },
+        { label: "api", targets: [{ bolt: "Database", label: "db" }, { run: "sleep 30", label: "server", background: true, after: "db" }], down: [{ run: "true", label: "cleanup" }] },
       ],
     });
     const deps = { platform: recorder(), environment: desktop, defaults: {} };
@@ -225,7 +249,7 @@ describe("down", () => {
     const ws = workspace({
       bolts: [
         { label: "Database", targets: [{ run: "sleep 30", label: "db", background: true }], down: [{ run: `touch '${marker}'`, label: "compose stop" }] },
-        { label: "api", targets: [{ bolt: "Database" }, { run: "sleep 30", label: "server", background: true }] },
+        { label: "api", targets: [{ bolt: "Database", label: "db" }, { run: "sleep 30", label: "server", background: true, after: "db" }] },
       ],
     });
     const deps = { platform: recorder(), environment: desktop, defaults: {} };
@@ -237,7 +261,7 @@ describe("down", () => {
 });
 
 describe("planBolt", () => {
-  it("keeps a dependency's steps where the dependency is listed", async () => {
+  it("keeps a bolt step's steps where the bolt step is listed", async () => {
     const ws = workspace({
       bolts: [
         { label: "db", targets: [{ run: "postgres" }] },
@@ -279,21 +303,18 @@ describe("compose steps", () => {
   });
 });
 
-describe("steps run together", () => {
-  it("starts a group's steps at once, lets them all finish, then stops if one failed", async () => {
-    const marker = join(dir, "slow-finished");
+describe("steps that wait for others", () => {
+  it("fan out after one step and back in before the next, side by side in between, and stop if one failed", async () => {
+    const marker = join(dir, "lint-finished");
     const ws = workspace({
       bolts: [
         {
           label: "Check",
           targets: [
-            {
-              together: [
-                { run: `sleep 1; echo slow done; touch '${marker}'`, label: "slow", finishes: true },
-                { run: "sleep 0.2; echo broke; exit 4", label: "quick", finishes: true },
-              ],
-            },
-            { run: "echo never", label: "after", finishes: true },
+            { run: "echo installed", label: "install", finishes: true },
+            { run: `sleep 0.6; echo lint done; touch '${marker}'`, label: "lint", after: "install", finishes: true },
+            { run: "sleep 0.2; echo broke; exit 4", label: "test", after: "install", finishes: true },
+            { run: "echo never", label: "build", after: ["lint", "test"], finishes: true },
           ],
         },
       ],
@@ -303,33 +324,64 @@ describe("steps run together", () => {
     const result = await switchToWorkspace(ws, { bolt: "check", onOutput: (_target, chunk) => void output.push(chunk) }, { platform: recorder(), environment: desktop, defaults: {} });
     expect(Date.now() - began).toBeLessThan(2500);
     expect(result.targets.map((target) => [target.label, target.ok, target.skipped ?? false])).toEqual([
-      ["slow", true, false],
-      ["quick", false, false],
-      ["after", false, true],
+      ["install", true, false],
+      ["lint", true, false],
+      ["test", false, false],
+      ["build", false, true],
     ]);
-    expect(result.targets[2]?.note).toBe('not reached — "quick" failed');
+    expect(result.targets[3]?.note).toBe('not reached — "test" failed');
     expect(await readFile(marker, "utf8")).toBe("");
-    expect(output).toContain("slow  │ slow done\n");
-    expect(output).toContain("quick │ broke\n");
+    expect(output).toContain("installed\n");
+    expect(output).toContain("lint │ lint done\n");
+    expect(output).toContain("test │ broke\n");
     const entry = await getHistory(result.historyId as string);
-    expect(entry?.steps.map((step) => step.label)).toEqual(["slow", "quick", "after"]);
+    expect(entry?.steps.map((step) => [step.label, step.after])).toEqual([
+      ["install", undefined],
+      ["lint", ["install"]],
+      ["test", ["install"]],
+      ["build", ["lint", "test"]],
+    ]);
   });
 
-  it("plans a group's steps with one number, and a bolt's other steps without", async () => {
+  it("plans a bolt step's steps to start when it would, and what waits for it to wait for all of them", async () => {
     const ws = workspace({
       bolts: [
-        { label: "Services", targets: [{ together: [{ wait: "localhost:5432" }, { wait: "localhost:6379" }] }] },
-        { label: "Dev", targets: [{ bolt: "Services" }, { together: [{ run: "a" }, { run: "b" }] }, { run: "c" }] },
+        { label: "Services", targets: [{ wait: "localhost:5432" }, { wait: "localhost:6379" }] },
+        { label: "Dev", targets: [{ bolt: "Services", label: "services" }, { run: "a", label: "a", after: "services" }, { run: "b", label: "b", after: "services" }, { run: "c", after: ["a", "b"] }] },
       ],
     });
     const plan = await planBolt(ws, resolveBolt(ws, "Dev"));
-    expect(plan.map((step) => [step.target.label, step.target.together])).toEqual([
-      ["port 5432", 0],
-      ["port 6379", 0],
-      ["a", 1],
-      ["b", 1],
-      ["c", undefined],
+    const key = (label: string) => plan.find((step) => step.target.label === label)?.key as string;
+    const services = [key("port 5432"), key("port 6379")];
+    expect(plan.map((step) => [step.target.label, step.deps])).toEqual([
+      ["port 5432", []],
+      ["port 6379", []],
+      ["a", services],
+      ["b", services],
+      ["c", [key("a"), key("b")]],
     ]);
+  });
+});
+
+describe("a run's pipeline", () => {
+  it("puts each step in a column by when it could start, stacking what ran at the same time", async () => {
+    const ws = workspace({
+      bolts: [
+        {
+          label: "Check",
+          targets: [
+            { run: "true", label: "install", finishes: true },
+            { run: "true", label: "lint", after: "install", finishes: true },
+            { run: "true", label: "test", after: "install", finishes: true },
+            { run: "true", label: "build", after: ["lint", "test"], finishes: true },
+          ],
+        },
+      ],
+    });
+    const result = await switchToWorkspace(ws, { bolt: "check" }, { platform: recorder(), environment: desktop, defaults: {} });
+    const { pipeline } = await import("../tui/history.js");
+    const entry = await getHistory(result.historyId as string);
+    expect(pipeline(entry!).map((column) => column.map((node) => node.label))).toEqual([["install"], ["lint", "test"], ["build"]]);
   });
 });
 
@@ -389,7 +441,7 @@ describe("inputs", () => {
 describe("stopping and retrying", () => {
   it("stops a run when asked: what is attached is killed, and nothing more starts", async () => {
     const ws = workspace({
-      bolts: [{ label: "Build", targets: [{ run: "sleep 30", label: "compile", finishes: true }, { run: "echo never", label: "package", finishes: true }] }],
+      bolts: [{ label: "Build", targets: [{ run: "sleep 30", label: "compile", finishes: true }, { run: "echo never", label: "package", after: "compile", finishes: true }] }],
     });
     const controller = new AbortController();
     setTimeout(() => controller.abort(), 300);
@@ -398,6 +450,27 @@ describe("stopping and retrying", () => {
     expect(Date.now() - began).toBeLessThan(5000);
     expect(result.ok).toBe(false);
     expect(result.targets[1]).toMatchObject({ skipped: true, note: "not reached — the run was stopped" });
+  });
+
+  it.skipIf(process.platform === "win32")("stops a command that runs over its timeout, with all it started, and fails the step", async () => {
+    const ws = workspace({
+      bolts: [{ label: "Backup", targets: [{ run: `sleep 37.25; touch "${join(dir, "went-on")}"`, label: "dump", finishes: true, timeout: 0.5 }, { run: "echo never", label: "clean", after: "dump", finishes: true }] }],
+    });
+    const began = Date.now();
+    const result = await switchToWorkspace(ws, { bolt: "backup" }, { platform: recorder(), environment: desktop, defaults: {} });
+    expect(Date.now() - began).toBeLessThan(5000);
+    expect(result.ok).toBe(false);
+    expect(result.targets[0]).toMatchObject({ ok: false, error: "ran over its 0.5s timeout, so Wisp stopped it" });
+    expect(result.targets[1]).toMatchObject({ skipped: true });
+    expect(spawnSync("pgrep", ["-f", "sleep 37.25"]).status).toBe(1);
+    await new Promise((settle) => setTimeout(settle, 300));
+    await expect(readFile(join(dir, "went-on"), "utf8")).rejects.toThrow();
+  });
+
+  it("leaves a command that finishes within its timeout alone", async () => {
+    const ws = workspace({ bolts: [{ label: "Check", targets: [{ run: "echo ok", label: "test", finishes: true, timeout: "1m" }] }] });
+    const result = await switchToWorkspace(ws, { bolt: "check" }, { platform: recorder(), environment: desktop, defaults: {} });
+    expect(result.targets[0]).toMatchObject({ ok: true });
   });
 
   it("retries only what failed, and what the failure kept from running", async () => {
@@ -409,8 +482,8 @@ describe("stopping and retrying", () => {
           label: "Check",
           targets: [
             { run: `echo x >> '${marker}'`, label: "lint", finishes: true },
-            { run: "exit 1", label: "test", finishes: true },
-            { run: "true", label: "build", finishes: true },
+            { run: "exit 1", label: "test", after: "lint", finishes: true },
+            { run: "true", label: "build", after: "test", finishes: true },
           ],
         },
       ],
@@ -467,7 +540,7 @@ describe("history like a CI", () => {
     const ws = workspace({
       bolts: [
         { label: "Database", targets: [{ run: "true", label: "postgres", background: true }] },
-        { label: "Check", targets: [{ bolt: "Database" }, { run: "true", label: "test", finishes: true }] },
+        { label: "Check", targets: [{ bolt: "Database", label: "db" }, { run: "true", label: "test", after: "db", finishes: true }] },
       ],
     });
     const deps = { platform: recorder(), environment: desktop, defaults: {} };
@@ -481,9 +554,9 @@ describe("history like a CI", () => {
     ]);
 
     const { pipeline } = await import("../tui/history.js");
-    expect(pipeline(latest!).map((node) => [node.label, node.detail?.split(" ").slice(0, 2).join(" ")])).toEqual([
-      ["Database", "1 step"],
-      ["Check", "1 step"],
+    expect(pipeline(latest!).map((column) => column.map((node) => [node.label, node.detail?.split(" ").slice(0, 2).join(" ")]))).toEqual([
+      [["Database", "1 step"]],
+      [["Check", "1 step"]],
     ]);
   });
 

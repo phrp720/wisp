@@ -18,7 +18,9 @@ export interface HistoryStep {
   note?: string;
   durationMs: number;
   finishes?: boolean;
-  together?: number;
+  after?: string[];
+  stage?: number;
+  running?: boolean;
   /** What an attached command printed. Commands in windows keep their output there. */
   log?: string;
   /** The bolt it belongs to, when a dependency brought it in — drawn as one group. */
@@ -182,7 +184,7 @@ export function withWorkspaceNames(entries: HistoryEntry[], names: ReadonlyMap<s
 export type StepProgress = "running" | "waiting";
 
 export function allSteps(entry: HistoryEntry): (HistoryStep & { state?: StepProgress })[] {
-  return [...entry.steps, ...(entry.pending ?? []).map((step, at): HistoryStep & { state: StepProgress } => ({ ...step, state: at === 0 ? "running" : "waiting" }))];
+  return [...entry.steps, ...(entry.pending ?? []).map((step): HistoryStep & { state: StepProgress } => ({ ...step, state: step.running ? "running" : "waiting" }))];
 }
 
 /** "Check (retry)" is a run of Check. */

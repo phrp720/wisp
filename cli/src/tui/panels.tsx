@@ -9,7 +9,7 @@ import { tildify } from "../core/paths.js";
 import { retryPlan } from "../core/switch.js";
 import type { Diagnostic } from "../core/types.js";
 import type { Glyphs } from "./glyphs.js";
-import { describeStep, groupMarks, windowed } from "./model.js";
+import { describeStep, windowed } from "./model.js";
 import { KIND, type RunState, type View } from "./state.js";
 import { spell } from "./spells.js";
 import { TONE } from "./tones.js";
@@ -33,7 +33,6 @@ export function RunProgress({ view, glyphs, height, tick }: { view: RunState; gl
   const stepRoom = Math.max(1, height - 3 - summary);
   const outputRoom = output.length > 0 ? Math.max(0, Math.min(output.length, Math.floor((stepRoom - 1) / 2))) : 0;
   const { items } = windowed(view.steps, Math.max(0, view.steps.findIndex((step) => step.state === "running")), Math.max(1, stepRoom - (outputRoom ? outputRoom + 1 : 0)));
-  const marks = groupMarks(view.steps.map((step) => step.target), glyphs);
 
   return (
     <>
@@ -61,8 +60,7 @@ export function RunProgress({ view, glyphs, height, tick }: { view: RunState; gl
                   : <Text color="green">{glyphs.ok}</Text>;
         return (
           <Text key={`${index}:${step.target.id}`} wrap="truncate-end">
-            {mark} <Text dimColor>{marks[view.steps.indexOf(step)]}</Text>
-            {step.state === "running" ? <Text bold>{describeStep(step.target, true)}</Text> : describeStep(step.target)}
+            {mark} {step.state === "running" ? <Text bold>{describeStep(step.target, true)}</Text> : describeStep(step.target)}
             {step.target.workspace ? <Text dimColor>{` (from ${step.target.workspace})`}</Text> : null}
             {result && !result.skipped && result.durationMs !== undefined && step.state !== "running" ? <Text dimColor>{`  ${result.durationMs >= 1000 ? `${(result.durationMs / 1000).toFixed(1)}s` : `${result.durationMs}ms`}`}</Text> : null}
             {result?.error ? <Text color="red">{`  ${result.error}`}</Text> : result?.note ? <Text dimColor>{`  ${result.note}`}</Text> : null}

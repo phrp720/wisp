@@ -1,7 +1,7 @@
 import { dirname } from "node:path";
 import { tildify } from "../../core/paths.js";
 import type { RunStatus } from "../../core/processes.js";
-import { boltStatus, collectBoltTargets, collectDownTargets } from "../../core/switch.js";
+import { boltStatus, collectBoltTargets, collectDownTargets, stagesOfTargets } from "../../core/switch.js";
 import type { Bolt, Diagnostic, SwitchTarget, Withheld, Workspace, WorkspaceRead } from "../../core/types.js";
 import { hasWords, slugify } from "../../core/workspaces.js";
 import { bold, cyan, dim, green, kindLabel, plural, red, yellow } from "../format.js";
@@ -56,12 +56,10 @@ export function printBolts(workspace: Workspace, expand = false, withheld: Withh
     console.log(`  ${upMark(workspace, bolt, runs)}${bold(bolt.label)} ${cyan(slugify(bolt.label))} ${dim(plural(steps.length, "step"))}${asks}${note}`);
     if (bolt.notes) console.log(`    ${dim(bolt.notes)}`);
     if (!expand) continue;
-    let group: number | undefined;
-    for (const step of steps) {
-      if (step.together !== undefined && step.together !== group) console.log(`    ${dim("together")}`);
-      group = step.together;
-      console.log(`${step.together === undefined ? "    " : "      "}${dim(kindLabel(step.kind))} ${step.label}`);
-    }
+    const stages = stagesOfTargets(steps);
+    steps.forEach((step, at) => {
+      console.log(`  ${dim(String(stages[at]).padStart(3))} ${dim(kindLabel(step.kind))} ${step.label}${step.after ? dim(` · after ${step.after.join(", ")}`) : ""}`);
+    });
     for (const item of waiting) console.log(`    ${dim(kindLabel(item.kind))} ${dim(item.label)} ${yellow("(not trusted)")}`);
     const down = collectDownTargets(workspace, bolt);
     if (down.length > 0) console.log(dim(`    down: ${down.map((step) => step.label).join(", ")}`));

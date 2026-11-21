@@ -1,6 +1,7 @@
 import { realpath, stat } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
+import { parseDuration } from "./duration.js";
 import { getOpenWithDefaults } from "./config.js";
 import { WispError, describe } from "./errors.js";
 import { INPUT_NAME, INPUT_VALUE, notPlain, placeholders } from "./inputs.js";
@@ -385,11 +386,6 @@ function inlineEntries(boltEntries: Entry[]): Record<InlineSection, Entry[]> {
         if (!isRecord(target)) return;
         const section = inlineKind(target);
         if (section) found[section].push({ value: target, at: `${at}.${list}[${index}]` });
-        if (!Array.isArray(target["together"])) return;
-        (target["together"] as unknown[]).forEach((member, position) => {
-          const kind = isRecord(member) ? inlineKind(member) : undefined;
-          if (kind) found[kind].push({ value: member, at: `${at}.${list}[${index}].together[${position}]` });
-        });
       });
     }
   }
@@ -549,7 +545,7 @@ function commands(entries: Entry[], ctx: Context): Command[] {
 
     const label = optionalString(entry["label"]) ?? script.label;
     const base = `command:${label.toLowerCase()}`;
-    const fingerprint = JSON.stringify([entry["run"], entry["cwd"], entry["shell"], entry["env"], entry["background"], entry["finishes"]]);
+    const fingerprint = JSON.stringify([entry["run"], entry["cwd"], entry["shell"], entry["env"], entry["background"], entry["finishes"], entry["timeout"]]);
     if (taken.has(base) && ctx.valueById.get(base) === fingerprint) {
       ctx.idsByAt.set(at, base);
       continue;
@@ -584,6 +580,16 @@ function commands(entries: Entry[], ctx: Context): Command[] {
         }
       } else {
         ctx.found.push({ level: "warning", at: `${at}.finishes`, message: '"finishes" must be true or false — it is ignored' });
+      }
+    }
+    if (entry["timeout"] !== undefined) {
+      const timeout = parseDuration(entry["timeout"]);
+      if (timeout === undefined) {
+        ctx.found.push({ level: "warning", at: `${at}.timeout`, message: `"${String(entry["timeout"])}" is not a timeout — it is ignored`, hint: 'Use seconds, or "30s", "10m", "1h"' });
+      } else if (!command.finishes) {
+        ctx.found.push({ level: "warning", at: `${at}.timeout`, message: '"timeout" only applies to a command that finishes — it is ignored', hint: 'Add "finishes": true, or remove the timeout' });
+      } else {
+        command.timeout = timeout;
       }
     }
 
@@ -681,7 +687,7 @@ function bolts(entries: Entry[], ctx: Context): Bolt[] {
       ctx.found.push({ level: "warning", at: `${at}.targets`, message: `"${label}" names nothing to open` });
     }
 
-    const { steps, skipped } = parseSteps(listed, `${at}.targets`, ctx);
+    const { steps, skipped, broken } = parseSteps(listed, `${at}.targets`, ctx);
 
     if (steps.length === 0 && listed.length > 0 && skipped === 0) {
       ctx.found.push({ level: "error", at, message: `"${label}" resolved to nothing — running it would open nothing` });
@@ -691,7 +697,7 @@ function bolts(entries: Entry[], ctx: Context): Bolt[] {
     }
     skippedSteps.set(id, skipped);
 
-    const bolt: Bolt = { id, label, steps };
+    const bolt: Bolt = { id, label, steps, ...(broken ? { broken: `"${label}" can't run: ${broken}` } : {}) };
     const notes = optionalString(entry["notes"]);
     if (notes) bolt.notes = notes;
     const color = optionalString(entry["color"]);
@@ -739,7 +745,9 @@ function bolts(entries: Entry[], ctx: Context): Bolt[] {
     // not a process Wisp can stop, like `docker compose stop`.
     if (entry["down"] !== undefined) {
       if (Array.isArray(entry["down"])) {
-        const down = parseSteps(entry["down"] as unknown[], `${at}.down`, ctx).steps;
+        const parsed = parseSteps(entry["down"] as unknown[], `${at}.down`, ctx);
+        const down = parsed.steps;
+        if (parsed.broken && !bolt.broken) bolt.broken = `"${label}" can't be taken down: ${parsed.broken}`;
         if (down.length > 0) bolt.down = down;
       } else {
         ctx.found.push({ level: "error", at: `${at}.down`, message: '"down" must be a list of steps — it was ignored' });
@@ -800,51 +808,87 @@ function parseInputs(value: unknown, at: string, ctx: Context): InputSpec[] {
 }
 
 /** One list of steps: a bolt's `targets` or its `down`. */
-function parseSteps(listed: unknown[], at: string, ctx: Context): { steps: BoltStep[]; skipped: number } {
+function parseSteps(listed: unknown[], at: string, ctx: Context): { steps: BoltStep[]; skipped: number; broken?: string } {
   const steps: BoltStep[] = [];
   let skipped = 0;
+  const declared: { name?: string; after: string[]; where: string }[] = [];
 
   for (const [position, target] of listed.entries()) {
     const where = `${at}[${position}]`;
+    if (!isRecord(target)) {
+      ctx.found.push({ level: "error", at: where, message: 'dropped: a step is an object, like { "run": "pnpm dev" } or { "url": "localhost:3000" }' });
+      continue;
+    }
+    const name = optionalString(target["label"]);
+    const after = readAfter(target["after"], `${where}.after`, ctx);
+    declared.push({ ...(name ? { name } : {}), after: after ?? [], where });
+    const extra = { ...(name ? { name } : {}), ...(after && after.length > 0 ? { after } : {}) };
 
-    if (isRecord(target) && inlineKind(target)) {
+    if (inlineKind(target)) {
       const inlineId = ctx.idsByAt.get(where);
       if (!inlineId) continue;
       if (ctx.elsewhere.has(inlineId)) {
         skipped += 1;
         continue;
       }
-      if (!steps.some((step) => step.kind === "asset" && step.id === inlineId)) steps.push({ kind: "asset", id: inlineId });
+      steps.push({ kind: "asset", id: inlineId, ...extra });
       continue;
     }
 
-    if (isRecord(target) && target["together"] !== undefined) {
-      if (!Array.isArray(target["together"]) || target["together"].length === 0) {
-        ctx.found.push({ level: "error", at: `${where}.together`, message: 'dropped: "together" lists the steps to run at the same time' });
-        continue;
-      }
-      const inner = parseSteps(target["together"] as unknown[], `${where}.together`, ctx);
-      skipped += inner.skipped;
-      const members = inner.steps.filter((step) => {
-        if (step.kind !== "bolt") return true;
-        ctx.found.push({ level: "error", at: `${where}.together`, message: `dropped "${step.bolt}": a bolt can't run inside together, so list it before or after` });
-        return false;
-      });
-      if (members.length === 1) steps.push(members[0] as BoltStep);
-      else for (const member of members) steps.push({ ...member, together: position });
-      continue;
-    }
-
-    if (isRecord(target)) {
-      const step = specialStep(target, where, ctx);
-      if (step) steps.push(step);
-      continue;
-    }
-
-    ctx.found.push({ level: "error", at: where, message: 'dropped: a step is an object, like { "run": "pnpm dev" } or { "url": "localhost:3000" }' });
+    const step = specialStep(target, where, ctx);
+    if (step) steps.push({ ...step, ...extra });
   }
 
-  return { steps, skipped };
+  const broken = checkAfter(declared, ctx);
+  return { steps, skipped, ...(broken ? { broken } : {}) };
+}
+
+function readAfter(value: unknown, at: string, ctx: Context): string[] | undefined {
+  if (value === undefined) return undefined;
+  const listed = typeof value === "string" ? [value] : Array.isArray(value) ? value : undefined;
+  const names = listed?.filter((entry): entry is string => typeof entry === "string" && entry.trim() !== "").map((entry) => entry.trim());
+  if (!names || names.length !== (listed?.length ?? -1)) {
+    ctx.found.push({ level: "error", at, message: '"after" names the steps this one waits for, by their label: "after": "install" or ["lint", "test"]' });
+    return undefined;
+  }
+  return [...new Set(names)];
+}
+
+function checkAfter(steps: { name?: string; after: string[]; where: string }[], ctx: Context): string | undefined {
+  let broken: string | undefined;
+  const fail = (at: string, message: string) => {
+    ctx.found.push({ level: "error", at, message });
+    broken ??= message;
+  };
+  const count = new Map<string, number>();
+  for (const step of steps) if (step.name) count.set(step.name, (count.get(step.name) ?? 0) + 1);
+  for (const step of steps) {
+    for (const name of step.after) {
+      if (name === step.name) fail(`${step.where}.after`, `"${name}" can't wait for itself`);
+      else if (!count.has(name)) fail(`${step.where}.after`, `waits for "${name}", but no step has that label`);
+      else if ((count.get(name) ?? 0) > 1) fail(`${step.where}.after`, `waits for "${name}", but more than one step has that label`);
+    }
+  }
+  if (broken) return broken;
+
+  const byName = new Map(steps.flatMap((step) => (step.name ? [[step.name, step] as const] : [])));
+  const state = new Map<object, "visiting" | "done">();
+  const visit = (step: (typeof steps)[number], path: string[]): void => {
+    if (state.get(step) === "done") return;
+    if (state.get(step) === "visiting") {
+      const cycle = [...path.slice(path.indexOf(step.name ?? "")), step.name ?? ""];
+      fail(step.where, `these steps wait for each other: ${cycle.join(" → ")}`);
+      return;
+    }
+    state.set(step, "visiting");
+    for (const name of step.after) {
+      const next = byName.get(name);
+      if (next) visit(next, [...path, step.name ?? ""]);
+    }
+    state.set(step, "done");
+  };
+  for (const step of steps) visit(step, []);
+  return broken;
 }
 
 /** A target written as an object: `{ "wait": … }` or `{ "bolt": …, "workspace"?: … }`. */
@@ -880,14 +924,21 @@ function specialStep(target: Record<string, unknown>, at: string, ctx: Context):
 
   const bolt = optionalString(target["bolt"]);
   if (bolt) {
-    const workspace = optionalString(target["workspace"]);
-    return { kind: "bolt", bolt, ...(workspace ? { workspace } : {}) };
+    if (target["workspace"] !== undefined) {
+      ctx.found.push({
+        level: "error",
+        at,
+        message: `dropped: a bolt step runs a bolt of this file. To run "${bolt}" from another project, run it as a command: { "run": "wisp use <its .wisp.json> ${bolt}", "finishes": true }`,
+      });
+      return undefined;
+    }
+    return { kind: "bolt", bolt };
   }
 
   ctx.found.push({
     level: "error",
     at,
-    message: 'dropped: an object target needs one of "url", "folder", "file", "app", "run", "compose", "wait" or "bolt"',
+    message: 'dropped: a step needs one of "url", "folder", "file", "app", "run", "compose", "wait" or "bolt"',
   });
   return undefined;
 }
@@ -935,12 +986,12 @@ function checkDependencies(bolts: Bolt[], ctx: Context): void {
 
   for (const bolt of bolts) {
     for (const step of bolt.steps) {
-      if (step.kind !== "bolt" || step.workspace) continue;
+      if (step.kind !== "bolt") continue;
       if (!byLabel.has(step.bolt.toLowerCase())) {
         ctx.found.push({
           level: "error",
           at: `bolts`,
-          message: `"${bolt.label}" needs a bolt called "${step.bolt}", which this file does not declare`,
+          message: `"${bolt.label}" runs a bolt called "${step.bolt}", which this file does not declare`,
         });
       }
     }
@@ -968,7 +1019,7 @@ function checkDependencies(bolts: Bolt[], ctx: Context): void {
     }
     visiting.add(bolt.id);
     for (const step of bolt.steps) {
-      if (step.kind !== "bolt" || step.workspace) continue;
+      if (step.kind !== "bolt") continue;
       const next = byLabel.get(step.bolt.toLowerCase());
       if (next) visit(next, [...path, bolt.label]);
     }

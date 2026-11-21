@@ -30,7 +30,7 @@ async function files(tree: Record<string, unknown>): Promise<void> {
 
 async function draft() {
   const result = await draftProject(dir);
-  const raw = JSON.parse(result.contents) as { name: string; bolts: { label: string; color?: string; job?: boolean; targets: unknown[]; down?: unknown[] }[] };
+  const raw = JSON.parse(result.contents) as { name: string; bolts: { label: string; color?: string; targets: unknown[]; down?: unknown[] }[] };
   // Every bolt gets a colour, and no two the same; compared apart from the rest, since it is random.
   const colors = raw.bolts.map((bolt) => bolt.color);
   expect(colors.every((color) => /^#[0-9a-f]{6}$/.test(color ?? ""))).toBe(true);
@@ -62,13 +62,13 @@ describe("init reads what the project already has", () => {
     expect(parsed.bolts.map((bolt) => bolt.label)).toEqual(["Services", "Work on api", "Work on web", "Run everything", "Check"]);
     expect(parsed.bolts[0]).toEqual({ label: "Services", targets: [{ compose: "compose.yaml" }] });
     expect(parsed.bolts[1]!.targets).toEqual([
-      { bolt: "Services" },
+      { bolt: "Services", label: "services" },
       { folder: "apps/api" },
-      { run: "pnpm dev", cwd: "apps/api", label: "api dev" },
-      { wait: "http://localhost:4000" },
-      { url: "http://localhost:4000" },
+      { run: "pnpm dev", cwd: "apps/api", label: "api dev", after: "services" },
+      { wait: "http://localhost:4000", label: "up", after: "api dev" },
+      { url: "http://localhost:4000", after: "up" },
     ]);
-    expect(parsed.bolts[2]!.targets).toContainEqual({ url: "http://localhost:3000" });
+    expect(parsed.bolts[2]!.targets).toContainEqual({ url: "http://localhost:3000", after: "up" });
     expect(parsed.bolts[4]).toEqual({ label: "Check", targets: [{ run: "pnpm lint", label: "lint", finishes: true }, { run: "pnpm test", label: "test", finishes: true }] });
     expect(detected.sources).toContain("2 Docker services: db, cache");
   });
@@ -81,7 +81,7 @@ describe("init reads what the project already has", () => {
     });
     const { parsed } = await draft();
     expect(parsed.bolts[0]).toEqual({ label: "Services", targets: [{ compose: "deployments/development/docker-compose.yml" }] });
-    expect(parsed.bolts[1]!.targets[0]).toEqual({ bolt: "Services" });
+    expect(parsed.bolts[1]!.targets[0]).toEqual({ bolt: "Services", label: "services" });
   });
 
   it("uses a task runner when there is no package to start", async () => {
@@ -113,8 +113,8 @@ describe("init reads what the project already has", () => {
     await files({ "package.json": { name: "site", scripts: { dev: "vite" } }, "yarn.lock": "" });
     expect((await draft()).parsed.bolts[0]!.targets).toEqual([
       { run: "yarn dev", label: "Site dev" },
-      { wait: "http://localhost:5173" },
-      { url: "http://localhost:5173" },
+      { wait: "http://localhost:5173", label: "up", after: "Site dev" },
+      { url: "http://localhost:5173", after: "up" },
     ]);
   });
 
