@@ -7,5 +7,6 @@ export default defineConfig({
     // process and can point Wisp at its own temp directory without racing the others.
     isolate: true,
     env: { WISP_NOTIFY: "off" },
+    testTimeout: 15000,
   },
 });

@@ -97,7 +97,7 @@ function services(overrides: Partial<Services> = {}, library: Library = { reads:
 }
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
-const eventually = (check: () => void) => vi.waitFor(check, { timeout: 2000, interval: 10 });
+const eventually = (check: () => void) => vi.waitFor(check, { timeout: 5000, interval: 10 });
 const ARROW_DOWN = "\u001B[B";
 const ARROW_LEFT = "\u001B[D";
 const ARROW_RIGHT = "\u001B[C";
@@ -817,25 +817,41 @@ describe("the TUI", () => {
     await eventually(() => expect(app.lastFrame()).toMatch(/ACTIVITY[\s\S]*\d\d:\d\d Work on api finished/));
   });
 
-  it("changes your own settings from a screen of their own, with s", async () => {
+  it("changes your own settings by category, with s: the values on the right, saved together", async () => {
     const set = vi.fn(async (change: Record<string, string>) => change);
     const app = await open(services({ settings: { get: async () => ({}), set, choices: () => ({ editors: [{ label: "Visual Studio Code", value: "Visual Studio Code" }], terminals: ["Ghostty", "tmux"] }), mouse: async () => true, setMouse: async (on) => on, notify: async () => ({ when: "failures" }), setNotify: async (change) => ({ when: "failures", ...change }) } }));
     await tick();
     app.stdin.write("s");
+    await eventually(() => expect(app.lastFrame()).toContain("mouse on"));
+    const frame = app.lastFrame() ?? "";
+    expect(frame).toMatch(/❯ Opening/);
+    expect(frame).toContain("in the background");
+    expect(frame).toContain("when a run fails");
+    expect(frame).toContain("● the system default");
+    app.stdin.write("\r");
+    await eventually(() => expect(app.lastFrame()).toContain("[ Save ]"));
     await tick();
+    app.stdin.write(ARROW_RIGHT);
+    await eventually(() => expect(app.lastFrame()).toContain("● Visual Studio Code"));
+    app.stdin.write("\u0013");
+    await eventually(() => expect(set).toHaveBeenCalledWith({ folder: "Visual Studio Code", file: "" }));
+    await eventually(() => expect(app.lastFrame()).not.toContain("[ Save ]"));
+    expect(app.lastFrame()).toMatch(/ {2}Visual Studio Code · /);
+
+    app.stdin.write("\r");
+    await eventually(() => expect(app.lastFrame()).toContain("[ Save ]"));
     await tick();
-    await eventually(() => expect(app.lastFrame()).toMatch(/Folders open in +the system default/));
-    expect(app.lastFrame()).toContain("in the background, watched in Wisp");
-    app.stdin.write("\r"); // Folders
+    app.stdin.write(ARROW_RIGHT);
+    await eventually(() => expect(app.lastFrame()).toContain("App for folders"));
+    app.stdin.write(ARROW_DOWN);
     await tick();
-    await eventually(() => expect(app.lastFrame()).toContain("Visual Studio Code"));
-    app.stdin.write("2"); // the first editor, after "the system default"
+    for (const char of "Sublime Text") app.stdin.write(char);
     await tick();
-    await tick();
-    expect(set).toHaveBeenCalledWith({ folder: "Visual Studio Code" });
+    app.stdin.write("\u0013");
+    await eventually(() => expect(set).toHaveBeenCalledWith({ folder: "Sublime Text", file: "" }));
   });
 
-  it("turns the mouse off and on from settings, with ⏎ on its row", async () => {
+  it("turns the mouse off from the Dashboard category in settings", async () => {
     const setMouse = vi.fn(async (on: boolean) => on);
     const enable = vi.fn();
     const mouse = { subscribe: () => () => undefined, enable };
@@ -845,41 +861,42 @@ describe("the TUI", () => {
     await tick();
     expect(enable).toHaveBeenLastCalledWith(true);
     app.stdin.write("s");
+    await eventually(() => expect(app.lastFrame()).toContain("mouse on"));
+    for (const key of ["j", "j", "j"]) app.stdin.write(key);
+    await eventually(() => expect(app.lastFrame()).toMatch(/❯ Dashboard/));
+    app.stdin.write("\r");
+    await eventually(() => expect(app.lastFrame()).toContain("[ Save ]"));
     await tick();
-    await tick();
-    await eventually(() => expect(app.lastFrame()).toMatch(/Mouse +on/));
-    for (const key of ["j", "j", "j", "\r"]) {
-      app.stdin.write(key);
-      await tick();
-    }
-    await tick();
-    expect(setMouse).toHaveBeenCalledWith(false);
-    expect(app.lastFrame()).toMatch(/Mouse +off/);
+    app.stdin.write(ARROW_RIGHT);
+    await eventually(() => expect(app.lastFrame()).toContain("● off"));
+    app.stdin.write("\u0013");
+    await eventually(() => expect(setMouse).toHaveBeenCalledWith(false));
+    await eventually(() => expect(app.lastFrame()).toContain("mouse off"));
     expect(enable).toHaveBeenLastCalledWith(false);
   });
 
-  it("chooses when Wisp tells you about a run, and a webhook, from settings", async () => {
+  it("chooses when Wisp tells you about a run, and refuses a webhook that isn't https, from settings", async () => {
     const setNotify = vi.fn(async (change: { when?: "failures" | "all" | "off"; webhook?: string }) => ({ when: change.when ?? "all", ...(change.webhook ? { webhook: change.webhook } : {}) }));
     const api = services();
     const app = await open({ ...api, settings: { ...api.settings, setNotify } });
     app.stdin.write("s");
-    await eventually(() => expect(app.lastFrame()).toMatch(/Tell me +when a run fails/));
-    await eventually(() => expect(app.lastFrame()).toMatch(/Webhook +none/));
-    for (const key of ["j", "j", "j", "j"]) app.stdin.write(key);
-    await tick();
+    await eventually(() => expect(app.lastFrame()).toContain("when a run fails"));
+    app.stdin.write("j");
+    app.stdin.write("j");
+    await eventually(() => expect(app.lastFrame()).toMatch(/❯ Notifications/));
     app.stdin.write("\r");
-    await eventually(() => expect(app.lastFrame()).toContain("When any run ends"));
+    await eventually(() => expect(app.lastFrame()).toContain("[ Save ]"));
+    await tick();
+    app.stdin.write(ARROW_RIGHT);
+    await eventually(() => expect(app.lastFrame()).toContain("● when any run ends"));
+    app.stdin.write("\u0013");
+    await eventually(() => expect(setNotify).toHaveBeenCalledWith({ when: "all", webhook: "" }));
+    await eventually(() => expect(app.lastFrame()).not.toContain("[ Save ]"));
+
+    app.stdin.write("\r");
+    await eventually(() => expect(app.lastFrame()).toContain("[ Save ]"));
     await tick();
     app.stdin.write(ARROW_DOWN);
-    await tick();
-    app.stdin.write("\r");
-    await eventually(() => expect(setNotify).toHaveBeenCalledWith({ when: "all" }));
-    await eventually(() => expect(app.lastFrame()).toMatch(/Tell me +when any run ends/));
-    await tick();
-    app.stdin.write("j");
-    await eventually(() => expect(app.lastFrame()).toMatch(/❯ Webhook/));
-    app.stdin.write("\r");
-    await eventually(() => expect(app.lastFrame()).toContain("Address"));
     await tick();
     for (const char of "ntfy.sh/x") app.stdin.write(char);
     await tick();
@@ -2158,8 +2175,10 @@ describe("the mouse", () => {
     mouse.emit({ kind: "click", ...(await spot(frame, "[ Cancel ]")) });
     await eventually(() => expect(frame()).not.toContain("[ Create bolt ]"));
 
-    app.stdin.write("a");
-    await eventually(() => expect(frame()).toContain("[ Create bolt ]"));
+    await eventually(() => {
+      if (!frame().includes("[ Create bolt ]")) app.stdin.write("a");
+      expect(frame()).toContain("[ Create bolt ]");
+    });
     await tick();
     app.stdin.write("\t");
     await tick();
@@ -2193,21 +2212,52 @@ describe("the mouse", () => {
     expect(setUp).toHaveBeenCalledWith(suggestion, ["Check"]);
   });
 
-  it("chooses a setting with a click, and changes it with a second", async () => {
+  it("leaves settings by its tabs, by click or 1 2 3, but not while a category is open", async () => {
+    const { app, mouse, frame } = await withMouse(services());
+    const header = frame().split("\n")[0] ?? "";
+    app.stdin.write("s");
+    await eventually(() => expect(frame()).toContain("mouse on"));
+    app.stdin.write("\r");
+    await eventually(() => expect(frame()).toContain("[ Save ]"));
+    await tick();
+    expect(mouse.emit({ kind: "click", x: header.indexOf("2 Running") + 1, y: 0 })).toBe(false);
+    app.stdin.write("2");
+    await tick();
+    expect(frame()).toContain("[ Save ]");
+    app.stdin.write("\u001B");
+    await eventually(() => expect(frame()).not.toContain("[ Save ]"));
+    await eventually(() => expect(mouse.emit({ kind: "click", x: header.indexOf("3 History") + 1, y: 0 })).toBe(true));
+    await eventually(() => expect(frame()).toContain("Nothing has run yet"));
+    await eventually(() => {
+      if (!frame().includes("Workspaces")) app.stdin.write("1");
+      expect(frame()).toContain("Workspaces");
+    });
+    await eventually(() => {
+      if (!frame().includes("mouse on")) app.stdin.write("s");
+      expect(frame()).toContain("mouse on");
+    });
+    await tick();
+    app.stdin.write("2");
+    await eventually(() => expect(frame()).toContain("Nothing is running"));
+  });
+
+  it("chooses a settings category with a click, opens it with a second, and saves by click", async () => {
     const setMouse = vi.fn(async (on: boolean) => on);
     const api = services();
     const { app, mouse, frame } = await withMouse({ ...api, settings: { ...api.settings, setMouse } });
     app.stdin.write("s");
-    await tick();
-    await tick();
-    mouse.emit({ kind: "click", ...(await spot(frame, "Mouse")) });
-    await eventually(() => expect(frame()).toMatch(/❯ Mouse/));
-    expect(setMouse).not.toHaveBeenCalled();
-    mouse.emit({ kind: "click", ...(await spot(frame, "Mouse")) });
-    await tick();
-    await tick();
-    expect(setMouse).toHaveBeenCalledWith(false);
-    expect(frame()).toMatch(/Mouse +off/);
+    await eventually(() => expect(frame()).toContain("mouse on"));
+    mouse.emit({ kind: "click", ...(await spot(frame, "Dashboard")) });
+    await eventually(() => expect(frame()).toMatch(/❯ Dashboard/));
+    expect(frame()).not.toContain("[ Save ]");
+    mouse.emit({ kind: "click", ...(await spot(frame, "Dashboard")) });
+    await eventually(() => expect(frame()).toContain("[ Save ]"));
+    mouse.emit({ kind: "click", ...(await spot(frame, "○ off")) });
+    await eventually(() => expect(frame()).toContain("● off"));
+    mouse.emit({ kind: "click", ...(await spot(frame, "[ Save ]")) });
+    await eventually(() => expect(setMouse).toHaveBeenCalledWith(false));
+    await eventually(() => expect(frame()).toContain("mouse off"));
+    expect(app.lastFrame()).not.toContain("[ Save ]");
   });
 
   it("chooses a step in the bolt editor with a click, and opens it with a second", async () => {

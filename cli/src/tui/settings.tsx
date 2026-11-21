@@ -1,34 +1,29 @@
-/** Your own settings on this machine: the app that opens folders and files, where commands run, and when Wisp tells you about a run. */
+/** Your own settings on this machine, by category: what opens folders and files, where commands run, when Wisp tells you about a run, and the mouse. */
 
-import { Box, Text, useInput } from "ink";
+import { Box, type DOMElement, Text, useInput } from "ink";
 import { useEffect, useRef, useState } from "react";
 
 import { webhookProblem } from "../core/notify.js";
-import { Form, Picker } from "./forms.js";
+import { type FieldSpec, Form } from "./forms.js";
 import type { Glyphs } from "./glyphs.js";
 import { useMouse, useRefs } from "./mouse.js";
 import type { NotifyChoice, OpenWith, Services } from "./model.js";
 import { TONE } from "./tones.js";
 
-type Key = "folder" | "file" | "terminal";
+type Category = "opening" | "running" | "notifications" | "dashboard";
 
-const ROWS: { key: Key | "mouse" | "notify" | "webhook"; label: string; what: string }[] = [
-  { key: "folder", label: "Folders open in", what: "a bolt's folder steps, like apps/api" },
-  { key: "file", label: "Files open in", what: "a bolt's file steps, like docs/runbook.md" },
-  { key: "terminal", label: "Commands run", what: "a bolt's commands, like pnpm dev" },
-  { key: "mouse", label: "Mouse", what: "click rows and tabs, scroll output with the wheel. Off: select text without holding Shift" },
-  { key: "notify", label: "Tell me", what: "about a run you might have missed: nobody watched it, or it took over 30s" },
-  { key: "webhook", label: "Webhook", what: "also post it here, for a server: Slack, Discord, ntfy or your own" },
+const CATEGORIES: { key: Category; label: string; intro: string }[] = [
+  { key: "opening", label: "Opening", intro: "What opens a bolt's folder and file steps. From a terminal: wisp open-with." },
+  { key: "running", label: "Running", intro: "Where a bolt's commands go while they keep running, like a dev server. Commands that finish always run where you can see them. From a terminal: wisp open-with terminal." },
+  { key: "notifications", label: "Notifications", intro: "About a run you might have missed: one nobody watched (cron, a script), or one that took over 30 seconds. From a terminal: wisp notify." },
+  { key: "dashboard", label: "Dashboard", intro: "How this screen behaves." },
 ];
 
 const WHEN = { failures: "when a run fails", all: "when any run ends", off: "never" } as const;
-
 const DEFAULT = "__default";
 const OTHER = "__other";
 
-type Mode = { kind: "list" } | { kind: "pick"; key: Key } | { kind: "other"; key: Key } | { kind: "notify" } | { kind: "webhook" };
-
-export function SettingsScreen({ services, glyphs, height, onClose, onSaved, onMouse }: { services: Services; glyphs: Glyphs; height: number; onClose: () => void; onSaved: (text: string) => void; onMouse?: (on: boolean) => void }) {
+export function SettingsScreen({ services, glyphs, height, columns = 100, onClose, onSaved, onMouse, onJump, onBusy }: { services: Services; glyphs: Glyphs; height: number; columns?: number; onClose: () => void; onSaved: (text: string) => void; onMouse?: (on: boolean) => void; onJump?: (input: string) => void; onBusy?: (busy: boolean) => void }) {
   const [current, setCurrent] = useState<OpenWith>();
   const [mouse, setMouse] = useState<boolean>();
   const [notify, setNotify] = useState<NotifyChoice>();
@@ -38,8 +33,18 @@ export function SettingsScreen({ services, glyphs, height, onClose, onSaved, onM
     indexRef.current = next;
     setIndexState(next);
   };
-  const [mode, setMode] = useState<Mode>({ kind: "list" });
+  const [editing, setEditingState] = useState(false);
+  const editingRef = useRef(false);
+  const setEditing = (next: boolean) => {
+    editingRef.current = next;
+    setEditingState(next);
+  };
+  const [session, setSession] = useState(0);
   const choices = useRef(services.settings.choices()).current;
+
+  useEffect(() => {
+    onBusy?.(editing);
+  }, [editing, onBusy]);
 
   useEffect(() => {
     void services.settings.get().then(setCurrent);
@@ -47,200 +52,223 @@ export function SettingsScreen({ services, glyphs, height, onClose, onSaved, onM
     void services.settings.notify().then(setNotify);
   }, [services]);
 
-  // On and off, so ⏎ flips it rather than opening a list of two.
-  const toggleMouse = async () => {
-    const next = await services.settings.setMouse(!(mouse ?? true));
-    setMouse(next);
-    onMouse?.(next);
-    onSaved(`Mouse: ${next ? "on" : "off"}`);
+  const leave = () => {
+    setEditing(false);
+    setSession((count) => count + 1);
   };
 
-  const save = async (key: Key, value: string) => {
-    const next = await services.settings.set({ [key]: value });
-    setCurrent(next);
-    setMode({ kind: "list" });
-    const row = ROWS.find((entry) => entry.key === key)!;
-    onSaved(`${row.label}: ${describe(key, next[key])}`);
-  };
-
-  // Open the selected setting: a list to choose from, or on and off for the mouse.
-  const change = (at: number) => {
-    const chosen = (ROWS[at] as (typeof ROWS)[number]).key;
-    if (chosen === "mouse") return void toggleMouse();
-    if (chosen === "notify" || chosen === "webhook") return setMode({ kind: chosen });
-    setMode({ kind: "pick", key: chosen });
-  };
-  // A click chooses a setting; a click on the chosen one changes it, as ⏎ does.
   const rowNodes = useRefs<number>();
+  const right = useRef<DOMElement>(null);
   useMouse(
     (event, at) => {
       if (event.kind !== "click") return false;
       const hit = rowNodes.entries().find(([, node]) => at(node));
-      if (!hit) return false;
-      if (hit[0] === indexRef.current) change(hit[0]);
-      else setIndex(hit[0]);
-      return true;
+      if (hit) {
+        if (hit[0] === indexRef.current) setEditing(true);
+        else setIndex(hit[0]);
+        return true;
+      }
+      if (at(right.current)) {
+        setEditing(true);
+        return true;
+      }
+      return false;
     },
-    mode.kind === "list",
+    !editing,
   );
 
   useInput(
     (input, key) => {
       if (key.escape || input === "q" || input === "s") return onClose();
+      if (onJump && (input === "1" || input === "2" || input === "3")) return onJump(input);
       if (key.upArrow || input === "k") return setIndex(Math.max(0, indexRef.current - 1));
-      if (key.downArrow || input === "j") return setIndex(Math.min(ROWS.length - 1, indexRef.current + 1));
-      if (key.return || input === " ") return change(indexRef.current);
+      if (key.downArrow || input === "j") return setIndex(Math.min(CATEGORIES.length - 1, indexRef.current + 1));
+      if (key.return || key.rightArrow || input === " ") return setEditing(true);
     },
-    { isActive: mode.kind === "list" },
+    { isActive: !editing },
   );
 
-  if (mode.kind === "pick") {
-    const row = ROWS.find((entry) => entry.key === mode.key)!;
-    const options =
-      mode.key === "terminal"
-        ? [
-            { key: DEFAULT, title: "In the background", detail: "no windows: watch them in the Running tab", group: "Default" },
-            ...choices.terminals
-              .filter((name) => name !== "tmux" && name !== "zellij")
-              .map((name) => ({ key: name, title: `A ${name} window`, detail: "each command in a window of its own", group: "A terminal" })),
-            ...choices.terminals
-              .filter((name) => name === "tmux" || name === "zellij")
-              .map((name) => ({ key: name, title: `A ${name} session`, detail: name === "tmux" ? "the one for servers over SSH: attach later with tmux attach -t wisp" : "inside the zellij you are in", group: "A multiplexer" })),
-          ]
-        : [
-            { key: DEFAULT, title: "The system default", detail: "Finder, or your desktop's file manager or app", group: "Default" },
-            ...choices.editors.map((editor) => ({ key: editor.value, title: editor.label, detail: "installed here", group: "An editor" })),
-            { key: OTHER, title: "Another app…", detail: "type its name", group: "Other" },
-          ];
-    return (
-      <Picker
-        title={row.label}
-        intro={`For ${row.what}. Saved on this machine only.`}
-        options={options}
-        glyphs={glyphs}
-        height={height}
-        onCancel={() => setMode({ kind: "list" })}
-        onPick={(picked) => {
-          if (picked === OTHER) return setMode({ kind: "other", key: mode.key });
-          void save(mode.key, picked === DEFAULT ? "" : picked);
-        }}
-      />
-    );
-  }
+  const loaded = current !== undefined && mouse !== undefined && notify !== undefined;
+  const category = CATEGORIES[index] as (typeof CATEGORIES)[number];
+  const narrow = columns < 80;
+  const leftWidth = Math.min(34, Math.max(24, Math.floor(columns * 0.3)));
 
-  if (mode.kind === "notify") {
-    return (
-      <Picker
-        title="Tell me"
-        intro="About a run you might have missed: one nobody watched (cron, a script), or one that took over 30 seconds. On this screen, and at the webhook if you set one."
-        options={[
-          { key: "failures", title: "When a run fails", detail: "the default", group: "Choose" },
-          { key: "all", title: "When any run ends", detail: "passed or failed", group: "Choose" },
-          { key: "off", title: "Never", detail: "", group: "Choose" },
-        ]}
-        glyphs={glyphs}
-        height={height}
-        onCancel={() => setMode({ kind: "list" })}
-        onPick={(picked) => {
-          void services.settings.setNotify({ when: picked as NotifyChoice["when"] }).then((next) => {
-            setNotify(next);
-            setMode({ kind: "list" });
-            onSaved(`Tell me: ${WHEN[next.when]}`);
-          });
-        }}
-      />
-    );
-  }
+  const summary = (key: Category): string => {
+    if (!loaded) return "…";
+    if (key === "opening") return current.folder === current.file ? describe("folder", current.folder) : `${describe("folder", current.folder)} · ${describe("file", current.file)}`;
+    if (key === "running") return current.terminal ? describe("terminal", current.terminal) : "in the background";
+    if (key === "notifications") return `${WHEN[notify.when]}${notify.webhook ? " · webhook" : ""}`;
+    return `mouse ${mouse ? "on" : "off"}`;
+  };
 
-  if (mode.kind === "webhook") {
+  const form = () => {
+    if (!loaded) return <Text dimColor>…</Text>;
+    const { fields, initial, save } = categoryForm(category.key, { current, mouse, notify, editors: choices.editors, terminals: choices.terminals });
     return (
       <Form
-        title="Webhook"
-        intro="Where to post it as well, so a server can reach you. Slack, Discord and ntfy get a message they show as it is; any other address gets JSON."
-        fields={[{ key: "url", label: "Address", hint: "leave it empty for none", placeholder: "https://ntfy.sh/my-server" }]}
-        initial={{ url: notify?.webhook ?? "" }}
+        key={`${category.key}:${session}`}
+        title={category.label}
+        intro={category.intro}
+        fields={fields}
+        initial={initial}
         submitLabel="Save"
+        cancelLabel="Back"
         glyphs={glyphs}
         height={height}
-        onCancel={() => setMode({ kind: "list" })}
+        active={editing}
+        keys={editing}
+        onCancel={leave}
         onSubmit={async (values) => {
-          const url = values["url"]?.trim() ?? "";
-          const refused = url ? webhookProblem(url) : undefined;
-          if (refused) return { url: refused };
-          const next = await services.settings.setNotify({ webhook: url });
-          setNotify(next);
-          setMode({ kind: "list" });
-          onSaved(`Webhook: ${next.webhook ?? "none"}`);
+          const outcome = await save(values, services);
+          if (outcome.errors) return outcome.errors;
+          if (outcome.current) setCurrent(outcome.current);
+          if (outcome.notify) setNotify(outcome.notify);
+          if (outcome.mouse !== undefined) {
+            setMouse(outcome.mouse);
+            onMouse?.(outcome.mouse);
+          }
+          onSaved(outcome.said ?? "Saved");
+          leave();
           return undefined;
         }}
       />
     );
-  }
+  };
 
-  if (mode.kind === "other") {
-    const row = ROWS.find((entry) => entry.key === mode.key)!;
-    return (
-      <Form
-        title={row.label}
-        intro={`For ${row.what}.`}
-        fields={[{ key: "app", label: "App", hint: "its name on macOS, or a command on Linux and Windows", placeholder: "Visual Studio Code", required: true }]}
-        initial={{ app: current?.[mode.key] ?? "" }}
-        submitLabel="Save"
-        glyphs={glyphs}
-        height={height}
-        onCancel={() => setMode({ kind: "pick", key: mode.key })}
-        onSubmit={async (values) => {
-          await save(mode.key, values["app"]?.trim() ?? "");
-          return undefined;
-        }}
-      />
-    );
-  }
-
-  return (
-    <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor={TONE.accent} paddingX={1}>
-      <Text bold color={TONE.accent}>Settings</Text>
-      <Text dimColor>Your own choices, saved on this machine only. A project's file never changes them.</Text>
+  const list = (
+    <Box flexDirection="column" width={narrow ? undefined : leftWidth} flexGrow={narrow ? 1 : 0} flexShrink={0} height={height} borderStyle={glyphs.border} borderColor={editing ? "gray" : TONE.accent} paddingX={1}>
+      <Text bold color={editing ? undefined : TONE.accent}>Settings</Text>
+      <Text dimColor wrap="truncate-end">On this machine only.</Text>
       <Text> </Text>
-      {ROWS.map((row, at) => {
+      {CATEGORIES.map((entry, at) => {
         const selected = at === index;
         return (
-          <Box key={row.key} ref={rowNodes.set(at)} flexDirection="column" flexShrink={0}>
+          <Box key={entry.key} ref={rowNodes.set(at)} flexDirection="column" flexShrink={0} marginBottom={1}>
             <Text wrap="truncate-end">
               <Text color={TONE.accent}>{selected ? `${glyphs.pointer} ` : "  "}</Text>
-              <Text bold={selected} color={selected ? TONE.accent : undefined}>{row.label.padEnd(18)}</Text>
-              <Text>
-                {row.key === "mouse"
-                  ? mouse === undefined
-                    ? "…"
-                    : mouse
-                      ? "on"
-                      : "off"
-                  : row.key === "notify"
-                    ? notify
-                      ? WHEN[notify.when]
-                      : "…"
-                    : row.key === "webhook"
-                      ? notify
-                        ? (notify.webhook ?? "none")
-                        : "…"
-                      : current
-                        ? describe(row.key, current[row.key])
-                        : "…"}
-              </Text>
+              <Text bold={selected} color={selected && !editing ? TONE.accent : undefined}>{entry.label}</Text>
             </Text>
-            {selected ? <Text dimColor wrap="truncate-end">{`    ${row.what}`}</Text> : null}
+            <Text dimColor wrap="truncate-end">{`  ${summary(entry.key)}`}</Text>
           </Box>
         );
       })}
       <Box flexGrow={1} />
-      <Text dimColor>{"↑↓ choose · ⏎ change · esc back   (also on the command line: wisp open-with, wisp notify)"}</Text>
+      {editing ? null : <Text dimColor wrap="truncate-end">⏎ edit · esc back</Text>}
+    </Box>
+  );
+
+  if (narrow) return editing ? <Box ref={right} flexDirection="column" flexGrow={1}>{form()}</Box> : list;
+  return (
+    <Box height={height}>
+      {list}
+      <Box ref={right} flexDirection="column" flexGrow={1} minWidth={0}>
+        {form()}
+      </Box>
     </Box>
   );
 }
 
-/** A setting in words: what it is, or what happens when nothing is chosen. */
-function describe(key: Key, value: string | undefined): string {
+interface Saved {
+  errors?: Record<string, string>;
+  current?: OpenWith;
+  notify?: NotifyChoice;
+  mouse?: boolean;
+  said?: string;
+}
+
+function categoryForm(
+  category: Category,
+  state: { current: OpenWith; mouse: boolean; notify: NotifyChoice; editors: { value: string; label: string }[]; terminals: string[] },
+): { fields: FieldSpec[]; initial: Record<string, string>; save: (values: Record<string, string>, services: Services) => Promise<Saved> } {
+  const { current, mouse, notify, editors, terminals } = state;
+
+  if (category === "opening") {
+    const apps = [{ value: DEFAULT, label: "the system default" }, ...editors, { value: OTHER, label: "another app…" }];
+    const known = (value: string | undefined) => (!value ? DEFAULT : editors.some((editor) => editor.value === value) ? value : OTHER);
+    const other = (key: "folder" | "file") => ({
+      key: `${key}App`,
+      label: key === "folder" ? "App for folders" : "App for files",
+      hint: "its name on macOS, or a command on Linux and Windows",
+      placeholder: "Visual Studio Code",
+      required: true,
+      when: (values: Record<string, string>) => values[key] === OTHER,
+    });
+    return {
+      fields: [
+        { key: "folder", label: "Folders open in", hint: "a bolt's folder steps, like apps/api", choices: apps },
+        other("folder"),
+        { key: "file", label: "Files open in", hint: "a bolt's file steps, like docs/runbook.md", choices: apps },
+        other("file"),
+      ],
+      initial: {
+        folder: known(current.folder),
+        folderApp: known(current.folder) === OTHER ? (current.folder ?? "") : "",
+        file: known(current.file),
+        fileApp: known(current.file) === OTHER ? (current.file ?? "") : "",
+      },
+      save: async (values, services) => {
+        const pick = (key: "folder" | "file") => (values[key] === DEFAULT ? "" : values[key] === OTHER ? (values[`${key}App`] ?? "").trim() : (values[key] ?? ""));
+        const next = await services.settings.set({ folder: pick("folder"), file: pick("file") });
+        return { current: next, said: `Folders open in ${describe("folder", next.folder)}, files in ${describe("file", next.file)}` };
+      },
+    };
+  }
+
+  if (category === "running") {
+    const options = [
+      { value: DEFAULT, label: "in the background, watched in Wisp" },
+      ...terminals.filter((name) => name !== "tmux" && name !== "zellij").map((name) => ({ value: name, label: `in a ${name} window` })),
+      ...terminals.filter((name) => name === "tmux" || name === "zellij").map((name) => ({ value: name, label: `in a ${name} session` })),
+    ];
+    if (current.terminal && !options.some((option) => option.value === current.terminal)) options.push({ value: current.terminal, label: describe("terminal", current.terminal) });
+    return {
+      fields: [{ key: "terminal", label: "Commands run", hint: "a tmux session suits a server over SSH: tmux attach -t wisp", choices: options }],
+      initial: { terminal: current.terminal || DEFAULT },
+      save: async (values, services) => {
+        const next = await services.settings.set({ terminal: values["terminal"] === DEFAULT ? "" : (values["terminal"] ?? "") });
+        return { current: next, said: `Commands run ${describe("terminal", next.terminal)}` };
+      },
+    };
+  }
+
+  if (category === "notifications") {
+    return {
+      fields: [
+        { key: "when", label: "Tell me", hint: "on this screen, and at the webhook if there is one", choices: (Object.keys(WHEN) as (keyof typeof WHEN)[]).map((value) => ({ value, label: WHEN[value] })) },
+        { key: "webhook", label: "Webhook", hint: "for a server: Slack, Discord and ntfy get a message, any other address JSON. Empty for none", placeholder: "https://ntfy.sh/my-server" },
+      ],
+      initial: { when: notify.when, webhook: notify.webhook ?? "" },
+      save: async (values, services) => {
+        const url = values["webhook"]?.trim() ?? "";
+        const refused = url ? webhookProblem(url) : undefined;
+        if (refused) return { errors: { webhook: refused } };
+        const next = await services.settings.setNotify({ when: values["when"] as NotifyChoice["when"], webhook: url });
+        return { notify: next, said: `Tell me ${WHEN[next.when]}${next.webhook ? `, and at ${next.webhook}` : ""}` };
+      },
+    };
+  }
+
+  return {
+    fields: [
+      {
+        key: "mouse",
+        label: "Mouse",
+        hint: "on: click rows and tabs, scroll with the wheel. Off: select text without holding Shift",
+        choices: [
+          { value: "on", label: "on" },
+          { value: "off", label: "off" },
+        ],
+      },
+    ],
+    initial: { mouse: mouse ? "on" : "off" },
+    save: async (values, services) => {
+      const next = await services.settings.setMouse(values["mouse"] === "on");
+      return { mouse: next, said: `Mouse: ${next ? "on" : "off"}` };
+    },
+  };
+}
+
+function describe(key: "folder" | "file" | "terminal", value: string | undefined): string {
   if (value) return key === "terminal" ? (value === "tmux" || value === "zellij" ? `in a ${value} session` : `in a ${value} window`) : value;
   return key === "terminal" ? "in the background, watched in Wisp" : "the system default";
 }

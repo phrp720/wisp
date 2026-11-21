@@ -36,7 +36,7 @@ Forms take clicks too: a field to type in it (on its text, the cursor goes where
 click), an option to choose it, the button to save, and `[ Cancel ]` beside it to leave
 without saving (on a new step, `[ Back ]`, to the list of kinds; `esc` does the same). So do the lists you pick from, the setup checklist and Settings. In the
 editor, the tabs along the top take you elsewhere whenever no form is open; with one open,
-save or cancel it first. Allowing a project's commands and confirming a delete stay
+save or cancel it first. Settings work the same way. Allowing a project's commands and confirming a delete stay
 on the keyboard, so a stray click can never do either.
 
 It works over SSH too, since your own terminal sends the clicks. In tmux it needs
@@ -77,6 +77,6 @@ the file itself if you'd rather.
 | `u` · `d` · `G` | scroll output up · down · back to the newest |
 | `f` | on Running: the log full screen, where `↑↓` scroll it and `←→` go to the command before or after |
 | `t` | allow a file's commands |
-| `s` | settings: your editor, and where commands run |
+| `s` | settings, by category: what opens folders and files, where commands run, notifications, the mouse |
 | `D` | on History: delete the selected run, or the selected bolt's runs |
 | `r` · `?` · `q` | reload the files · the keys of the tab you're on · quit |

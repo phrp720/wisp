@@ -3,16 +3,20 @@
 Press `s` in the dashboard. Your own choices, saved on your machine only: a project's file
 never changes them.
 
+The categories are on the left, and the selected one's settings with their values on the
+right. `⏎` (or a click) edits them there: `[ Save ]` keeps the whole category, `[ Back ]`
+or `esc` leaves it as it was.
+
 ![Wisp's settings: choosing WebStorm for folders, then the choices for where commands run](/demo/settings.gif)
 
-| Setting | Choices |
-|---|---|
-| **Folders open in** | the system default (Finder, your file manager), or an editor Wisp found installed: VS Code, Cursor, Zed, WebStorm, IntelliJ, PyCharm, Sublime Text… or any app by name |
-| **Files open in** | the same, for a bolt's file steps |
-| **Commands run** | in the background (the default: watch them in the Running tab), in a terminal window each (Terminal, iTerm, Ghostty, WezTerm, kitty, Alacritty), or in a tmux or zellij session |
-| **Mouse** | on (the default: click rows and tabs, scroll with the wheel) or off, to select text without holding Shift |
-| **Tell me** | when a run fails (the default), when any run ends, or never. See [notifications](#notifications) |
-| **Webhook** | an address to post it to as well, for a server: Slack, Discord, ntfy or your own |
+| Category | Setting | Choices |
+|---|---|---|
+| Opening | **Folders open in** | the system default (Finder, your file manager), or an editor Wisp found installed: VS Code, Cursor, Zed, WebStorm, IntelliJ, PyCharm, Sublime Text… or any app by name |
+| | **Files open in** | the same, for a bolt's file steps |
+| Running | **Commands run** | in the background (the default: watch them in the Running tab), in a terminal window each (Terminal, iTerm, Ghostty, WezTerm, kitty, Alacritty), or in a tmux or zellij session |
+| Notifications | **Tell me** | when a run fails (the default), when any run ends, or never. See [notifications](#notifications) |
+| | **Webhook** | an address to post it to as well, for a server: Slack, Discord, ntfy or your own |
+| Dashboard | **Mouse** | on (the default: click rows and tabs, scroll with the wheel) or off, to select text without holding Shift |
 
 A change applies to the next run, without restarting Wisp. The mouse changes straight away.
 

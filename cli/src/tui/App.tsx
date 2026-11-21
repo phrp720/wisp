@@ -139,9 +139,9 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
   const bolts = current?.workspace.bolts ?? [];
   const bolt = bolts[Math.min(boltIndex, Math.max(0, bolts.length - 1))];
   const [checked, setChecked] = useState<{ read: WorkspaceRead; diagnostics: Diagnostic[] }>();
-  const editorBusy = useRef(false);
-  const setEditorBusy = useCallback((busy: boolean) => {
-    editorBusy.current = busy;
+  const formOpen = useRef(false);
+  const setFormOpen = useCallback((busy: boolean) => {
+    formOpen.current = busy;
   }, []);
   useEffect(() => {
     if (!current) return;
@@ -906,7 +906,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
     if (!library) return false;
     // The tabs along the top.
     if (event.y === 0) {
-      if (event.kind !== "click" || !(TABS_CLICKABLE.has(view.kind) || (view.kind === "editor" && !editorBusy.current))) return false;
+      if (event.kind !== "click" || !(TABS_CLICKABLE.has(view.kind) || ((view.kind === "editor" || view.kind === "settings") && !formOpen.current))) return false;
       const tab = headerTabAt(event.x, glyphs, runningStatus(glyphs, runningCount, failing)?.text ?? "");
       if (tab === "bolts" && view.kind !== "browse") setView({ kind: "browse" });
       if (tab === "running" && view.kind !== "processes") setView(activity());
@@ -1082,7 +1082,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
           columns={columns}
           onHint={setScreenHint}
           onJump={(input) => void jump(input)}
-          onBusy={setEditorBusy}
+          onBusy={setFormOpen}
           onClose={() => setView({ kind: "browse" })}
           onChanged={(label) => {
             savedAt.current = Date.now();
@@ -1180,7 +1180,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
           }}
         />
       ) : view.kind === "settings" ? (
-        <SettingsScreen services={services} glyphs={glyphs} height={bodyHeight} onMouse={setMouseOn} onClose={() => setView({ kind: "browse" })} onSaved={(text) => {
+        <SettingsScreen services={services} glyphs={glyphs} height={bodyHeight} columns={columns} onMouse={setMouseOn} onJump={(input) => void jump(input)} onBusy={setFormOpen} onClose={() => setView({ kind: "browse" })} onSaved={(text) => {
           say(text);
           // Each workspace fixes which app opens its folders and files when it is read, so
           // read them again: the next run uses the new choice, without restarting Wisp.
