@@ -295,7 +295,7 @@ describe("the TUI", () => {
     app.stdin.write("e");
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ .*1 .*apps\/api/));
     await tick();
-    app.stdin.write("d");
+    app.stdin.write("D");
     await eventually(() => expect(app.lastFrame()).toContain("Remove this step?"));
     const frame = app.lastFrame() ?? "";
     expect(frame).toContain("⚡ Work on api");
@@ -305,7 +305,7 @@ describe("the TUI", () => {
     await tick();
     await eventually(() => expect(app.lastFrame()).not.toContain("Remove this step?"));
     expect(removeStep).not.toHaveBeenCalled();
-    app.stdin.write("d");
+    app.stdin.write("D");
     await eventually(() => expect(app.lastFrame()).toContain("Remove this step?"));
     await tick();
     app.stdin.write("y");
@@ -875,8 +875,9 @@ describe("the TUI", () => {
     app.stdin.write("\r");
     await eventually(() => expect(setNotify).toHaveBeenCalledWith({ when: "all" }));
     await eventually(() => expect(app.lastFrame()).toMatch(/Tell me +when any run ends/));
-    app.stdin.write("j");
     await tick();
+    app.stdin.write("j");
+    await eventually(() => expect(app.lastFrame()).toMatch(/❯ Webhook/));
     app.stdin.write("\r");
     await eventually(() => expect(app.lastFrame()).toContain("Address"));
     await tick();
@@ -919,8 +920,10 @@ describe("the TUI", () => {
     const app = await open(services({ suggestSetup: async () => suggestion, setUp, declineSetup }, { reads: [infra], unreadable: [] }));
     await tick();
     await eventually(() => expect(app.lastFrame()).toContain("Set up this bolt"));
-    expect(app.lastFrame()).toContain("d don't ask again");
-    app.stdin.write("d");
+    expect(app.lastFrame()).toContain("N don't ask again");
+    expect(app.lastFrame()).toContain("[ Not now ]");
+    expect(app.lastFrame()).toContain("[ Don't ask again ]");
+    app.stdin.write("N");
     await tick();
     await tick();
     expect(declineSetup).toHaveBeenCalledWith("/dev/shop");
@@ -953,12 +956,26 @@ describe("commands that finish, down and history in the TUI", () => {
     await eventually(() => expect(app.lastFrame()).toContain("All done."));
     expect(app.lastFrame()).toContain("❯ Work on api");
     expect(app.lastFrame()).toContain("Work on web");
-    expect(app.lastFrame()).toContain("⏎ run again · esc hide");
+    expect(app.lastFrame()).toContain("⏎ done");
     expect(app.lastFrame()).not.toContain("When you run it");
     await tick();
     app.stdin.write("\u001B");
     await eventually(() => expect(app.lastFrame()).toContain("When you run it, it will:"));
     expect(app.lastFrame()).not.toContain("All done.");
+  });
+
+  it("closes a finished run on ⏎, back to the bolt, and runs it again only on the next ⏎", async () => {
+    const run = vi.fn(services().run);
+    const app = await open(services({ run }));
+    app.stdin.write("\r");
+    await eventually(() => expect(app.lastFrame()).toContain("All done."));
+    await tick();
+    app.stdin.write("\r");
+    await eventually(() => expect(app.lastFrame()).toContain("When you run it, it will:"));
+    expect(run).toHaveBeenCalledTimes(1);
+    await tick();
+    app.stdin.write("\r");
+    await eventually(() => expect(run).toHaveBeenCalledTimes(2));
   });
 
   it("streams an attached command's output while it runs", async () => {
@@ -1030,6 +1047,16 @@ describe("commands that finish, down and history in the TUI", () => {
     await eventually(() => expect(app.lastFrame()).toMatch(/Work on api\s+● running/));
   });
 
+  it("says in the list where a run came from only when it wasn't you", async () => {
+    const entry = { id: "aa", number: 3, workspace: acme.workspace.file, workspaceName: "Acme", bolt: "Check", trigger: "tui", git: { branch: "main", commit: "a1b2c3d", subject: "fix cart total" }, startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), ok: true, steps: [] };
+    const app = render(<App services={services({ history: async () => [entry] })} glyphs={unicode} size={{ columns: 130, rows: 30 }} />);
+    await tick();
+    app.stdin.write("h");
+    await eventually(() => expect(app.lastFrame()).toContain("Check #3"));
+    expect(app.lastFrame()).toContain("a1b2c3d fix cart total");
+    expect(app.lastFrame()).not.toContain("the dashboard");
+  });
+
   it("shows past runs like a CI: bolts to filter by, numbered runs, and a run's summary, pipeline and logs", async () => {
     const entry = {
       id: "3f2a1b",
@@ -1059,7 +1086,7 @@ describe("commands that finish, down and history in the TUI", () => {
     let frame = app.lastFrame() ?? "";
     expect(frame).toContain("All bolts");
     expect(frame).toContain("Check #7");
-    expect(frame).toContain("failed at test · “fix cart total” · a1b2c3d");
+    expect(frame).toMatch(/✗ Check #7 +at test +a1b2c3d fix cart total +· git hook +· Acme/);
     expect(frame).toContain(" main ");
 
     // / narrows the runs as you type; nothing matching says so.
@@ -1559,7 +1586,7 @@ describe("doing everything without JSON", () => {
     await eventually(() => expect(app.lastFrame()).not.toContain("[ Add input ]"));
     app.stdin.write("k");
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ Inputs +tag/));
-    app.stdin.write("d");
+    app.stdin.write("D");
     await eventually(() => expect(app.lastFrame()).toContain("Remove this input?"));
     await tick();
     app.stdin.write("y");
@@ -2058,6 +2085,73 @@ describe("the mouse", () => {
     expect(frame()).toContain("[ Add step ]");
   });
 
+  it("leaves the editor by its tabs, by click or 1 2 3, but not while a form is open; a new step's form goes back to the choices", async () => {
+    const { app, mouse, frame } = await withMouse(services());
+    const header = frame().split("\n")[0] ?? "";
+    app.stdin.write("e");
+    await eventually(() => expect(frame()).toContain("+  add the first step"));
+    await tick();
+    app.stdin.write("a");
+    await eventually(() => expect(frame()).toContain("Run a command"));
+    await tick();
+    mouse.emit({ kind: "click", ...(await spot(frame, "[ Cancel ]")) });
+    await eventually(() => expect(frame()).not.toContain("[ Cancel ]"));
+    app.stdin.write("a");
+    await eventually(() => expect(frame()).toContain("Run a command"));
+    await tick();
+    app.stdin.write("1");
+    await eventually(() => expect(frame()).toContain("[ Add step ]"));
+    expect(mouse.emit({ kind: "click", x: header.indexOf("2 Running") + 1, y: 0 })).toBe(false);
+    app.stdin.write("2");
+    await tick();
+    expect(frame()).toContain("[ Add step ]");
+    mouse.emit({ kind: "click", ...(await spot(frame, "[ Back ]")) });
+    await eventually(() => expect(frame()).toContain("[ Cancel ]"));
+    expect(frame()).toContain("Run a command");
+    app.stdin.write("1");
+    await eventually(() => expect(frame()).toContain("[ Add step ]"));
+    app.stdin.write("\u001B");
+    await eventually(() => expect(frame()).toContain("[ Cancel ]"));
+    await tick();
+    mouse.emit({ kind: "click", ...(await spot(frame, "[ Cancel ]")) });
+    await eventually(() => expect(frame()).not.toContain("[ Cancel ]"));
+    await eventually(() => expect(mouse.emit({ kind: "click", x: header.indexOf("3 History") + 1, y: 0 })).toBe(true));
+    await eventually(() => expect(frame()).toContain("Nothing has run yet"));
+
+    app.stdin.write("1");
+    await eventually(() => expect(frame()).toContain("Workspaces"));
+    app.stdin.write("e");
+    await eventually(() => expect(frame()).toContain("+  add the first step"));
+    await tick();
+    app.stdin.write("2");
+    await eventually(() => expect(frame()).toContain("Nothing is running"));
+  });
+
+  it("leaves a form from its Cancel button, by click or by keys, saving nothing", async () => {
+    const addBolt = vi.fn(async () => undefined);
+    const api = services();
+    const { app, mouse, frame } = await withMouse({ ...api, editing: { ...api.editing, addBolt } });
+    app.stdin.write("a");
+    await eventually(() => expect(frame()).toContain("[ Create bolt ]"));
+    expect(frame()).toContain("[ Cancel ]");
+    await tick();
+    for (const key of "Lint") app.stdin.write(key);
+    await tick();
+    mouse.emit({ kind: "click", ...(await spot(frame, "[ Cancel ]")) });
+    await eventually(() => expect(frame()).not.toContain("[ Create bolt ]"));
+
+    app.stdin.write("a");
+    await eventually(() => expect(frame()).toContain("[ Create bolt ]"));
+    await tick();
+    app.stdin.write("\t");
+    await tick();
+    app.stdin.write(ARROW_RIGHT);
+    await eventually(() => expect(frame()).toContain("▸ Cancel"));
+    app.stdin.write("\r");
+    await eventually(() => expect(frame()).not.toContain("Create bolt"));
+    expect(addBolt).not.toHaveBeenCalled();
+  });
+
   it("ticks bolts to set up with a click, and sets them up from the button", async () => {
     const suggestion = {
       dir: "/dev/shop",
@@ -2170,7 +2264,7 @@ describe("the mouse", () => {
     // Back to the runs: the bolts on the left filter them.
     app.stdin.write("\u001B");
     await tick();
-    mouse.emit({ kind: "click", ...(await spot(frame, "Work on web", 2)) });
+    mouse.emit({ kind: "click", ...(await spot(frame, "Work on web   ")) });
     await tick();
     await eventually(() => expect(frame()).toMatch(/Work on web +1 run/));
     expect(frame()).not.toContain("Check #7");

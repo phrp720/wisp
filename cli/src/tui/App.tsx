@@ -139,6 +139,10 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
   const bolts = current?.workspace.bolts ?? [];
   const bolt = bolts[Math.min(boltIndex, Math.max(0, bolts.length - 1))];
   const [checked, setChecked] = useState<{ read: WorkspaceRead; diagnostics: Diagnostic[] }>();
+  const editorBusy = useRef(false);
+  const setEditorBusy = useCallback((busy: boolean) => {
+    editorBusy.current = busy;
+  }, []);
   useEffect(() => {
     if (!current) return;
     let live = true;
@@ -795,6 +799,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
       if (input === "r" && inBox.done && inBox.result && retryPlan(inBox.result).length > 0) return void retryFailed();
       if (input === "p") return setView(activity(inBox.done ? (startedBy(inBox) ?? "current") : "current"));
       if (key.escape && inBox.done) return setRunPinned(false);
+      if (key.return && inBox.done && focus === "bolts") return setRunPinned(false);
     }
     if (input === "?") return setView({ kind: "help" });
     if (input === "N") return setView({ kind: "new-workspace" });
@@ -901,7 +906,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
     if (!library) return false;
     // The tabs along the top.
     if (event.y === 0) {
-      if (event.kind !== "click" || !TABS_CLICKABLE.has(view.kind)) return false;
+      if (event.kind !== "click" || !(TABS_CLICKABLE.has(view.kind) || (view.kind === "editor" && !editorBusy.current))) return false;
       const tab = headerTabAt(event.x, glyphs, runningStatus(glyphs, runningCount, failing)?.text ?? "");
       if (tab === "bolts" && view.kind !== "browse") setView({ kind: "browse" });
       if (tab === "running" && view.kind !== "processes") setView(activity());
@@ -1076,6 +1081,8 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
           height={bodyHeight}
           columns={columns}
           onHint={setScreenHint}
+          onJump={(input) => void jump(input)}
+          onBusy={setEditorBusy}
           onClose={() => setView({ kind: "browse" })}
           onChanged={(label) => {
             savedAt.current = Date.now();

@@ -35,6 +35,7 @@ export interface FormProps {
   /** Resolves with errors to show per field, or nothing when it worked. */
   onSubmit: (values: Record<string, string>) => Promise<Record<string, string> | undefined>;
   onCancel: () => void;
+  cancelLabel?: string;
   active?: boolean;
   keys?: boolean;
 }
@@ -45,7 +46,7 @@ export interface FormProps {
  * beside the one you are on, examples in grey where nothing is typed yet, and a button at the
  * bottom that does the thing. ↑↓ or tab move, ⏎ moves on and, on the button, saves.
  */
-export function Form({ title, intro, fields, initial = {}, submitLabel = "Save", preview, glyphs, height, onSubmit, onCancel, active: editing = true, keys = true }: FormProps) {
+export function Form({ title, intro, fields, initial = {}, submitLabel = "Save", cancelLabel = "Cancel", preview, glyphs, height, onSubmit, onCancel, active: editing = true, keys = true }: FormProps) {
   // Kept in refs as well as state: keys arrive faster than React redraws — typing fast, or
   // pasting — and each must build on the one before, not on the last frame drawn.
   const touched = useRef(new Set(Object.keys(initial)));
@@ -127,10 +128,12 @@ export function Form({ title, intro, fields, initial = {}, submitLabel = "Save",
     const shown = visible(values);
     if (key.escape) return onCancel();
     if (key.upArrow || (key.shift && key.tab)) return setIndex((at) => Math.max(0, at - 1));
-    if (key.downArrow || key.tab) return setIndex((at) => Math.min(shown.length, at + 1));
+    if (key.downArrow || key.tab) return setIndex((at) => Math.min(shown.length + 1, at + 1));
     if (key.ctrl && input === "s") return void submit();
     if (index >= shown.length) {
-      if (key.return || input === " ") return void submit();
+      if (key.leftArrow) return setIndex(shown.length);
+      if (key.rightArrow) return setIndex(shown.length + 1);
+      if (key.return || input === " ") return index > shown.length ? onCancel() : void submit();
       return;
     }
     if (key.return) return setIndex(index + 1);
@@ -169,12 +172,17 @@ export function Form({ title, intro, fields, initial = {}, submitLabel = "Save",
   // an option, to choose it; on the button, to save. The wheel moves between fields, as ↑↓.
   const fieldNodes = useRefs<string>();
   const button = useRef<DOMElement>(null);
+  const cancel = useRef<DOMElement>(null);
   useMouse((event, at) => {
     if (event.kind !== "click" || saving) return false;
     const shown = visible(valuesRef.current);
     if (at(button.current)) {
       setIndex(shown.length);
       void submit();
+      return true;
+    }
+    if (at(cancel.current)) {
+      onCancel();
       return true;
     }
     for (const [position, field] of shown.entries()) {
@@ -205,7 +213,8 @@ export function Form({ title, intro, fields, initial = {}, submitLabel = "Save",
   const bar = glyphs.border === "round" ? "┃" : "|";
   const said = preview?.(values);
   const shown = visible(values);
-  const onButton = index >= shown.length;
+  const onButton = index === shown.length;
+  const onCancelButton = index > shown.length;
   const needed = 3 + (intro ? 1 : 0) + shown.reduce((sum, entry) => sum + 2 + (entry.choices ? (entry.multi ? withAll(entry.choices).length : entry.choices.length) : 1) + 1, 0) + (said ? 1 : 0) + (editing ? 2 : 0);
   const compact = needed > height;
   const sizes = shown.map((entry, at) => 1 + (entry.choices ? (entry.multi ? withAll(entry.choices).length : entry.choices.length) : 1) + (errors[entry.key] || (editing && at === index && (entry.hint || entry.choices)) ? 2 : 0));
@@ -300,8 +309,15 @@ export function Form({ title, intro, fields, initial = {}, submitLabel = "Save",
               {saving ? " saving… " : onButton ? ` ▸ ${submitLabel} ` : ` [ ${submitLabel} ] `}
             </Text>
           </Box>
+          {saving ? null : (
+            <Box ref={cancel} marginLeft={1}>
+              <Text color={onCancelButton ? "black" : undefined} backgroundColor={onCancelButton ? "gray" : undefined} dimColor={!onCancelButton}>
+                {onCancelButton ? ` ▸ ${cancelLabel} ` : ` [ ${cancelLabel} ] `}
+              </Text>
+            </Box>
+          )}
           {below > 0 ? <Text dimColor>{`   ↓ ${below} more`}</Text> : null}
-          {keys ? <Text dimColor>{`   ↑↓ fields · ⏎ next · ctrl+s ${submitLabel.toLowerCase()} · esc cancel`}</Text> : null}
+          {keys ? <Text dimColor>{`   ↑↓ fields · ⏎ next · ctrl+s ${submitLabel.toLowerCase()} · esc ${cancelLabel.toLowerCase()}`}</Text> : null}
         </Box>
       ) : null}
     </Box>
@@ -417,8 +433,10 @@ export function Picker(props: {
 
   // A click on an option picks it, as ⏎ does.
   const optionNodes = useRefs<string>();
+  const cancelNode = useRef<DOMElement>(null);
   useMouse((event, at) => {
     if (event.kind !== "click") return false;
+    if (at(cancelNode.current)) return onCancel(), true;
     const hit = optionNodes.entries().find(([, node]) => at(node));
     if (hit) onPick(hit[0]);
     return Boolean(hit);
@@ -456,12 +474,13 @@ export function Picker(props: {
           </Box>
         );
       })}
-      {keys ? (
-        <>
-          <Box flexGrow={1} />
-          <Text dimColor>↑↓ choose · ⏎ pick · type to find · esc cancel</Text>
-        </>
+      {choosing || keys ? <Box flexGrow={1} /> : null}
+      {choosing ? (
+        <Box ref={cancelNode}>
+          <Text dimColor>{" [ Cancel ] "}</Text>
+        </Box>
       ) : null}
+      {keys ? <Text dimColor>↑↓ choose · ⏎ pick · type to find · esc cancel</Text> : null}
     </Box>
   );
 }

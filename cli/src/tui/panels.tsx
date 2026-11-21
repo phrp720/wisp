@@ -18,7 +18,7 @@ export function RunProgress({ view, glyphs, height, tick }: { view: RunState; gl
     : [
         retryable > 0 ? `r retry from ${view.steps.find((step) => step.result && !step.result.ok && !step.result.skipped)?.target.label ?? "where it stopped"}` : "",
         background > 0 ? "p watch what it started" : "",
-        "⏎ run again · esc hide",
+        "⏎ done",
       ]
         .filter(Boolean)
         .join(" · ");
@@ -153,7 +153,7 @@ export function HelpPanel({ glyphs, height, tab = "bolts" }: { glyphs: Glyphs; h
         ["c", "check it: what it would do, and what's wrong; nothing runs"],
         ["u  d", "scroll the selected bolt's steps, when they don't fit"],
         ["x  R", "stop the run, or what it started · restart it"],
-        ["r  esc", "after a failed run, retry from where it failed · hide the run"],
+        ["r  ⏎", "after a run: retry from where it failed · close it, back to the bolt"],
       ],
     ],
     [

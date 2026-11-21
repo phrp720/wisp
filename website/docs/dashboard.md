@@ -12,7 +12,8 @@ it started, look back at past runs. It works the same at your desk, over SSH and
   it's up, the bolts it runs opened up in place, how its last run went, what runs it, and
   the command that runs it from a terminal. `⏎` runs it right there: each step ticks off in
   that box, with the output of the one running, while the list stays where it is. `x` stops
-  the run, `r` retries from a failed step, and `esc` hides the result.
+  the run, `r` retries from a failed step, and `⏎` (or `esc`) closes the result, so a second
+  `⏎` runs it again.
   One that [asks for values](./file#inputs) shows a short form first, and one that
   [asks first](./file#asking-first) asks on its row.
   A bolt with a problem says so on its row (`✗ 1 problem`), and its box says what's wrong
@@ -32,8 +33,10 @@ its log. The wheel scrolls the list under it, or the output when it is over a lo
 selects; `⏎` still runs a bolt, so a stray click never starts anything.
 
 Forms take clicks too: a field to type in it (on its text, the cursor goes where you
-click), an option to choose it, the button to save. So do the lists you pick from, the
-setup checklist and Settings. Allowing a project's commands and confirming a delete stay
+click), an option to choose it, the button to save, and `[ Cancel ]` beside it to leave
+without saving (on a new step, `[ Back ]`, to the list of kinds; `esc` does the same). So do the lists you pick from, the setup checklist and Settings. In the
+editor, the tabs along the top take you elsewhere whenever no form is open; with one open,
+save or cancel it first. Allowing a project's commands and confirming a delete stay
 on the keyboard, so a stray click can never do either.
 
 It works over SSH too, since your own terminal sends the clicks. In tmux it needs
@@ -49,7 +52,7 @@ name, notes, what a failure does, whether it asks first and its inputs, then its
 (Start, Wait, Open; another bolt is under Start) and filled in the same way, each with a
 **Depends on** list of the other steps to tick (none ticked: it starts right away; **all**
 ticks or clears them all). `a` adds one after the selected
-step, already depending on it; `d` removes it and `K` `J` move it. On a narrow terminal it shows one side at a time. `E` opens
+step, already depending on it; `D` removes it and `K` `J` move it. On a narrow terminal it shows one side at a time. `E` opens
 the file itself if you'd rather.
 
 ![Making a bolt in the dashboard: name it, then add a command, a wait and a website through short forms, then run it](/demo/editor.gif)
@@ -61,7 +64,7 @@ the file itself if you'd rather.
 | `⏎` · `c` | run the selected bolt, in its box · check it: what it would do, and what's wrong, with nothing run |
 | `u` · `d` | scroll the selected bolt's steps, when they don't fit |
 | `x` · `R` | stop the run while it goes, or what it started (asks about the bolts it needed) · restart it |
-| `r` · `esc` | after a failed run: retry from the step that failed · hide the run |
+| `r` · `⏎` | after a run: retry from the step that failed · close it, back to the bolt |
 | `e` · `a` · `D` | edit · add · delete a bolt (on the left: `e` renames a workspace and sets its icon and notes, `D` deletes it) |
 | `←` `⏎` or `y` · `esc` | deleting asks on the row itself: delete it · keep it |
 | `K` · `J` | move a bolt up · down |

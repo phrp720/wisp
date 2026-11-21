@@ -70,7 +70,7 @@ export function SetupPanel({ suggestion, glyphs, height, onAnswer }: { suggestio
   useInput((input, key) => {
     if (answered.current) return;
     if (key.escape || input === "q" || input === "n") return answer(undefined);
-    if (input === "d") return answer("never");
+    if (input === "N") return answer("never");
     if (key.upArrow || input === "k") return setIndex(Math.max(0, indexRef.current - 1));
     if (key.downArrow || input === "j") return setIndex(Math.min(suggestion.bolts.length - 1, indexRef.current + 1));
     if (input === " ") {
@@ -93,6 +93,8 @@ export function SetupPanel({ suggestion, glyphs, height, onAnswer }: { suggestio
   // A click on a bolt ticks or unticks it; on the button, sets up the ones ticked.
   const rows = useRefs<number>();
   const button = useRef<DOMElement>(null);
+  const later = useRef<DOMElement>(null);
+  const never = useRef<DOMElement>(null);
   useMouse((event, at) => {
     if (event.kind !== "click" || answered.current) return false;
     if (at(button.current)) {
@@ -100,6 +102,8 @@ export function SetupPanel({ suggestion, glyphs, height, onAnswer }: { suggestio
       if (chosen.length > 0) answer(chosen);
       return true;
     }
+    if (at(later.current)) return answer(undefined), true;
+    if (at(never.current)) return answer("never"), true;
     const hit = rows.entries().find(([, node]) => at(node));
     const bolt = hit ? suggestion.bolts[hit[0]] : undefined;
     if (!hit || !bolt) return false;
@@ -140,8 +144,14 @@ export function SetupPanel({ suggestion, glyphs, height, onAnswer }: { suggestio
         <Box ref={button}>
           <Text color={count > 0 ? "black" : undefined} backgroundColor={count > 0 ? TONE.accent : undefined} bold dimColor={count === 0}>{count > 0 ? ` ▸ ${count === 1 ? (suggestion.bolts.length === 1 ? "Set up this bolt" : "Set up 1 bolt") : count === suggestion.bolts.length ? `Set up all ${count} bolts` : `Set up ${count} bolts`} ` : " Tick at least one "}</Text>
         </Box>
-        <Text dimColor>{"   space tick · a all/none · ⏎ set up · esc not now · d don't ask again"}</Text>
+        <Box ref={later} marginLeft={1}>
+          <Text dimColor>{" [ Not now ] "}</Text>
+        </Box>
+        <Box ref={never} marginLeft={1}>
+          <Text dimColor>{" [ Don't ask again ] "}</Text>
+        </Box>
       </Box>
+      <Text dimColor>{"space tick · a all/none · ⏎ set up · n not now · N don't ask again"}</Text>
     </Box>
   );
 }

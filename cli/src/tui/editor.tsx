@@ -41,13 +41,15 @@ export interface BoltEditorProps {
   /** Just before each save, so the file's own change is not taken for someone else's. */
   onSaving?: () => void;
   onHint?: (hint: string) => void;
+  onJump?: (input: string) => void;
+  onBusy?: (busy: boolean) => void;
 }
 
 /**
  * A bolt, edited without its JSON: its steps in plain words, in order, and keys to add,
  * change, move and remove them. Every change is saved as it is made.
  */
-export function BoltEditor({ file, bolt, workspace, others, adding = false, editing, glyphs, height, columns = 100, onClose, onChanged, onMessage, onSaving, onHint }: BoltEditorProps) {
+export function BoltEditor({ file, bolt, workspace, others, adding = false, editing, glyphs, height, columns = 100, onClose, onChanged, onMessage, onSaving, onHint, onJump, onBusy }: BoltEditorProps) {
   const [label, setLabel] = useState(bolt);
   const [raw, setRaw] = useState<RawBolt>();
   const [index, setIndexState] = useState(-1);
@@ -153,6 +155,7 @@ export function BoltEditor({ file, bolt, workspace, others, adding = false, edit
       const at = place(indexRef.current);
       const current = rows[at] as Row;
       if (key.escape || input === "q") return onClose();
+      if (onJump && (input === "1" || input === "2" || input === "3")) return onJump(input);
       if (input === "K" || (key.shift && key.upArrow)) {
         if (current.kind === "step") void shift(() => editing.moveStep(file, label, current.at, -1));
         return;
@@ -165,11 +168,15 @@ export function BoltEditor({ file, bolt, workspace, others, adding = false, edit
       if (key.downArrow || input === "j") return setIndex(Math.min(rows.length - 1, at + 1));
       if (key.return || key.rightArrow) return edit(current);
       if (input === "a") return addAfter(current);
-      if (current.kind === "step" && (input === "d" || key.delete)) return setDeleting(current.at);
-      if (current.kind === "input" && (input === "d" || key.delete)) return setDropping(current.name);
+      if (current.kind === "step" && (input === "D" || key.delete)) return setDeleting(current.at);
+      if (current.kind === "input" && (input === "D" || key.delete)) return setDropping(current.name);
     },
     { isActive: !open && deleting === undefined && dropping === undefined },
   );
+  const busy = open || deleting !== undefined || dropping !== undefined;
+  useEffect(() => {
+    onBusy?.(busy);
+  }, [busy, onBusy]);
 
   const rowNodes = useRefs<number>();
   const rightNode = useRef<DOMElement>(null);
@@ -203,7 +210,7 @@ export function BoltEditor({ file, bolt, workspace, others, adding = false, edit
                 "↑↓ choose",
                 "⏎ edit",
                 onInputs ? "a add an input" : "a add a step",
-                row.kind === "step" ? "d remove · K J move" : row.kind === "input" ? "d remove" : "",
+                row.kind === "step" ? "D remove · K J move" : row.kind === "input" ? "D remove" : "",
                 "esc done",
               ]
                 .filter(Boolean)
@@ -247,11 +254,12 @@ export function BoltEditor({ file, bolt, workspace, others, adding = false, edit
           return step ? describeRawStep(step) : undefined;
         }}
         submitLabel={replace ? "Save step" : "Add step"}
+        cancelLabel={replace ? "Cancel" : "Back"}
         glyphs={glyphs}
         height={room}
         active={active}
         keys={false}
-        onCancel={back}
+        onCancel={replace ? back : () => setNewStep({ at })}
         onSubmit={async (given) => {
           const values = valuesOf(given);
           const { step, errors } = buildStep(kind, values);

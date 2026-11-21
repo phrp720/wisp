@@ -270,7 +270,6 @@ export function HistoryScreen(props: HistoryScreenProps) {
 
   const sideWidth = historySideWidth(columns);
   const { items: runRows, offset: runOffset } = runWindow(shown, runIndex, height);
-  const runWidth = Math.max(30, columns - sideWidth - 6);
 
   return (
     <Box height={height}>
@@ -316,14 +315,23 @@ export function HistoryScreen(props: HistoryScreenProps) {
           // A fixed width, so the times line up down the list whatever their length.
           const right = `${(entry.interrupted ? "?" : formatDuration(totalMs(entry)) || "0ms").padStart(7)} · ${since(entry.startedAt).padEnd(8)}`;
           const doomed = forget?.ids.includes(entry.id) ?? false;
-          const branch = entry.git ? ` ${entry.git.branch} ` : "";
+          const branch = entry.git ? ` ${clip(entry.git.branch, 24)} ` : "";
+          const subject = entry.git?.subject ? clip(entry.git.subject, 48) : "";
           return (
             <Box key={entry.id} flexDirection="column">
               <Box>
                 <Box flexGrow={1} minWidth={0}>
-                  <Text wrap="truncate-end" bold={selected} color={doomed ? "red" : selected ? TONE.accent : undefined}>
-                    {selected ? glyphs.pointer : " "} <Mark ok={entry.ok} running={entry.running} interrupted={entry.interrupted} glyphs={glyphs} /> {entry.bolt}
-                    <Text dimColor>{` #${entry.number ?? ""}`}</Text>
+                  <Text wrap="truncate-end" color={doomed ? "red" : undefined}>
+                    <Text bold={selected} color={doomed ? "red" : selected ? TONE.accent : undefined}>
+                      {selected ? glyphs.pointer : " "} <Mark ok={entry.ok} running={entry.running} interrupted={entry.interrupted} glyphs={glyphs} /> {filter?.bolt ? "" : `${entry.bolt} `}
+                    </Text>
+                    <Text dimColor={!filter?.bolt} bold={selected && Boolean(filter?.bolt)} color={selected && filter?.bolt ? TONE.accent : undefined}>{`#${entry.number ?? ""}`}</Text>
+                    {state ? <Text color="cyan">{`  ${state}`}</Text> : null}
+                    {failedAt ? <Text color="red">{`  at ${failedAt.label}`}</Text> : null}
+                    {entry.git ? <Text color="yellow" dimColor>{`  ${entry.git.commit}`}</Text> : null}
+                    {subject ? <Text dimColor>{` ${subject}`}</Text> : null}
+                    {entry.trigger === "hook" ? <Text dimColor>{"  · git hook"}</Text> : null}
+                    {filter?.bolt ? null : <Text dimColor>{`  · ${entry.workspaceName}`}</Text>}
                   </Text>
                 </Box>
                 <Box flexShrink={0}>
@@ -331,25 +339,7 @@ export function HistoryScreen(props: HistoryScreenProps) {
                   <Text dimColor>{`  ${right}`}</Text>
                 </Box>
               </Box>
-              {doomed && forget?.one ? (
-                <AskHere question={forget.title} yes="Delete" onAnswer={answerForget} />
-              ) : (
-                <Text wrap="truncate-end" dimColor>
-                  {`    ${clip(
-                    [
-                      state,
-                      failedAt ? `failed at ${failedAt.label}` : "",
-                      entry.git?.subject ? `“${entry.git.subject}”` : "",
-                      entry.git ? entry.git.commit : "",
-                      triggerWords(entry.trigger),
-                      filter?.bolt ? "" : entry.workspaceName,
-                    ]
-                      .filter(Boolean)
-                      .join(" · "),
-                    runWidth - 4,
-                  )}`}
-                </Text>
-              )}
+              {doomed && forget?.one ? <AskHere question={forget.title} yes="Delete" onAnswer={answerForget} /> : null}
             </Box>
           );
         })}
@@ -380,13 +370,13 @@ export function filterLines(filters: BoltFilter[], filterIndex: number, height: 
 
 /** The runs that fit on the right, two lines each, kept around the chosen one. */
 export function runWindow<T>(shown: T[], runIndex: number, height: number): { items: T[]; offset: number } {
-  return windowed(shown, runIndex, Math.max(1, Math.floor((height - 4) / 2)));
+  return windowed(shown, runIndex, Math.max(1, height - 4));
 }
 
-/** The run at a line of the runs panel, counted from its top border: the title, the search line, then two lines a run. */
+/** The run at a line of the runs panel, counted from its top border: the title, the search line, then a line a run. */
 export function runAt<T>(shown: T[], runIndex: number, height: number, y: number): number | undefined {
   const { items, offset } = runWindow(shown, runIndex, height);
-  const position = Math.floor((y - 3) / 2);
+  const position = y - 3;
   return y >= 3 && position < items.length ? offset + position : undefined;
 }
 
