@@ -7,6 +7,7 @@ import Home from "./components/Home.vue";
 import Orb from "./components/Orb.vue";
 import Pipeline from "./components/Pipeline.vue";
 import Recording from "./components/Recording.vue";
+import UseCases from "./components/UseCases.vue";
 import "./style.css";
 
 export default {
@@ -25,5 +26,6 @@ export default {
     app.component("Home", Home);
     app.component("Recording", Recording);
     app.component("Pipeline", Pipeline);
+    app.component("UseCases", UseCases);
   },
 } satisfies Theme;

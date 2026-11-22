@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { AlarmClockIcon, ContainerIcon, Copy01Icon, DashboardSquare01Icon, FlashIcon, Folder01Icon, LaptopIcon, Layers01Icon, ReloadIcon, RoboticIcon, Rocket01Icon, SecurityCheckIcon, ServerStack01Icon, TaskDone01Icon, Tick02Icon, Time04Icon, WorkflowSquare01Icon } from "@hugeicons/core-free-icons";
+import { Copy01Icon, Tick02Icon } from "@hugeicons/core-free-icons";
+
+import { icons, svgAttrs, uses, type IconData } from "../useCases";
 import { onMounted, onBeforeUnmount, ref } from "vue";
 
 const command = "wisp acme dev";
@@ -43,24 +45,6 @@ async function copy(command: string) {
   }
 }
 
-type IconData = readonly (readonly [string, Record<string, unknown>])[];
-const icons: Record<string, IconData> = {
-  flow: WorkflowSquare01Icon as IconData,
-  folder: Folder01Icon as IconData,
-  watch: DashboardSquare01Icon as IconData,
-  history: Time04Icon as IconData,
-  nested: FlashIcon as IconData,
-  docker: ContainerIcon as IconData,
-  restart: ReloadIcon as IconData,
-  asks: SecurityCheckIcon as IconData,
-  laptop: LaptopIcon as IconData,
-  agents: RoboticIcon as IconData,
-  stack: Layers01Icon as IconData,
-  checks: TaskDone01Icon as IconData,
-  deploy: Rocket01Icon as IconData,
-  server: ServerStack01Icon as IconData,
-  clock: AlarmClockIcon as IconData,
-};
 
 const kinds = [
   { kind: "run", label: "command" },
@@ -69,9 +53,6 @@ const kinds = [
   { kind: "link", label: "open" },
   { kind: "pipeline", label: "another pipeline" },
 ];
-function svgAttrs(attrs: Record<string, unknown>): Record<string, unknown> {
-  return Object.fromEntries(Object.entries(attrs).filter(([name]) => name !== "key").map(([name, value]) => [name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`), value]));
-}
 
 const pillars = [
   { icon: "flow", title: "In parallel, or in order", text: "Steps start together unless they wait for others, like the API for a healthy database." },
@@ -80,14 +61,6 @@ const pillars = [
   { icon: "history", title: "History of every run", text: "Each run kept like CI, with its commit and output. Retry only what failed." },
 ];
 
-const uses = [
-  { icon: "stack", title: "Bring up a dev stack", flow: [["db:docker"], ["api:run"], ["page:link"]], text: "The database, the API once it's healthy, the web app beside them, then the page. One command stops it all.", link: "/docs/use-cases#bring-up-a-dev-stack" },
-  { icon: "checks", title: "Check before you push", flow: [["lint:run", "types:run", "test:run"], ["build:run"]], text: "Lint, types and tests side by side, then the build. As a git hook, a failure stops the push.", link: "/docs/use-cases#check-before-you-push" },
-  { icon: "deploy", title: "Release and deploy", flow: [["checks:pipeline"], ["deploy:run"], ["health:wait"]], text: "The checks first, then it asks where and asks before it goes. Every deploy's log is kept.", link: "/docs/use-cases#release-and-deploy" },
-  { icon: "server", title: "Run a server", flow: [["pull:run"], ["install:run"], ["restart:run"]], text: "Pull, install, migrate and restart the app, the same way for whoever SSHs in, from whatever folder they land in.", link: "/docs/use-cases#run-a-server" },
-  { icon: "clock", title: "Scheduled jobs", flow: [["dump:run"], ["prune:run"]], text: "Backups and cleanups from cron, stopped if they hang, and checks that tell you once when a site goes down. Messages go to Slack, Teams or ntfy.", link: "/docs/use-cases#scheduled-jobs" },
-  { icon: "laptop", title: "Your own machine", flow: [["tunnel:run"], ["port 5433:wait"]], text: "Pipelines outside any repo: an SSH tunnel kept open and ready, your photos backed up to the NAS.", link: "/docs/use-cases#your-own-machine" },
-];
 
 const more = [
   { icon: "nested", title: "Shared steps, started once", text: "Run one pipeline inside others. The database starts once, however many need it." },

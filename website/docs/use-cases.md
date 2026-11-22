@@ -7,7 +7,7 @@ The names are yours. Wisp has no built-in `dev` or `deploy`: you run a pipeline 
 folder as `wisp <workspace> <pipeline>`, so `wisp acme dev` runs the *Dev* pipeline of the
 *Acme* project. Inside the project, `wisp dev` is enough.
 
-[[toc]]
+<UseCases />
 
 ## Bring up a dev stack
 
