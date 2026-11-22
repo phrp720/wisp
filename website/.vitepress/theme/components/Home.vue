@@ -85,7 +85,7 @@ const uses = [
   { icon: "checks", title: "Check before you push", flow: [["lint:run", "types:run", "test:run"], ["build:run"]], text: "Lint, types and tests side by side, then the build. As a git hook, a failure stops the push.", link: "/docs/use-cases#check-before-you-push" },
   { icon: "deploy", title: "Release and deploy", flow: [["checks:pipeline"], ["deploy:run"], ["health:wait"]], text: "The checks first, then it asks where and asks before it goes. Every deploy's log is kept.", link: "/docs/use-cases#release-and-deploy" },
   { icon: "server", title: "Run a server", flow: [["pull:run"], ["install:run"], ["restart:run"]], text: "Pull, install, migrate and restart the app, the same way for whoever SSHs in, from whatever folder they land in.", link: "/docs/use-cases#run-a-server" },
-  { icon: "clock", title: "Scheduled jobs", flow: [["dump:run"], ["prune:run"]], text: "Backups and cleanups from cron, stopped if they hang, with a message to Slack or ntfy if they fail.", link: "/docs/use-cases#scheduled-jobs" },
+  { icon: "clock", title: "Scheduled jobs", flow: [["dump:run"], ["prune:run"]], text: "Backups and cleanups from cron, stopped if they hang, and checks that tell you once when a site goes down. Messages go to Slack, Teams or ntfy.", link: "/docs/use-cases#scheduled-jobs" },
   { icon: "laptop", title: "Your own machine", flow: [["tunnel:run"], ["port 5433:wait"]], text: "Pipelines outside any repo: an SSH tunnel kept open and ready, your photos backed up to the NAS.", link: "/docs/use-cases#your-own-machine" },
 ];
 

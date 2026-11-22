@@ -54,7 +54,7 @@ How names are matched: [Running pipelines](./running-pipelines#how-wisp-reads-a-
 | `wisp scan ~/dev` | find the projects you already have; `--remember`, `--depth 4` |
 | `wisp hook pre-push verify` | run a pipeline from a git hook; `--list`, `--remove`, `--force` |
 | `wisp open-with` | what opens folders and files, and where commands run: [Settings](./settings) |
-| `wisp notify` | when Wisp tells you about a run, and its webhooks (`add`, `remove`): [Notifications](./notifications) |
+| `wisp notify` | when Wisp tells you about a run, and its webhooks (`add`, `remove`, `--test`, `--reveal`): [Notifications](./notifications) |
 | `wisp completion --install` | tab completion for zsh, bash and fish |
 
 ## Finding things

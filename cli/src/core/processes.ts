@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { closeSync, openSync, readFileSync, readSync, statSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, statSync, writeFileSync } from "node:fs";
 import { open, readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -402,7 +402,25 @@ function info(request: RunInfo): RunInfo {
 export function stopRun(run: Run): boolean {
   const pid = pidOf(run);
   if (!pid || !withStatus(run).alive) return false;
+  markStopped(run.id);
   return stopTree(pid, run.shim ?? false);
+}
+
+function stoppedMarker(id: string): string {
+  return join(stateDir(), "stopped", id);
+}
+
+function markStopped(id: string): void {
+  try {
+    mkdirSync(join(stateDir(), "stopped"), { recursive: true, mode: 0o700 });
+    writeFileSync(stoppedMarker(id), new Date().toISOString(), { mode: 0o600 });
+  } catch {
+    return;
+  }
+}
+
+export function stoppedOnPurpose(id: string): boolean {
+  return existsSync(stoppedMarker(id));
 }
 
 /**
@@ -682,7 +700,7 @@ function strip(run: RunStatus): Run {
 }
 
 async function removeFiles(run: Run): Promise<void> {
-  const files = [run.log, run.log ? exitFileFor(run.log) : undefined, run.pidFile];
+  const files = [run.log, run.log ? exitFileFor(run.log) : undefined, run.pidFile, stoppedMarker(run.id)];
   await Promise.all(files.filter((file): file is string => Boolean(file)).map((file) => rm(file, { force: true })));
 }
 

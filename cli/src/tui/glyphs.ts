@@ -8,6 +8,7 @@ export interface Glyphs {
   pointer: string;
   ok: string;
   fail: string;
+  cancel: string;
   skip: string;
   pending: string;
   running: string[];
@@ -25,6 +26,7 @@ const UNICODE: Glyphs = {
   pointer: "❯",
   ok: "✓",
   fail: "✗",
+  cancel: "⊘",
   skip: "–",
   pending: "·",
   running: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
@@ -40,6 +42,7 @@ const ASCII: Glyphs = {
   pointer: ">",
   ok: "+",
   fail: "x",
+  cancel: "/",
   skip: "-",
   pending: ".",
   running: ["|", "/", "-", "\\"],

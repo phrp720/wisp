@@ -324,6 +324,8 @@ export interface SwitchTarget {
 
 export interface TargetResult extends SwitchTarget {
   ok: boolean;
+  /** Cut short because the run was stopped, not because it broke. */
+  cancelled?: boolean;
   error?: string;
   /** Said when the platform did something less than asked, like opening a new tab. */
   note?: string;
@@ -344,6 +346,8 @@ export interface SwitchResult {
   /** The run's entry in history, for `wisp history <id>`. */
   historyId?: string;
   ok: boolean;
+  /** Stopped before it finished, by you: neither a success nor a failure. */
+  cancelled?: boolean;
   /** What it set out to do, step by step — so the failed part can be run again. */
   plan?: import("./switch.js").PlannedStep[];
   inputs?: Record<string, string>;

@@ -131,6 +131,11 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
     if (active.done && !(loggedRun.current === active || (loggedRun.current?.done && loggedRun.current.title === active.title && loggedRun.current.read === active.read))) {
       const failed = active.steps.find((step) => step.result && !step.result.ok && !step.result.skipped);
       const up = active.steps.some((step) => (step.target.kind === "command" && !step.target.finishes) || step.target.kind === "compose");
+      if (active.result?.cancelled) {
+        record(`${active.bolt} was cancelled${failed?.result?.error ? `: ${failed.result.error}` : ""}`, "info");
+        loggedRun.current = active;
+        return;
+      }
       record(active.stopped ? `${active.bolt} stopped — ${active.stopped}` : failed || active.error ? `${active.bolt} failed${failed ? ` at ${failed.target.label}` : ""}` : `${active.bolt} ${up ? "is up" : "finished"}`, active.stopped || failed || active.error ? "bad" : "good");
     }
     loggedRun.current = active;
@@ -1352,7 +1357,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
                     )
                   : inBox
                     ? (room: number) => (
-                        <Box flexDirection="column" height={room} borderStyle={glyphs.border} borderColor={inBox.done ? (inBox.error || inBox.steps.some((step) => step.result && !step.result.ok && !step.result.skipped) ? "red" : "green") : TONE.accent} paddingX={1} overflow="hidden">
+                        <Box flexDirection="column" height={room} borderStyle={glyphs.border} borderColor={inBox.done ? (inBox.result?.cancelled ? "gray" : inBox.error || inBox.steps.some((step) => step.result && !step.result.ok && !step.result.skipped) ? "red" : "green") : TONE.accent} paddingX={1} overflow="hidden">
                           <RunProgress view={inBox} glyphs={glyphs} height={Math.max(1, room - 2)} tick={tick} />
                         </Box>
                       )

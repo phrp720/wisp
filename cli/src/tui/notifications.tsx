@@ -123,9 +123,9 @@ export function NotificationsPanel({
     return (
       <Form
         key={`when:${session}`}
-        title="Tell me"
+        title="Inform me"
         intro="On this screen, and at every webhook."
-        fields={[{ key: "when", label: "Tell me", choices: (Object.keys(WHEN) as (keyof typeof WHEN)[]).map((value) => ({ value, label: WHEN[value] })) }]}
+        fields={[{ key: "when", label: "Inform me", choices: (Object.keys(WHEN) as (keyof typeof WHEN)[]).map((value) => ({ value, label: WHEN[value] })) }]}
         initial={{ when: notify.when }}
         submitLabel="Save"
         cancelLabel="Back"
@@ -135,7 +135,7 @@ export function NotificationsPanel({
         onSubmit={async (values) => {
           const next = await services.settings.setNotify({ when: values["when"] as NotifyChoice["when"] });
           onChange(next);
-          onSaved(`Tell me ${WHEN[next.when]}${webhookCount(next.webhooks.length)}`);
+          onSaved(`Inform me ${WHEN[next.when]}${webhookCount(next.webhooks.length)}`);
           back();
           return undefined;
         }}
@@ -236,7 +236,7 @@ export function NotificationsPanel({
       <Box ref={rowNodes.set(0)}>
         <Text wrap="truncate-end">
           {pointer(0)}
-          <Text bold={on(0)} color={on(0) ? TONE.accent : undefined}>{"Tell me".padEnd(10)}</Text>
+          <Text bold={on(0)} color={on(0) ? TONE.accent : undefined}>{"Inform me".padEnd(10)}</Text>
           <Text>{WHEN[notify.when]}</Text>
         </Text>
       </Box>

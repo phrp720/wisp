@@ -3,14 +3,14 @@
 Your own choices, saved on this machine only: a project's file never changes them. Press `s`
 in the dashboard, or use the command line.
 
-<Recording name="settings" alt="Wisp's settings: categories on the left; folders set to open in WebStorm, then a look at where commands run and when Wisp tells you about a run" />
+<Recording name="settings" alt="Wisp's settings: categories on the left; folders set to open in WebStorm, then Notifications: tell me when a pipeline starts failing or works again, and two webhooks added in one form" />
 
 | Category | Setting | Choices |
 |---|---|---|
 | Opening | **Folders open in** | the system default, or an editor Wisp found: VS Code, Cursor, Zed, WebStorm, IntelliJ, PyCharm, Sublime Text… or any app by name |
 | | **Files open in** | the same, for file steps |
 | Running | **Commands run** | in the background (the default), in a terminal window each (Terminal, iTerm, Ghostty, WezTerm, kitty, Alacritty), or in a tmux or zellij session |
-| Notifications | **Tell me** · each webhook (keep or remove) · **Add a webhook** · **For** | when Wisp tells you about a run, and where: a new webhook for every workspace, or only the ones ticked. [Notifications](./notifications) |
+| Notifications | **Inform me** · **Webhooks** | when Wisp tells you about a run, and where. The webhooks are a list, like a pipeline's steps: `a` adds several in one form, `⏎` changes which workspaces one is for (none or all ticked: every workspace), `D` removes it. Each shows whether its last message arrived. [Notifications](./notifications) |
 | Dashboard | **Mouse** | on (the default) or off, to select text without holding Shift |
 
 In the dashboard, the categories are on the left and their settings on the right. `⏎` (or a

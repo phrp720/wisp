@@ -163,6 +163,7 @@ export const use: CommandDef<UseOptions> = {
         workspace: workspace.name,
         pipeline: result.bolt?.label,
         ok: result.ok,
+        ...(result.cancelled ? { cancelled: true } : {}),
         dryRun: result.dryRun,
         history: result.historyId ?? null,
         ...(result.inputs ? { inputs: result.inputs } : {}),
@@ -214,7 +215,10 @@ export const use: CommandDef<UseOptions> = {
     const failedAt = result.targets.find((target) => !target.ok && !target.skipped);
     const name = result.bolt?.label ?? label;
     const total = result.targets.reduce((sum, target) => sum + (target.durationMs ?? 0), 0);
-    if (!result.ok) {
+    if (result.cancelled) {
+      console.error(`\n${dim("⊘")} ${bold(name)} was cancelled${failedAt?.error ? dim(`: ${failedAt.error}`) : ""}${result.historyId ? dim(` · \`wisp history ${result.historyId}\``) : ""}`);
+      process.exitCode = 130;
+    } else if (!result.ok) {
       const next = [
         result.historyId ? `\`wisp history ${result.historyId}\`` : "",
         failedAt && result.historyId ? `\`wisp ${workspaceRef ? `${workspaceRef} ` : ""}${slugify(name)} --retry\` runs only what failed` : "",

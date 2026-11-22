@@ -22,7 +22,8 @@ export function RunProgress({ view, glyphs, height, tick }: { view: RunState; gl
       ]
         .filter(Boolean)
         .join(" · ");
-  const failed = view.steps.filter((step) => step.result && !step.result.ok && !step.result.skipped).length;
+  const failed = view.steps.filter((step) => step.result && !step.result.ok && !step.result.skipped && !step.result.cancelled).length;
+  const cancelled = view.result?.cancelled === true;
   const links = view.steps.filter((step) => step.result?.kind === "link" && step.result.note?.startsWith("no display"));
   const output = view.output.length > 0 && view.output[view.output.length - 1] === "" ? view.output.slice(0, -1) : view.output;
   const summary = view.done ? 2 + links.length : 0;
@@ -51,7 +52,9 @@ export function RunProgress({ view, glyphs, height, tick }: { view: RunState; gl
               ? <Text color={TONE.accent}>{glyphs.running[tick % glyphs.running.length]}</Text>
               : result?.skipped
                 ? <Text dimColor>{glyphs.skip}</Text>
-                : !result?.ok
+                : result?.cancelled
+                  ? <Text color="gray">{glyphs.cancel}</Text>
+                  : !result?.ok
                   ? <Text color="red">{glyphs.fail}</Text>
                   : <Text color="green">{glyphs.ok}</Text>;
         return (
@@ -59,7 +62,7 @@ export function RunProgress({ view, glyphs, height, tick }: { view: RunState; gl
             {mark} {step.state === "running" ? <Text bold>{describeStep(step.target, true)}</Text> : describeStep(step.target)}
             {step.target.workspace ? <Text dimColor>{` (from ${step.target.workspace})`}</Text> : null}
             {result && !result.skipped && result.durationMs !== undefined && step.state !== "running" ? <Text dimColor>{`  ${result.durationMs >= 1000 ? `${(result.durationMs / 1000).toFixed(1)}s` : `${result.durationMs}ms`}`}</Text> : null}
-            {result?.error ? <Text color="red">{`  ${result.error}`}</Text> : result?.note ? <Text dimColor>{`  ${result.note}`}</Text> : null}
+            {result?.error ? <Text color={result.cancelled ? "gray" : "red"}>{`  ${result.error}`}</Text> : result?.note ? <Text dimColor>{`  ${result.note}`}</Text> : null}
           </Text>
         );
       })}
@@ -79,8 +82,8 @@ export function RunProgress({ view, glyphs, height, tick }: { view: RunState; gl
             <Text key={`link:${step.target.id}`} color="cyan">{`  ${step.result?.value ?? step.target.value}`}</Text>
           ))}
           <Text wrap="truncate-end">
-            {view.stopped ? <Text color="yellow">{`Stopped — ${view.stopped}. `}</Text> : null}
-            {failed > 0 ? (
+            {cancelled ? <Text color="gray">{`${glyphs.cancel} Cancelled. h shows this run in History`}</Text> : view.stopped ? <Text color="yellow">{`Stopped — ${view.stopped}. `}</Text> : null}
+            {cancelled ? null : failed > 0 ? (
               <Text color="red">{view.dryRun ? `${glyphs.fail} It would stop there. Nothing ran.` : `${glyphs.fail} Failed — h shows this run in History`}</Text>
             ) : view.error || view.stopped ? null : (
               <Text color="green">{view.dryRun ? `${glyphs.ok} Ready to run. That's what it would do; nothing ran.` : "All done."}</Text>

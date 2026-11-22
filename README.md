@@ -75,7 +75,7 @@ Then Wisp:
 - **Asks when it matters.** A deploy can ask *where?* and *are you sure?* A script answers
   with `--input env=production --yes`.
 - **Tells you when it fails.** A cron run that breaks shows a notification, or posts to
-  Slack, Discord or ntfy.
+  Slack, Discord, Microsoft Teams or ntfy, saying which step failed and why.
 - **Is safe with cloned repos.** A file's commands run only after you've read them and run
   `wisp trust`. Any change, a `git pull` included, asks again.
 - **Works with agents.** Every command takes `--json`, nothing prompts without a terminal,

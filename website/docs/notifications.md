@@ -20,24 +20,12 @@ The same is in the dashboard's [Settings](./settings), under **Notifications**.
 tell you every 5 minutes while the site is down. `changes` tells you once when a pipeline
 starts failing, and once when it works again:
 
-```json
-{
-  "label": "Check staging",
-  "steps": [
-    { "wait": { "url": "https://staging.example.com/health", "status": 200, "timeout": 30 } }
-  ]
-}
-```
-
 ```bash
 wisp notify changes
-wisp notify add https://ntfy.sh/my-staging
-# crontab -e
-*/5 * * * * wisp use ~/staging/.wisp.json "Check staging"
 ```
 
-Run it from another machine to check the site from outside, or on the server itself to check
-ports nobody else can reach, like `{ "wait": "localhost:5432" }`.
+The whole check, with its pipeline and its crontab line, is in
+[Use cases](./use-cases#know-when-a-site-goes-down).
 
 ## Webhooks
 
@@ -53,7 +41,12 @@ wisp notify remove 2                                                    # gone, 
 ```
 
 A workspace is named as in `wisp show`, or by the path to its `.wisp.json`. A run goes to the
-webhooks for every workspace and to those for its own. Webhooks are kept in your settings on
+webhooks for every workspace and to those for its own.
+
+In the dashboard's [Settings](./settings), under **Notifications**, the webhooks are a list like a
+pipeline's steps. `a` adds them, several in one form: fill in an address and there's room for
+the next. `⏎` on one changes which workspaces it's for, and ticking all of them is the same as
+none: every workspace, including ones you add later. `D` removes it, after asking. Webhooks are kept in your settings on
 this machine, never in `.wisp.json`: the address is usually a secret, and that file is shared.
 
 Each message says which step failed and why, like `at dump: exited with code 1` or
@@ -117,6 +110,14 @@ remembers how each webhook's last delivery went, and tells you where you'll see 
 
 `wisp notify --test` checks them all now. Make a new webhook, add it, and remove the old one
 by its number.
+
+## When you cancel a run
+
+A run you [cancelled](./history#how-a-run-ends) is neither a success nor a failure, so it says
+so: `⊘ Deploy was cancelled`, at the step it was on, in grey rather than red. It tells you as a
+failure would (with `failures` or `all`, and only about a run you might have missed), and
+`changes` skips it: cancelling isn't breaking, so it never sets off "started failing" or
+"works again". The JSON for other addresses has `"cancelled": true`.
 
 ## When it stays quiet
 

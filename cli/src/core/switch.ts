@@ -9,14 +9,14 @@ import { runInTmux, runInZellij } from "../platform/multiplexer.js";
 import { MULTIPLEXERS } from "../platform/terminals.js";
 import { describeDuration } from "./duration.js";
 import { getOpenWithDefaults } from "./config.js";
-import { composeStopArgs, composeUpArgs, type Container } from "./docker.js";
+import { composeStopArgs, composeUpArgs, DOCKER_DOWN, dockerState, usesDocker, type Container, type DockerState } from "./docker.js";
 import { detectEnvironment, type Environment } from "./environment.js";
 import { WispError, describe } from "./errors.js";
 import { envNames, fillEnv, fillTarget, fillText, type InputValues } from "./inputs.js";
 import { notifyRunEnd } from "./notify.js";
 import { baseLabel, gitState, listHistory, newHistoryId, noteNotified, recordHistory, stepLogFile, stepLogPath, type HistoryEntry, type HistoryStep } from "./history.js";
 import { currentOS, expandHome, stateDir, withLock } from "./paths.js";
-import { listRuns, newRunId, pidFileFor, recordWindowRun, runningFor, startRun, stopHung, stopRun, tidyState, trimLog, type RunStatus } from "./processes.js";
+import { listRuns, newRunId, pidFileFor, recordWindowRun, runningFor, startRun, stopHung, stopRun, stoppedOnPurpose, tidyState, trimLog, type RunStatus } from "./processes.js";
 import { restartLoop, shellInvocation, windowInvocation } from "./shell.js";
 import { normalizeUrl, sameUrl } from "./url.js";
 import { describeWait, waitFor } from "./wait.js";
@@ -204,9 +204,13 @@ export async function runPlan(
       const result: TargetResult = { ...outcome, durationMs: Date.now() - began };
       // Cut short by a stop, not broken: say so, rather than a signal's exit code.
       if (options.signal?.aborted && !result.ok && !result.skipped) {
-        result.error = "stopped";
-        halted ??= "the run was stopped";
+        result.error = "you stopped the run";
+        result.cancelled = true;
+      } else if (!result.ok && !result.skipped && result.run && stoppedOnPurpose(result.run)) {
+        result.error = `you stopped ${result.label}`;
+        result.cancelled = true;
       }
+      if (result.cancelled) halted ??= "the run was cancelled";
       if (result.run && !result.note?.startsWith("already running")) context.started.push({ id: result.run });
       runningLogs.delete(at);
       if (!result.ok && !result.skipped && !step.keepGoing) halted ??= step.target.kind === "wait" ? "an earlier wait gave up" : `"${step.target.label}" failed`;
@@ -220,7 +224,7 @@ export async function runPlan(
 
   try {
     for (;;) {
-      if (options.signal?.aborted) halted ??= "the run was stopped";
+      if (options.signal?.aborted) halted ??= "the run was cancelled";
       let moved = false;
       for (let at = 0; at < steps.length; at += 1) {
         if (results[at] || active.has(at)) continue;
@@ -246,10 +250,12 @@ export async function runPlan(
 
   const finished = results as TargetResult[];
   const ok = finished.every((result) => result.ok || result.skipped === true) && !halted;
+  const failures = finished.filter((result) => !result.ok && !result.skipped);
+  const cancelled = !ok && (Boolean(options.signal?.aborted) || (failures.length > 0 && failures.every((result) => result.cancelled === true)));
 
   if (record && historyId) {
     const where = await git;
-    await save({ ...entry({ ok, running: false }), ...(where ? { git: where } : {}) });
+    await save({ ...entry({ ok, running: false }), ...(cancelled ? { cancelled: true } : {}), ...(where ? { git: where } : {}) });
     // The run that dropped out of History takes its output with it.
     await tidyState().catch(() => undefined);
   }
@@ -257,7 +263,7 @@ export async function runPlan(
   if (!dryRun && steps.length > 0) {
     const failed = finished.find((result) => !result.ok && !result.skipped);
     const previous = (await listHistory({ workspace: workspace.file }).catch(() => [])).find(
-      (other) => other.id !== historyId && !other.running && baseLabel(other.bolt) === baseLabel(options.label),
+      (other) => other.id !== historyId && !other.running && !other.cancelled && baseLabel(other.bolt) === baseLabel(options.label),
     );
     const notified = await notifyRunEnd(
       {
@@ -265,7 +271,8 @@ export async function runPlan(
         bolt: options.label,
         workspace: workspace.name,
         workspaceFile: workspace.file,
-        ...(failed ? { failedStep: failed.label, ...(failed.error ? { error: failed.error } : {}) } : {}),
+        ...(cancelled ? { cancelled: true } : {}),
+        ...(failed ? { failedStep: failed.label, ...(failed.error && !cancelled ? { error: failed.error } : {}) } : {}),
         ...(historyId ? { historyId } : {}),
         durationMs: Date.now() - startedAt.getTime(),
         watched: options.watched ?? true,
@@ -276,7 +283,7 @@ export async function runPlan(
     if (record && historyId && notified.length > 0) await noteNotified(historyId, notified).catch(() => undefined);
   }
 
-  return { workspace, targets: finished, dryRun, ok, plan: steps, ...(historyId ? { historyId } : {}), ...(inputs ? { inputs } : {}) };
+  return { workspace, targets: finished, dryRun, ok, ...(cancelled ? { cancelled: true } : {}), plan: steps, ...(historyId ? { historyId } : {}), ...(inputs ? { inputs } : {}) };
 }
 
 function alongsideOthers(waitsOn: number[][], inline: boolean[]): Set<number> {
@@ -331,6 +338,7 @@ function toHistoryStep(result: TargetResult): HistoryStep {
     ...(result.workspace ? { workspace: result.workspace } : {}),
     ok: result.ok,
     ...(result.skipped ? { skipped: true } : {}),
+    ...(result.cancelled ? { cancelled: true } : {}),
     ...(result.finishes ? { finishes: true } : {}),
     ...(result.after ? { after: result.after } : {}),
     ...(result.error ? { error: result.error } : {}),
@@ -352,6 +360,10 @@ interface Context {
   historyId: string | undefined;
   /** Runs this run started, so a wait can notice one has died. */
   started: { id: string }[];
+  /** Asked once per run, before the first step that needs Docker. */
+  docker?: Promise<DockerState>;
+  /** A command this run started that someone stopped on purpose while it went on. */
+  cancelledBy?: string;
 }
 
 /**
@@ -364,6 +376,10 @@ async function deadBefore(context: Context): Promise<string | undefined> {
   for (const started of context.started) {
     const run = runs.find((entry) => entry.id === started.id);
     if (!run || run.alive) continue;
+    if (stoppedOnPurpose(run.id)) {
+      context.cancelledBy = run.label;
+      return `you stopped ${run.label}`;
+    }
     return run.log
       ? `${run.label} stopped before it was ready — \`wisp logs ${run.id}\``
       : `${run.label} stopped before it was ready — its ${run.where ?? "terminal"} window shows why`;
@@ -501,18 +517,35 @@ async function preview(step: PlannedStep, context: Context): Promise<TargetResul
   return { ...target, ok: true };
 }
 
+function dockerOf(context: Context): Promise<DockerState> {
+  context.docker ??= dockerState();
+  return context.docker;
+}
+
 async function execute(step: PlannedStep, index: number, context: Context): Promise<TargetResult> {
   const { target, workspace } = step;
 
   try {
     switch (target.kind) {
       case "wait":
-        if (target.wait) await waitFor(target.wait, context.options.signal, () => deadBefore(context));
+        if (target.wait) {
+          try {
+            await waitFor(target.wait, context.options.signal, () => deadBefore(context));
+          } catch (error) {
+            if (context.cancelledBy) return { ...target, ok: false, cancelled: true, error: `you stopped ${context.cancelledBy}` };
+            throw error;
+          }
+        }
         return { ...target, ok: true };
       case "command":
+        if (usesDocker(target.value) && (await dockerOf(context)) === "down") return { ...target, ok: false, error: DOCKER_DOWN };
         return await runCommand(step, index, context);
-      case "compose":
+      case "compose": {
+        const state = await dockerOf(context);
+        if (state === "down") return { ...target, ok: false, error: DOCKER_DOWN };
+        if (state === "missing") return { ...target, ok: false, error: "Docker isn't installed" };
         return await runCompose(step, index, context);
+      }
       case "link":
         return await openLink(target, context);
       case "folder":

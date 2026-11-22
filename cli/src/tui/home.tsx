@@ -15,7 +15,7 @@ import { AskHere } from "./forms.js";
 import type { Glyphs } from "./glyphs.js";
 import { type SearchHit, windowed } from "./model.js";
 import { flow, planGraph, stepLines, usedBy } from "./steps.js";
-import { fitGraph, StepGraph } from "./graph.js";
+import { fitGraph, graphBudget, StepGraph } from "./graph.js";
 import { counts, needsTrust, since } from "./state.js";
 import { TONE } from "./tones.js";
 
@@ -306,7 +306,7 @@ function PipelineDetails(props: {
   const problemLines = problems.length > 0 ? problems.reduce((sum, problem) => sum + 1 + (problem.hint ? 1 : 0), 0) + 1 : 0;
   const above = (full ? 1 + notes.length + (needs.length > 1 ? 1 : 0) + 2 : notes.length + 1) + problemLines;
   const bottom = full ? 3 + (inputNames.length > 0 ? 1 : 0) : 0;
-  const drawn = fitGraph(plan, width, Math.floor((room - above - bottom) * 0.45));
+  const drawn = fitGraph(plan, width, graphBudget(room - above - bottom));
   const lines = stepLines({ read, bolt, reads, runs, containers, glyphs, after: !drawn });
   const space = Math.max(1, room - above - bottom - (drawn ? drawn.height + 1 : 0));
   const overflow = lines.length > space;

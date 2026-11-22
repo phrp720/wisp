@@ -115,11 +115,11 @@ export const history: CommandDef<{ all?: boolean; log?: string; clear?: boolean;
       return;
     }
     for (const run of entries.slice(0, 30)) {
-      const mark = run.running ? cyan("●") : run.interrupted ? yellow("!") : run.ok ? green("✓") : red("✗");
+      const mark = run.running ? cyan("●") : run.interrupted ? yellow("!") : run.ok ? green("✓") : run.cancelled ? dim("⊘") : red("✗");
       const where = here ? "" : dim(` · ${run.workspaceName}`);
       const context = [TRIGGERS[run.trigger ?? ""], run.git ? `${run.git.branch} @ ${run.git.commit}` : ""].filter(Boolean).join(" · ");
       const number = run.number ? dim(` #${run.number}`) : "";
-      const state = run.running ? ` · running, step ${Math.min(run.steps.length + 1, run.total ?? run.steps.length + 1)} of ${run.total ?? "?"}` : run.interrupted ? " · interrupted" : "";
+      const state = run.running ? ` · running, step ${Math.min(run.steps.length + 1, run.total ?? run.steps.length + 1)} of ${run.total ?? "?"}` : run.interrupted ? " · interrupted" : run.cancelled ? " · cancelled" : "";
       const took = run.interrupted ? "" : ` · ${duration(run)}`;
       console.log(`${mark} ${bold(run.id)}  ${run.bolt}${number}${where} ${dim(`· ${ago(run.startedAt)} ago${took}${state}${context ? ` · ${context}` : ""}`)}`);
     }
@@ -137,14 +137,14 @@ async function showEntry(entry: HistoryEntry, options: { log?: string; json?: bo
   }
   if (options.json) return emitJson(publicRun(entry));
 
-  const mark = entry.running ? cyan("running") : entry.interrupted ? yellow("interrupted") : entry.ok ? green("passed") : red("failed");
+  const mark = entry.running ? cyan("running") : entry.interrupted ? yellow("interrupted") : entry.ok ? green("passed") : entry.cancelled ? dim("cancelled") : red("failed");
   const context = [TRIGGERS[entry.trigger ?? ""] ? `from ${TRIGGERS[entry.trigger ?? ""]}` : "", entry.git ? `${entry.git.branch} @ ${entry.git.commit}` : ""].filter(Boolean).join(" · ");
   console.log(`${mark} ${bold(entry.bolt)} ${dim(`· ${entry.workspaceName} · ${new Date(entry.startedAt).toLocaleString()}${entry.interrupted ? "" : ` · ${duration(entry)}`}${context ? ` · ${context}` : ""}`)}`);
   if (entry.inputs) console.log(dim(`  with ${Object.entries(entry.inputs).map(([name, value]) => `${name}=${value}`).join(" ")}`));
   entry.steps.forEach((step, index) => {
-    const markStep = !step.ok ? (step.skipped ? dim("–") : red("✗")) : step.skipped ? dim("–") : green("✓");
+    const markStep = !step.ok ? (step.skipped ? dim("–") : step.cancelled ? dim("⊘") : red("✗")) : step.skipped ? dim("–") : green("✓");
     const time = step.durationMs >= 1000 ? dim(` ${(step.durationMs / 1000).toFixed(1)}s`) : "";
-    const detail = step.error ? ` ${red(step.error)}` : step.note ? ` ${dim(step.note)}` : "";
+    const detail = step.error ? ` ${step.cancelled ? dim(step.error) : red(step.error)}` : step.note ? ` ${dim(step.note)}` : "";
     const log = `${step.after ? dim(` · after ${step.after.join(", ")}`) : ""}${step.log ? dim(`  [--log ${index + 1}]`) : ""}`;
     console.log(`  ${dim(String(index + 1).padStart(2))} ${markStep} ${dim(kindLabel(step.kind))} ${named(step.label, step.value)}${time}${detail}${log}`);
   });

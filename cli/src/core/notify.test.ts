@@ -48,6 +48,27 @@ describe("when to tell you", () => {
     expect(shouldNotify({ ...failed, watched: true }, "changes")).toBe(false);
   });
 
+  it("tells you a run you missed was cancelled, but never counts a cancel as a change", () => {
+    const cancelled = { ...failed, cancelled: true };
+    expect(shouldNotify(cancelled, "failures")).toBe(true);
+    expect(shouldNotify(cancelled, "all")).toBe(true);
+    expect(shouldNotify({ ...cancelled, watched: true }, "failures")).toBe(false);
+    expect(shouldNotify(cancelled, "changes")).toBe(false);
+    expect(shouldNotify({ ...cancelled, previousOk: true }, "changes")).toBe(false);
+  });
+
+  it("says a cancelled run was cancelled, where, and paints it grey, not red", () => {
+    const cancelled: RunEnd = { ...failed, cancelled: true, error: "you stopped the run" };
+    expect(describeEnd(cancelled)).toEqual({ title: "⊘ Backup was cancelled", message: "at dump · Ops · wisp history abc123" });
+    const slack = JSON.parse(webhookRequest("https://hooks.slack.com/services/x", cancelled, "web-1").body);
+    expect(slack.attachments[0].color).toBe("#9aa0a6");
+    expect(slack.attachments[0].blocks[1].fields[1]).toEqual({ type: "mrkdwn", text: "*Stopped at*\ndump" });
+    expect(slack.attachments[0].blocks).toHaveLength(3);
+    expect(JSON.parse(webhookRequest("https://discord.com/api/webhooks/1/x", cancelled, "web-1").body).embeds[0].color).toBe(0x9aa0a6);
+    expect(JSON.parse(webhookRequest("https://ntfy.sh/acme", cancelled, "web-1").body).tags).toEqual(["no_entry_sign"]);
+    expect(JSON.parse(webhookRequest("https://example.com/hook", cancelled, "web-1").body)).toMatchObject({ ok: false, cancelled: true, failedStep: "dump" });
+  });
+
   it("takes WISP_NOTIFY over the setting", () => {
     expect(notifyWhen({}, { WISP_NOTIFY: "changes" })).toBe("changes");
     expect(notifyWhen({ when: "all" }, { WISP_NOTIFY: "off" })).toBe("off");

@@ -10,7 +10,7 @@ same at your desk, over SSH and in tmux.
 
 | Tab | |
 |---|---|
-| **`1` Pipelines** | your workspaces on the left, their pipelines on the right, the selected one's steps below |
+| **`1` Pipelines** | your workspaces on the left, their pipelines on the right, the selected one's steps below: drawn as a graph of what waits for what (`v` hides it), then each step's command, then its inputs |
 | **`2` Running** | what each pipeline started, with live output, health and ports. [More](./whats-running#the-running-tab) |
 | **`3` History** | every run, with its commit and each step's output. [More](./history) |
 
@@ -22,6 +22,8 @@ the list stays where it is.
 - `x` stops it, and `r` retries from a failed step.
 - `⏎` again closes the result, so a second `⏎` runs it again.
 - `c` checks it instead: what it would do, with nothing run.
+
+Steps that all run at once get no graph: the box says they run at the same time.
 
 A pipeline that [asks for values](./inputs) shows a short form first, and one that
 [asks first](./asking-first) asks on its row. A pipeline with a problem says so on its row

@@ -14,6 +14,7 @@ export interface HistoryStep {
   workspace?: string;
   ok: boolean;
   skipped?: boolean;
+  cancelled?: boolean;
   error?: string;
   note?: string;
   durationMs: number;
@@ -56,6 +57,8 @@ export interface HistoryEntry {
   steps: HistoryStep[];
   running?: boolean;
   interrupted?: boolean;
+  /** Stopped before it finished, by you: neither a success nor a failure. */
+  cancelled?: boolean;
   pid?: number;
   total?: number;
   pending?: HistoryStep[];

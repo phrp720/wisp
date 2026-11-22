@@ -26,6 +26,24 @@ step, and folds a long column into `+N more`.
 `/` filters a run's output, all steps at once: type `FAIL` or `error` to go straight to what
 broke. Each step says how many lines matched.
 
+## How a run ends
+
+| | |
+|---|---|
+| `✓` **Success** | every step did what it should |
+| `✗` **Failed** | a step broke: a command exited with an error, a wait gave up |
+| `⊘` **Cancelled** | you stopped it before it finished. Grey, never red: nothing broke |
+| `!` **Interrupted** | Wisp itself stopped before the run did, so how it ended is unknown |
+
+A run is cancelled when you press `x` on it, and also when you stop something it started
+while it's still going: `x` on the Running tab, `wisp stop` or `wisp down`, say on the dev
+server a later step was waiting for. As on GitHub, the step that was cut off says why
+(`you stopped the run`, `you stopped server`) and the steps after it say they weren't reached.
+A command that crashed by itself is still a failure.
+
+A cancelled run doesn't count as a pipeline [starting to fail](./notifications#checks-that-run-every-few-minutes),
+and `--retry` picks up from the step that was cut off.
+
 ## Retry what failed
 
 ```bash

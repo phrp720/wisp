@@ -20,6 +20,14 @@ API, never starts against a database that isn't ready:
 { "run": "pnpm dev", "cwd": "apps/api", "after": "db" }
 ```
 
+## When Docker isn't running
+
+Before a compose step, or a command that calls `docker` (like
+`{ "run": "docker compose up -d" }`), Wisp checks that Docker answers, giving it 5 seconds. If it
+doesn't, the step fails at once with "Docker isn't running: open Docker Desktop, then try
+again", and nothing after it runs. Nothing waits for Docker in the background, so opening Docker
+Desktop later doesn't set off steps you ran earlier. The check runs once per run.
+
 ## Watching them
 
 The [Running tab](./whats-running#the-running-tab) shows each container beside the

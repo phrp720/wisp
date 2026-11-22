@@ -28,6 +28,23 @@ export interface ContainerStats {
   memory: string;
 }
 
+export type DockerState = "up" | "down" | "missing";
+
+export const DOCKER_DOWN = "Docker isn't running: open Docker Desktop, then try again";
+
+export async function dockerState(timeoutMs = 5000): Promise<DockerState> {
+  try {
+    await exec("docker", ["version", "--format", "{{.Server.Version}}"], { timeout: timeoutMs, killSignal: "SIGKILL" });
+    return "up";
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "ENOENT" ? "missing" : "down";
+  }
+}
+
+export function usesDocker(command: string): boolean {
+  return /(^|[;&|(]|\$\()\s*(sudo\s+)?docker(\s|$)/.test(command.trim());
+}
+
 /** Why Docker cannot be asked, in words that say what to do. */
 export class DockerUnavailable extends Error {}
 

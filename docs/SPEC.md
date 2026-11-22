@@ -47,7 +47,7 @@ the TUI.
 | app | `{ "app": "Slack" }` | launches or focuses an app |
 | command | `{ "run": "pnpm dev", "cwd": "apps/api", "env": { "PORT": 3000 } }` | runs a shell command |
 | wait | `{ "wait": 3 }`, `{ "wait": "localhost:5432" }`, `{ "wait": "http://localhost:3000" }` | pauses until seconds pass, a port accepts, or a url answers below 500 (60s timeout; object form `{ "wait": { "port": 5432, "timeout": 120 } }`; `"status": 200` with a url asks for that exact answer) |
-| docker | `{ "compose": "compose.yaml", "services": ["postgres"] }` | `docker compose up --wait`: done when the services are healthy; `wisp down` stops them; shown with state, health and logs |
+| docker | `{ "compose": "compose.yaml", "services": ["postgres"] }` | `docker compose up --wait`: done when the services are healthy; `wisp down` stops them; shown with state, health and logs. Before it, or a `run` that calls `docker`, Wisp checks Docker answers (5s, once a run) and fails the step at once if not |
 | pipeline | `{ "pipeline": "Database" }` | runs another pipeline of this file as one step; done when all its steps are |
 
 Any step may also carry `"label"`, `"os"` and `"after"`.
@@ -101,7 +101,10 @@ build, a backup, a deploy. One pipeline can mix both:
 - Every run is in `wisp history`, with each step's duration and output, from the moment
   it starts. Until it ends it has `"running": true`, and `pending` lists the steps not
   done yet; the ones in progress have `"running": true` and a `log` that fills as it goes.
-  `"interrupted": true` means Wisp stopped before the run did.
+  `"interrupted": true` means Wisp stopped before the run did. `"cancelled": true` (with
+  `"ok": false`) means someone stopped it: `x` in the dashboard, or stopping a command it started
+  while it ran (`wisp stop`, `wisp down`); the cut-off step has `"cancelled": true` too. It is not
+  a failure: it doesn't count for `wisp notify changes`, and its notification says "cancelled".
 - `wisp hook pre-push Check` runs it before every push and blocks the push if it fails.
   Its commands should finish: one that keeps running cannot block a push.
 
@@ -272,7 +275,8 @@ CLI instead.
   `{"ok": false, "error": {"code": "NO_PIPELINE", "message": "…", "hint": "…"}}`, with exit 1.
   Without `--json`, errors go to stderr.
 - Exit 0: everything ran. Exit 1: a step failed, `check` found errors, or the command
-  was refused (the message says why, and usually what to run instead). The same with
+  was refused (the message says why, and usually what to run instead). Exit 130: the run was
+  cancelled, by someone stopping a command it started while it ran. The same with
   `--json`: `"ok": false` and exit 1 go together.
 - Without a terminal Wisp never prompts: `wisp` with no pipeline lists the pipelines, and a pipeline
   that asks first stops with `CONFIRM_NEEDED` unless given `--yes`.

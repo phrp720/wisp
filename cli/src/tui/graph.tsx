@@ -10,14 +10,16 @@ export interface GraphNode {
   skipped?: boolean;
   state?: StepProgress;
   more?: boolean;
+  cancelled?: boolean;
 }
 
 export function graphWidth(columns: GraphNode[][]): number {
   return columns.reduce((total, column) => total + Math.max(...column.map((node) => node.label.length + (node.detail?.length ?? 0) + 6)) + 5, 0);
 }
 
-export function Mark({ ok, skipped, running, waiting, interrupted, glyphs }: { ok: boolean; skipped?: boolean | undefined; running?: boolean | undefined; waiting?: boolean | undefined; interrupted?: boolean | undefined; glyphs: Glyphs }) {
+export function Mark({ ok, skipped, running, waiting, interrupted, cancelled, glyphs }: { ok: boolean; skipped?: boolean | undefined; running?: boolean | undefined; waiting?: boolean | undefined; interrupted?: boolean | undefined; cancelled?: boolean | undefined; glyphs: Glyphs }) {
   if (running) return <Text color="cyan">{glyphs.dot}</Text>;
+  if (cancelled) return <Text color="gray">{glyphs.cancel}</Text>;
   if (waiting) return <Text dimColor>{glyphs.pending}</Text>;
   if (skipped) return <Text dimColor>{glyphs.skip}</Text>;
   if (interrupted) return <Text color="yellow">!</Text>;
@@ -38,7 +40,7 @@ export function StepGraph({ graph, glyphs, compact = false }: { graph: GraphNode
                   <Text key={row} dimColor wrap="truncate-end">{`  ${node.label}`}</Text>
                 ) : (
                   <Text key={row} wrap="truncate-end">
-                    <Mark ok={node.ok} skipped={node.skipped} running={node.state === "running"} waiting={node.state === "waiting"} glyphs={glyphs} /> {node.label}
+                    <Mark ok={node.ok} skipped={node.skipped} cancelled={node.cancelled} running={node.state === "running"} waiting={node.state === "waiting"} glyphs={glyphs} /> {node.label}
                     {node.detail ? <Text dimColor>{` ${node.detail}`}</Text> : null}
                   </Text>
                 )
@@ -56,9 +58,9 @@ export function StepGraph({ graph, glyphs, compact = false }: { graph: GraphNode
           {at > 0 ? <Box marginTop={1}><Text dimColor>{glyphs.border === "round" ? " ──▶ " : " --> "}</Text></Box> : null}
           <Box flexDirection="column">
             {column.map((node, row) => (
-              <Box key={row} borderStyle="round" borderColor={node.state === "running" ? "cyan" : node.state === "waiting" || node.skipped ? "gray" : node.ok ? "green" : "red"} paddingX={1}>
+              <Box key={row} borderStyle="round" borderColor={node.state === "running" ? "cyan" : node.state === "waiting" || node.skipped || node.cancelled ? "gray" : node.ok ? "green" : "red"} paddingX={1}>
                 <Text wrap="truncate-end">
-                  <Mark ok={node.ok} skipped={node.skipped} running={node.state === "running"} waiting={node.state === "waiting"} glyphs={glyphs} /> {node.label}
+                  <Mark ok={node.ok} skipped={node.skipped} cancelled={node.cancelled} running={node.state === "running"} waiting={node.state === "waiting"} glyphs={glyphs} /> {node.label}
                   {node.detail ? <Text dimColor>{` ${node.detail}`}</Text> : null}
                 </Text>
               </Box>
@@ -74,12 +76,12 @@ function rowsOf(graph: GraphNode[][], width: number, boxed: boolean): number {
   let rows = 1;
   let used = 0;
   for (const column of graph) {
-    const wide = Math.max(...column.map((node) => node.label.length + (node.detail ? node.detail.length + 1 : 0) + 2)) + (boxed ? 4 : 0) + 5;
-    if (used > 0 && used + wide > width) {
+    const wide = Math.max(...column.map((node) => node.label.length + (node.detail ? node.detail.length + 1 : 0) + 2)) + (boxed ? 4 : 0);
+    if (used > 0 && used + 5 + wide > width) {
       rows += 1;
       used = 0;
     }
-    used += wide;
+    used += (used > 0 ? 5 : 0) + wide;
   }
   return rows;
 }
@@ -92,6 +94,10 @@ export function graphHeight(graph: GraphNode[][], width: number, boxed = true): 
 
 function capped(graph: GraphNode[][], most: number): GraphNode[][] {
   return graph.map((column) => (column.length <= most ? column : [...column.slice(0, most - 1), { label: `+${column.length - most + 1} more`, ok: true, state: "waiting", more: true }]));
+}
+
+export function graphBudget(space: number): number {
+  return Math.max(Math.floor(space * 0.45), Math.min(space - 8, 9));
 }
 
 export function fitGraph(graph: GraphNode[][], width: number, budget: number): { graph: GraphNode[][]; compact: boolean; height: number } | undefined {

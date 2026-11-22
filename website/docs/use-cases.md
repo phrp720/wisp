@@ -235,6 +235,38 @@ Each step runs even if another fails, and the run still says what failed.
 0 4 * * 0 wisp use /srv/shop/.wisp.json Cleanup
 ```
 
+### Know when a site goes down
+
+A check every 5 minutes that tells you once when the site stops answering, and once when it's
+back, not every 5 minutes in between:
+
+```json
+{
+  "label": "Check shop",
+  "steps": [
+    { "wait": { "url": "https://shop.example.com/health", "status": 200, "timeout": 30 }, "label": "site" },
+    { "wait": { "port": 5432, "timeout": 10 }, "label": "database" }
+  ]
+}
+```
+
+```bash
+wisp notify changes                          # once when it starts failing, once when it works again
+wisp notify add https://hooks.slack.com/services/... shop
+```
+
+```
+*/5 * * * * wisp use /srv/shop/.wisp.json "Check shop"
+```
+
+The message says which check failed and why, like `at site: it answered 502`. Run it on the
+server itself to check what only it can reach, like the database's port, or from another
+machine to see the site as your users do. `wisp history` keeps every check, so you can see
+when it went down and for how long.
+
+It's a check from one machine, as often as cron runs it, not an uptime service: no status page,
+and nothing checking from elsewhere if that machine goes down too.
+
 ## Your own machine
 
 Not everything belongs to a repository. Press `N` in the dashboard for a personal

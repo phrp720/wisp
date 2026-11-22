@@ -65,6 +65,15 @@ export default defineConfig({
   sitemap: { hostname: site },
   appearance: "dark",
   lastUpdated: false,
+  markdown: {
+    config(md) {
+      const inline = md.renderer.rules.code_inline;
+      md.renderer.rules.code_inline = (tokens, at, options, env, self) => {
+        const html = inline ? inline(tokens, at, options, env, self) : self.renderToken(tokens, at, options);
+        return html.replace(/^<code/, "<code v-pre");
+      };
+    },
+  },
   head: [
     ["link", { rel: "icon", type: "image/svg+xml", href: "/logo.svg" }],
     ["meta", { name: "theme-color", content: "#8b5cf6" }],

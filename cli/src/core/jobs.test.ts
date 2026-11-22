@@ -501,7 +501,59 @@ describe("stopping and retrying", () => {
     const result = await switchToWorkspace(ws, { bolt: "build", signal: controller.signal }, { platform: recorder(), environment: desktop, defaults: {} });
     expect(Date.now() - began).toBeLessThan(5000);
     expect(result.ok).toBe(false);
-    expect(result.targets[1]).toMatchObject({ skipped: true, note: "not reached — the run was stopped" });
+    expect(result.cancelled).toBe(true);
+    expect(result.targets[0]).toMatchObject({ ok: false, cancelled: true, error: "you stopped the run" });
+    expect(result.targets[1]).toMatchObject({ skipped: true, note: "not reached — the run was cancelled" });
+    const entry = await getHistory(result.historyId as string);
+    expect(entry).toMatchObject({ ok: false, cancelled: true });
+    expect(entry?.steps[0]).toMatchObject({ cancelled: true });
+  });
+
+  it.skipIf(process.platform === "win32")("counts a run as cancelled when you stop what it is waiting on, from Running or wisp stop", async () => {
+    const ws = workspace({
+      pipelines: [{ label: "Dev", steps: [{ run: "sleep 30", label: "server" }, { wait: { port: 1, timeout: 20 }, label: "up", after: "server" }, { url: "http://localhost:1", after: "up" }] }],
+    });
+    const stopper = setInterval(async () => {
+      const server = (await listRuns()).find((run) => run.alive && run.label === "server" && Date.now() - Date.parse(run.startedAt) > 2500);
+      if (server) {
+        clearInterval(stopper);
+        stopRun(server);
+      }
+    }, 100);
+    const began = Date.now();
+    const result = await switchToWorkspace(ws, { bolt: "dev" }, { platform: recorder(), environment: desktop, defaults: {} });
+    clearInterval(stopper);
+    expect(Date.now() - began).toBeLessThan(10_000);
+    expect(result).toMatchObject({ ok: false, cancelled: true });
+    expect(result.targets[1]).toMatchObject({ ok: false, cancelled: true, error: "you stopped server" });
+    expect(result.targets[2]).toMatchObject({ skipped: true, note: "not reached — the run was cancelled" });
+    expect(await getHistory(result.historyId as string)).toMatchObject({ cancelled: true });
+  });
+
+  it.skipIf(process.platform === "win32")("counts it as cancelled when you stop a command while it is still starting", async () => {
+    const ws = workspace({ pipelines: [{ label: "Dev", steps: [{ run: "sleep 30", label: "server" }, { url: "http://localhost:1", after: "server" }] }] });
+    const stopper = setInterval(async () => {
+      const server = (await listRuns()).find((run) => run.alive && run.label === "server");
+      if (server) {
+        clearInterval(stopper);
+        stopRun(server);
+      }
+    }, 20);
+    const result = await switchToWorkspace(ws, { bolt: "dev" }, { platform: recorder(), environment: desktop, defaults: {} });
+    clearInterval(stopper);
+    expect(result).toMatchObject({ ok: false, cancelled: true });
+    expect(result.targets[0]).toMatchObject({ ok: false, cancelled: true, error: "you stopped server" });
+  });
+
+  it.skipIf(process.platform === "win32")("still counts it as a failure when what it waits on dies by itself", async () => {
+    const ws = workspace({
+      pipelines: [{ label: "Dev", steps: [{ run: "sleep 3; exit 1", label: "server" }, { wait: { port: 1, timeout: 20 }, label: "up", after: "server" }] }],
+    });
+    const result = await switchToWorkspace(ws, { bolt: "dev" }, { platform: recorder(), environment: desktop, defaults: {} });
+    expect(result.ok).toBe(false);
+    expect(result.cancelled).toBeUndefined();
+    expect(result.targets[1]).toMatchObject({ ok: false, error: expect.stringContaining("server stopped before it was ready") });
+    expect(result.targets[1]?.cancelled).toBeUndefined();
   });
 
   it.skipIf(process.platform === "win32")("stops a command that runs over its timeout, with all it started, and fails the step", async () => {

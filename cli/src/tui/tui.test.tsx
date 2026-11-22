@@ -853,6 +853,17 @@ describe("the TUI", () => {
     expect(app.lastFrame()).toMatch(/2\. run lint +after install/);
   });
 
+  it("draws boxes for a short pipeline even in a small window, as long as its steps keep room", async () => {
+    const shop = read("/dev/shop/.wisp.json", {
+      name: "Shop",
+      pipelines: [{ label: "Dev", steps: [{ run: "node db.mjs", label: "db" }, { run: "node web.mjs", label: "web" }, { run: "node api.mjs", label: "api", after: "db" }, { wait: "localhost:4000", label: "up", after: "api" }, { url: "http://localhost:5173", after: "up" }] }],
+    });
+    const app = render(<App services={services({}, { reads: [shop], here: shop.workspace.file, unreadable: [] })} glyphs={unicode} size={{ columns: 110, rows: 32 }} />);
+    await eventually(() => expect(app.lastFrame()).toMatch(/│ · db +│ ──▶ │ · api │ ──▶ │ · up │/));
+    expect(app.lastFrame()).toContain("│ · web │");
+    expect(app.lastFrame()).toContain("1. start db");
+  });
+
   it("draws no graph for steps that all run at once, and says so above them", async () => {
     const shop = read("/dev/shop/.wisp.json", {
       name: "Shop",
@@ -1045,7 +1056,7 @@ describe("the TUI", () => {
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ Notifications/));
     await tick();
     app.stdin.write("\r");
-    await eventually(() => expect(app.lastFrame()).toMatch(/❯ Tell me +when a run fails/));
+    await eventually(() => expect(app.lastFrame()).toMatch(/❯ Inform me +when a run fails/));
     await eventually(() => expect(app.lastFrame()).toContain("+  add a webhook"));
     await tick();
     app.stdin.write("\r");
@@ -1056,7 +1067,7 @@ describe("the TUI", () => {
     await tick();
     app.stdin.write("\u0013");
     await eventually(() => expect(setNotify).toHaveBeenCalledWith({ when: "changes" }));
-    await eventually(() => expect(app.lastFrame()).toMatch(/❯ Tell me +when a pipeline starts failing/));
+    await eventually(() => expect(app.lastFrame()).toMatch(/❯ Inform me +when a pipeline starts failing/));
 
     await tick();
     app.stdin.write("a");
@@ -1445,6 +1456,35 @@ describe("commands that finish, down and history in the TUI", () => {
     await tick();
     app.stdin.write("v");
     await eventually(() => expect(app.lastFrame()).toContain("│ ✓ install 500ms │"));
+  });
+
+  it("shows a cancelled run in grey, as cancelled, never as failed", async () => {
+    const entry: HistoryEntry = {
+      id: "6c7d8e9f0a1b",
+      number: 4,
+      workspace: acme.workspace.file,
+      workspaceName: "Acme",
+      bolt: "Deploy",
+      startedAt: new Date(Date.now() - 60_000).toISOString(),
+      finishedAt: new Date().toISOString(),
+      ok: false,
+      cancelled: true,
+      steps: [
+        { kind: "command", label: "build", value: "pnpm build", ok: true, durationMs: 800, finishes: true },
+        { kind: "command", label: "ship", value: "./ship.sh", ok: false, cancelled: true, error: "you stopped the run", durationMs: 300, finishes: true },
+        { kind: "link", label: "site", value: "https://acme.test", ok: false, skipped: true, note: "not reached — the run was cancelled", durationMs: 0 },
+      ],
+    };
+    const app = render(<App services={services({ history: async () => [entry] })} glyphs={unicode} size={{ columns: 130, rows: 30 }} />);
+    await tick();
+    app.stdin.write("h");
+    await eventually(() => expect(app.lastFrame()).toMatch(/⊘ Deploy #4 +cancelled/));
+    expect(app.lastFrame()).not.toContain("at ship");
+    await tick();
+    app.stdin.write("\r");
+    await eventually(() => expect(app.lastFrame()).toContain("Cancelled"));
+    expect(app.lastFrame()).not.toContain("Failed");
+    expect(app.lastFrame()).toMatch(/⊘ run ship/);
   });
 
   it("says on a run's page where its notification went, and that it didn't arrive", async () => {

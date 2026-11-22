@@ -12,7 +12,7 @@ import { TONE } from "./tones.js";
 import { matchesAll, shortUrl, windowed, type Services } from "./model.js";
 import { FilterLine, filterLog, MatchLine } from "./logfilter.js";
 import { useMouse } from "./mouse.js";
-import { fitGraph, Mark, StepGraph, type GraphNode } from "./graph.js";
+import { fitGraph, graphBudget, Mark, StepGraph, type GraphNode } from "./graph.js";
 
 export interface HistoryScreenProps {
   services: Services;
@@ -317,8 +317,8 @@ export function HistoryScreen(props: HistoryScreenProps) {
           const titleWidth = Math.min(32, Math.max(0, ...all.map(titleOf)));
           const at = runOffset + position;
           const selected = at === runIndex && focus === "runs";
-          const failedAt = entry.steps.find((step) => !step.ok && !step.skipped);
-          const state = entry.running ? `running, step ${Math.min(entry.steps.length + 1, entry.total ?? entry.steps.length + 1)} of ${entry.total ?? "?"}` : entry.interrupted ? "interrupted" : "";
+          const failedAt = entry.cancelled ? undefined : entry.steps.find((step) => !step.ok && !step.skipped);
+          const state = entry.cancelled ? "cancelled" : entry.running ? `running, step ${Math.min(entry.steps.length + 1, entry.total ?? entry.steps.length + 1)} of ${entry.total ?? "?"}` : entry.interrupted ? "interrupted" : "";
           // A fixed width, so the times line up down the list whatever their length.
           const right = `${(entry.interrupted ? "?" : formatDuration(totalMs(entry)) || "0ms").padStart(7)} · ${since(entry.startedAt).padEnd(8)}`;
           const doomed = forget?.ids.includes(entry.id) ?? false;
@@ -330,11 +330,11 @@ export function HistoryScreen(props: HistoryScreenProps) {
                 <Box flexGrow={1} minWidth={0}>
                   <Text wrap="truncate-end" color={doomed ? "red" : undefined}>
                     <Text bold={selected} color={doomed ? "red" : selected ? TONE.accent : undefined}>
-                      {selected ? glyphs.pointer : " "} <Mark ok={entry.ok} running={entry.running} interrupted={entry.interrupted} glyphs={glyphs} /> {filter?.bolt ? "" : `${entry.bolt} `}
+                      {selected ? glyphs.pointer : " "} <Mark ok={entry.ok} running={entry.running} interrupted={entry.interrupted} cancelled={entry.cancelled} glyphs={glyphs} /> {filter?.bolt ? "" : `${entry.bolt} `}
                     </Text>
                     <Text dimColor={!filter?.bolt} bold={selected && Boolean(filter?.bolt)} color={selected && filter?.bolt ? TONE.accent : undefined}>{`#${entry.number ?? ""}`}</Text>
                     {" ".repeat(Math.max(0, titleWidth - titleOf(entry)))}
-                    {state ? <Text color="cyan">{`  ${state}`}</Text> : null}
+                    {state ? <Text color={entry.cancelled ? "gray" : "cyan"}>{`  ${state}`}</Text> : null}
                     {failedAt ? <Text color="red">{`  at ${failedAt.label}`}</Text> : null}
                     {entry.git ? <Text color="yellow" dimColor>{`  ${entry.git.commit}`}</Text> : null}
                     {subject ? <Text dimColor>{` ${subject}`}</Text> : null}
@@ -505,14 +505,14 @@ function RunDetail(props: {
       step: at,
       node: (
         <Text wrap="truncate-end">
-          <Text color={TONE.accent}>{isSelected ? glyphs.pointer : " "}</Text> {isOpen ? "▾" : "▸"} <Mark ok={step.ok} skipped={step.skipped} running={step.state === "running"} waiting={step.state === "waiting"} glyphs={glyphs} />{" "}
+          <Text color={TONE.accent}>{isSelected ? glyphs.pointer : " "}</Text> {isOpen ? "▾" : "▸"} <Mark ok={step.ok} skipped={step.skipped} cancelled={step.cancelled} running={step.state === "running"} waiting={step.state === "waiting"} glyphs={glyphs} />{" "}
           <Text bold={isSelected} color={isSelected ? TONE.accent : undefined} dimColor={step.state === "waiting" && !isSelected}>{fit(describeHistoryStep(step), labelWidth)}</Text>
           {step.state ? (
             <Text color={step.state === "running" ? "cyan" : undefined} dimColor={step.state === "waiting"}>{`  ${(step.state === "running" ? "running" : "waiting").padEnd(18)}  `}</Text>
           ) : (
             <>
               <Text dimColor>{` ${formatDuration(step.durationMs).padStart(6)}  `}</Text>
-              <Text color={step.ok ? TONE.accent : "red"}>{bar.padEnd(12)}</Text>
+              <Text color={step.ok ? TONE.accent : step.cancelled ? "gray" : "red"}>{bar.padEnd(12)}</Text>
             </>
           )}
           {"  "}
@@ -558,7 +558,7 @@ function RunDetail(props: {
   });
 
   const graph = pipeline(entry);
-  const fitted = showGraph ? fitGraph(graph, columns - 6, Math.floor((height - 8) * 0.45)) : undefined;
+  const fitted = showGraph ? fitGraph(graph, columns - 6, graphBudget(height - 8)) : undefined;
   const drawn = fitted !== undefined;
   const graphLines = fitted ? fitted.height - 1 : 0;
   const room = Math.max(3, height - 8 - graphLines - (filtering || typing ? 1 : 0));
@@ -662,10 +662,10 @@ function RunDetail(props: {
   });
 
   return (
-    <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor={entry.ok || entry.running ? "gray" : entry.interrupted ? "yellow" : "red"} paddingX={1} overflow="hidden">
+    <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor={entry.ok || entry.running || entry.cancelled ? "gray" : entry.interrupted ? "yellow" : "red"} paddingX={1} overflow="hidden">
       <Box ref={head} flexDirection="column" flexShrink={0}>
       <Text wrap="truncate-end">
-        <Mark ok={entry.ok} running={entry.running} interrupted={entry.interrupted} glyphs={glyphs} /> <Text bold>{entry.bolt}</Text>
+        <Mark ok={entry.ok} running={entry.running} interrupted={entry.interrupted} cancelled={entry.cancelled} glyphs={glyphs} /> <Text bold>{entry.bolt}</Text>
         <Text dimColor>{` #${entry.number ?? ""}`}</Text>
         <Text dimColor>{`   ${entry.workspaceName}`}</Text>
       </Text>
@@ -717,7 +717,9 @@ function Summary({ entry }: { entry: HistoryEntry }) {
       ? ["Status", `Running, step ${Math.min(entry.steps.length + 1, entry.total ?? entry.steps.length + 1)} of ${entry.total ?? "?"}`, "cyan"]
       : entry.interrupted
         ? ["Status", "Interrupted", "yellow"]
-        : ["Status", entry.ok ? "Success" : "Failed", entry.ok ? "green" : "red"],
+        : entry.cancelled
+          ? ["Status", "Cancelled", "gray"]
+          : ["Status", entry.ok ? "Success" : "Failed", entry.ok ? "green" : "red"],
     ["Total duration", entry.interrupted ? "unknown" : formatDuration(totalMs(entry)) || "0ms"],
     ...(entry.notified && entry.notified.length > 0 ? [notifiedCell(entry.notified)] : []),
   ];
@@ -880,7 +882,7 @@ function searchText(entry: HistoryEntry): (string | undefined)[] {
     entry.bolt,
     `#${entry.number ?? ""}`,
     entry.workspaceName,
-    entry.ok ? "passed success ok" : "failed failure",
+    entry.ok ? "passed success ok" : entry.cancelled ? "cancelled stopped" : "failed failure",
     failedAt ? failedAt.label : "",
     entry.git?.branch,
     entry.git?.commit,

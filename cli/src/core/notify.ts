@@ -20,6 +20,7 @@ export interface RunEnd {
   workspaceFile?: string;
   failedStep?: string;
   error?: string;
+  cancelled?: boolean;
   historyId?: string;
   durationMs: number;
   watched: boolean;
@@ -28,7 +29,7 @@ export interface RunEnd {
 
 export function shouldNotify(end: RunEnd, when: NotifyWhen): boolean {
   if (when === "off") return false;
-  if (when === "changes" && end.ok === (end.previousOk ?? true)) return false;
+  if (when === "changes" && (end.cancelled || end.ok === (end.previousOk ?? true))) return false;
   if (when === "failures" && end.ok) return false;
   return !end.watched || end.durationMs >= LONG_RUN_MS;
 }
@@ -40,16 +41,17 @@ export function notifyWhen(settings: NotifySettings, env: NodeJS.ProcessEnv = pr
 }
 
 export function failureReason(end: RunEnd): string | undefined {
+  if (end.cancelled) return undefined;
   const error = end.error?.replace(/\s+/g, " ").trim();
   if (!error) return undefined;
   return error.length > 200 ? `${error.slice(0, 199)}…` : error;
 }
 
 export function describeEnd(end: RunEnd): { title: string; message: string } {
-  const reason = failureReason(end);
+  const reason = end.cancelled ? undefined : failureReason(end);
   const at = end.failedStep ? `at ${end.failedStep}${reason ? `: ${reason}` : ""}` : "";
   return {
-    title: end.ok ? (end.previousOk === false ? `✓ ${end.bolt} works again` : `✓ ${end.bolt} finished`) : `✗ ${end.bolt} failed`,
+    title: end.ok ? (end.previousOk === false ? `✓ ${end.bolt} works again` : `✓ ${end.bolt} finished`) : end.cancelled ? `⊘ ${end.bolt} was cancelled` : `✗ ${end.bolt} failed`,
     message: [at, end.workspace, end.historyId ? `wisp history ${end.historyId}` : ""].filter(Boolean).join(" · "),
   };
 }
@@ -153,11 +155,16 @@ export function webhookKind(url: string): WebhookKind {
 
 const GREEN = 0x2eb67d;
 const RED = 0xe01e5a;
+const GREY = 0x9aa0a6;
+
+function colourOf(end: RunEnd): number {
+  return end.ok ? GREEN : end.cancelled ? GREY : RED;
+}
 
 function facts(end: RunEnd, host: string): { name: string; value: string }[] {
   return [
     { name: "Workspace", value: end.workspace },
-    ...(end.failedStep ? [{ name: "Failed at", value: end.failedStep }] : []),
+    ...(end.failedStep ? [{ name: end.cancelled ? "Stopped at" : "Failed at", value: end.failedStep }] : []),
     { name: "Host", value: host },
     { name: "Took", value: describeDuration(end.durationMs / 1000) },
   ];
@@ -176,7 +183,7 @@ function slackBody(end: RunEnd, host: string, text: string): unknown {
     ...(reason ? [{ type: "section", text: { type: "mrkdwn", text: `\`\`\`${slackEscape(reason)}\`\`\`` } }] : []),
     ...(end.historyId ? [{ type: "context", elements: [{ type: "mrkdwn", text: `\`wisp history ${end.historyId}\`` }] }] : []),
   ];
-  return { text, attachments: [{ color: `#${(end.ok ? GREEN : RED).toString(16)}`, blocks }] };
+  return { text, attachments: [{ color: `#${colourOf(end).toString(16)}`, blocks }] };
 }
 
 function discordBody(end: RunEnd, host: string, now: Date): unknown {
@@ -186,7 +193,7 @@ function discordBody(end: RunEnd, host: string, now: Date): unknown {
     embeds: [
       {
         title: title.slice(0, 256),
-        color: end.ok ? GREEN : RED,
+        color: colourOf(end),
         ...(reason ? { description: `\`\`\`\n${reason.replace(/`/g, "'")}\n\`\`\`` } : {}),
         fields: facts(end, host)
           .filter((fact) => fact.name !== "Host")
@@ -213,7 +220,7 @@ function teamsBody(end: RunEnd, host: string): unknown {
           version: "1.4",
           msteams: { width: "Full" },
           body: [
-            { type: "TextBlock", text: title, weight: "Bolder", size: "Medium", color: end.ok ? "Good" : "Attention", wrap: true },
+            { type: "TextBlock", text: title, weight: "Bolder", size: "Medium", color: end.ok ? "Good" : end.cancelled ? "Default" : "Attention", wrap: true },
             { type: "FactSet", facts: facts(end, host).map((fact) => ({ title: fact.name, value: fact.value })) },
             ...(reason ? [{ type: "TextBlock", text: reason, fontType: "Monospace", wrap: true }] : []),
             ...(end.historyId ? [{ type: "TextBlock", text: `wisp history ${end.historyId}`, isSubtle: true, size: "Small", fontType: "Monospace", wrap: true }] : []),
@@ -237,7 +244,7 @@ export function webhookRequest(url: string, end: RunEnd, host = hostname(), now 
     const segments = target.pathname.split("/").filter(Boolean);
     const topic = segments.pop() ?? "";
     const base = new URL(`/${segments.join("/")}`, target.origin).toString();
-    return { url: base, headers, body: JSON.stringify({ topic, title: `${title} on ${host}`, message, tags: [end.ok ? "white_check_mark" : "x"] }) };
+    return { url: base, headers, body: JSON.stringify({ topic, title: `${title} on ${host}`, message, tags: [end.ok ? "white_check_mark" : end.cancelled ? "no_entry_sign" : "x"] }) };
   }
   const reason = failureReason(end);
   return {
@@ -246,6 +253,7 @@ export function webhookRequest(url: string, end: RunEnd, host = hostname(), now 
     body: JSON.stringify({
       text,
       ok: end.ok,
+      ...(end.cancelled ? { cancelled: true } : {}),
       pipeline: end.bolt,
       workspace: end.workspace,
       ...(end.failedStep ? { failedStep: end.failedStep } : {}),

@@ -163,10 +163,11 @@ export function resultLine(result: {
   workspace?: string;
   error?: string;
   note?: string;
+  cancelled?: boolean;
 }): string {
-  const mark = result.skipped ? dim("–") : !result.ok ? red("✗") : green("✓");
+  const mark = result.skipped ? dim("–") : result.cancelled ? dim("⊘") : !result.ok ? red("✗") : green("✓");
   const from = result.workspace ? dim(` (${result.workspace})`) : "";
-  const detail = result.error ? ` ${red(`(${result.error})`)}` : result.note ? ` ${dim(`· ${result.note}`)}` : "";
+  const detail = result.error ? ` ${result.cancelled ? dim(`(${result.error})`) : red(`(${result.error})`)}` : result.note ? ` ${dim(`· ${result.note}`)}` : "";
   const time = result.durationMs && result.durationMs >= 1000 ? dim(` ${(result.durationMs / 1000).toFixed(1)}s`) : "";
   return `  ${mark} ${dim(kindLabel(result.kind))} ${named(result.label, shown(result), from)}${time}${detail}`;
 }
