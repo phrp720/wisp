@@ -1,7 +1,7 @@
 # Use cases
 
 What Wisp is for, each with a pipeline to copy. Put it in the project's `.wisp.json`, or in
-a [workspace of your own](./file#personal-workspaces) when it belongs to no repository.
+a [personal workspace](./file#personal-workspaces) when it belongs to no repository.
 
 The names are yours. Wisp has no built-in `dev` or `deploy`: you run a pipeline from any
 folder as `wisp <workspace> <pipeline>`, so `wisp acme dev` runs the *Dev* pipeline of the
@@ -254,8 +254,7 @@ Each step runs even if another fails, and the run still says what failed.
 
 ## Your own machine
 
-Not everything belongs to a repository. Press `N` in the dashboard for a workspace of your
-own, say *Me*. Its pipelines run from any folder, and without asking for trust, since
+Not everything belongs to a repository. Press `N` in the dashboard for a personal workspace, say *Me*. Its pipelines run from any folder, and without asking for trust, since
 they're yours.
 
 ### A tunnel to the production database

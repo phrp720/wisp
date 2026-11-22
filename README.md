@@ -34,8 +34,8 @@
 
 ## What it is
 
-A **pipeline** is a name and its steps, in a `.wisp.json` next to your code or in a workspace
-of your own. Steps start together unless they say what they wait for:
+A **pipeline** is a name and its steps, in a `.wisp.json` next to your code or in a personal
+workspace. Steps start together unless they say what they wait for:
 
 ```
 db ──▶ api ──▶ up ──┐
@@ -93,8 +93,8 @@ Then Wisp:
 | **Scheduled jobs** | `dump → prune` | From cron: stopped if it hangs, a message to Slack or ntfy if it fails, every run in history. |
 | **Your own machine** | `mail · calendar · Slack` | Pipelines outside any repo: the day's tabs and apps, an SSH tunnel kept open. |
 
-You name the pipelines and run them from any folder as `wisp <workspace> <pipeline>`:
-`wisp shop deploy` runs the Deploy pipeline of your Shop project. Each use case, with the
+You name the pipelines and run them from any folder as `wisp <workspace> <pipeline>`,
+e.g. `wisp shop deploy` for the Deploy pipeline of your Shop project. Each use case, with the
 pipeline to copy: [Use cases](https://willowisp.dev/docs/use-cases).
 
 <p align="center">

@@ -1123,7 +1123,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
         />
       ) : view.kind === "new-workspace" ? (
         <Form
-          title="A workspace of your own"
+          title="A personal workspace"
           intro="For things that belong to no project: 'Morning', 'On call', 'University'. It lives in Wisp's own folder, and its commands run without asking — it's yours."
           fields={[{ key: "name", label: "Name", hint: "what it's for", placeholder: "Morning", required: true }]}
           submitLabel="Create workspace"

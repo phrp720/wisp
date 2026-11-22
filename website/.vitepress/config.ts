@@ -14,7 +14,7 @@ const site = "https://willowisp.dev";
  */
 const LLMS = `# Wisp
 
-> Wisp runs pipelines on your own machines: a dev stack, checks before a push, a deploy, a backup. A pipeline is steps that run side by side or wait for what they need: commands, Docker services, waits for a port or a website, other pipelines, and links, folders and apps to open. It lives in a \`.wisp.json\` next to the code, or in a workspace of your own, and runs with \`wisp <workspace> <pipeline>\` from whatever folder you're in, on the machine Wisp is installed on: a laptop or a server. Wisp keeps track of everything it starts, keeps every run like CI, and runs nothing from a cloned repository until a person allows it. Free and open source, for macOS, Linux and Windows.
+> Wisp runs pipelines on your own machines: a dev stack, checks before a push, a deploy, a backup. A pipeline is steps that run side by side or wait for what they need: commands, Docker services, waits for a port or a website, other pipelines, and links, folders and apps to open. It lives in a \`.wisp.json\` next to the code, or in a personal workspace, and runs with \`wisp <workspace> <pipeline>\` from whatever folder you're in, on the machine Wisp is installed on: a laptop or a server. Wisp keeps track of everything it starts, keeps every run like CI, and runs nothing from a cloned repository until a person allows it. Free and open source, for macOS, Linux and Windows.
 
 The complete reference for agents, the file format, every command, JSON output and exit codes, is [llms-full.txt](${site}/llms-full.txt). The installed CLI prints the same text with \`wisp help agents\`.
 

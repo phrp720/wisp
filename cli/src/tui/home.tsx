@@ -21,7 +21,7 @@ import { TONE } from "./tones.js";
 /**
  * Every workspace, grouped by where it comes from — said in words rather than marks: the
  * project of the folder Wisp was opened in, the other projects you have used, and the
- * workspaces of your own.
+ * personal workspaces.
  */
 export interface Asking {
   question: string;

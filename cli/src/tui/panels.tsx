@@ -170,7 +170,7 @@ export function HelpPanel({ glyphs, height, tab = "bolts" }: { glyphs: Glyphs; h
         ["e", "edit the selected pipeline, or the workspace on the left: its name, icon, notes"],
         ["a  D", "add a pipeline · delete the selected pipeline, or workspace on the left"],
         ["K  J", "move the selected pipeline up · down"],
-        ["N", "a new workspace of your own"],
+        ["N", "a new personal workspace"],
         ["E", "open the file itself in your text editor"],
         ["s", "settings: what opens files, where commands run, notifications, the mouse"],
       ],

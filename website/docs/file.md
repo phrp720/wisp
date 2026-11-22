@@ -170,6 +170,5 @@ without touching the shared file.
 
 ## Personal workspaces
 
-Tasks that belong to no repository, like *Morning* or *Tunnel*, go in a workspace of your
-own: the same format, kept in Wisp's `workspaces` folder (`wisp doctor` shows where). Make
+Tasks that belong to no repository, like *Morning* or *Tunnel*, go in a personal workspace: the same format, kept in Wisp's `workspaces` folder (`wisp doctor` shows where). Make
 one with `N` in the dashboard. Its commands run without asking: they're yours.

@@ -95,7 +95,7 @@ const more = [
   { icon: "restart", title: "Servers that come back", text: "A crashed server restarts on its own, and you see that it did." },
   { icon: "asks", title: "Asks when it matters", text: "A deploy can ask where to, and ask before it goes." },
   { icon: "laptop", title: "Same file, every machine", text: "Works the same on macOS, Linux and Windows, laptop or server." },
-  { icon: "agents", title: "Ready for agents", text: "Every command takes <code>--json</code>, and agents can't approve their own commands." },
+  { icon: "agents", title: "Ready for agents", text: "Every command takes <code>--json</code>, and nothing waits for a keypress without a terminal." },
 ];
 </script>
 
@@ -131,7 +131,7 @@ const more = [
       <div>
         <p class="eyebrow">One file</p>
         <h2>Write the pipeline once.</h2>
-        <p class="lead">A pipeline is a list of steps that start together unless they say what they wait for, with <code>after</code>. It lives in a <code>.wisp.json</code> next to your code, or in a workspace of your own. <code>wisp init</code> drafts pipelines from what your project already has, and the dashboard edits them through forms.</p>
+        <p class="lead">A pipeline is a list of steps that start together unless they say what they wait for, with <code>after</code>. It lives in a <code>.wisp.json</code> next to your code, or in a personal workspace for what belongs to no repo. <code>wisp init</code> drafts pipelines from what your project already has, and the dashboard edits them through forms.</p>
         <ul class="places">
           <li><b>Commands</b> that keep running, like a server, or finish, like a test.</li>
           <li><b>Docker services</b>, ready when they're healthy.</li>
@@ -176,7 +176,7 @@ const more = [
 
     <section class="wrap">
       <h2 class="center">Use cases</h2>
-      <p class="lead center-lead">Each is a pipeline you write once, or let <code>wisp init</code> draft, and name as you like. Then you run it from whatever folder you're in as <code>wisp &lt;workspace&gt; &lt;pipeline&gt;</code>: <code>wisp shop deploy</code> runs the Deploy pipeline of your Shop project.</p>
+      <p class="lead center-lead">Each is a pipeline you write once, or let <code>wisp init</code> draft, and name as you like. Then you run it from whatever folder you're in as <code>wisp &lt;workspace&gt; &lt;pipeline&gt;</code>, e.g. <code>wisp shop deploy</code> for the Deploy pipeline of your Shop project.</p>
       <p class="legend" aria-hidden="true">
         <span v-for="entry in kinds" :key="entry.kind" class="legend-item" :class="`k-${entry.kind}`">{{ entry.label }}</span>
       </p>
@@ -228,7 +228,7 @@ const more = [
       <div class="showcase-text">
         <p class="eyebrow">On a server</p>
         <h2>Your server's runbook, runnable.</h2>
-        <p class="lead">Deploys that ask where and ask before they go. Updates that pull, migrate and restart. Backups that tell you when they fail. From wherever you SSH in, with no folder to find: <code>wisp shop deploy</code>, <code>wisp ps</code>, <code>wisp logs shop -f</code>.</p>
+        <p class="lead">How to deploy, update and back up the app, written once next to it. Whoever SSHs in runs <code>wisp shop deploy</code> from any folder: it asks before it goes, and every run is kept. A backup from cron messages you when it fails, and what Wisp starts keeps running after you log out.</p>
         <a class="more" href="/docs/use-cases#run-a-server">Server use cases →</a>
       </div>
       <img class="recording" src="/demo/server.gif" width="960" height="820" loading="lazy" alt="wisp shop deploy, from the home folder: it asks where, asks before it goes, then builds and ships" />
@@ -241,7 +241,7 @@ const more = [
           <h2>Nothing runs<br />until you say so.</h2>
         </div>
         <div>
-          <p class="lead">A cloned project's commands wait until you've read and allowed them. Any change, a <code>git pull</code> included, asks again.</p>
+          <p class="lead">A cloned project's commands wait until <code>wisp trust</code> has shown them to you and you've said yes. Change the file, even with a <code>git pull</code>, and it asks again. Agents can write pipelines, but never approve them.</p>
           <a class="more" href="/docs/trust">How trust works →</a>
         </div>
       </div>

@@ -10,7 +10,7 @@ Three words you'll see:
 
 - **Pipeline:** a name and its steps, like *Dev*, *Verify* or *Deploy*.
 - **Step:** one thing a pipeline does: start a server, wait for a port, run the tests, open a page.
-- **Workspace:** where pipelines live: a project's `.wisp.json`, or a workspace of your own.
+- **Workspace:** where pipelines live: a project's `.wisp.json`, or a personal workspace.
 
 ## 1. Install
 
