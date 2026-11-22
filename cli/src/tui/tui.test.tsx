@@ -121,11 +121,13 @@ describe("the TUI", () => {
 
   it("starts on the project you are in, with its pipelines ready to run", async () => {
     const { lastFrame } = await open(services());
-    const frame = lastFrame() ?? "";
-    expect(frame).toContain("Workspaces");
-    expect(frame.indexOf("Acme")).toBeLessThan(frame.indexOf("infra"));
-    expect(frame).toContain("❯ Work on api");
-    expect(frame).toContain("pnpm dev");
+    await eventually(() => {
+      const frame = lastFrame() ?? "";
+      expect(frame).toContain("Workspaces");
+      expect(frame.indexOf("Acme")).toBeLessThan(frame.indexOf("infra"));
+      expect(frame).toContain("❯ Work on api");
+      expect(frame).toContain("pnpm dev");
+    });
   });
 
   it("shows the pipelines in one box and the selected one in a box below, with the command that runs it", async () => {
@@ -141,27 +143,30 @@ describe("the TUI", () => {
       expect(frame).toContain("never run yet");
       expect(frame).toContain("from a terminal: wisp api");
     });
+    await tick();
     app.stdin.write("j");
     await tick();
     await eventually(() => expect(app.lastFrame()).toContain("⚡ Work on web"));
-    expect(app.lastFrame()).toContain("from a terminal: wisp web");
+    await eventually(() => expect(app.lastFrame()).toContain("from a terminal: wisp web"));
   });
 
   it("keeps one box on a short terminal", async () => {
     const app = render(<App services={services()} glyphs={unicode} size={{ columns: 100, rows: 16 }} />);
     await tick();
-    const frame = app.lastFrame() ?? "";
-    expect(frame).toContain("❯ Work on api");
-    expect(frame).toContain("pnpm dev");
-    expect(frame).not.toContain("from a terminal");
+    await eventually(() => {
+      const frame = app.lastFrame() ?? "";
+      expect(frame).toContain("❯ Work on api");
+      expect(frame).toContain("pnpm dev");
+      expect(frame).not.toContain("from a terminal");
+    });
   });
 
   it("fits the keys and the version on an 80-column terminal", async () => {
     const app = render(<App services={services()} glyphs={unicode} size={{ columns: 80, rows: 24 }} />);
     await tick();
     const footer = (app.lastFrame() ?? "").split("\n").at(-1) ?? "";
-    expect(footer).toContain("? keys · q quit");
-    expect(footer).toContain(`v${VERSION}`);
+    await eventually(() => expect(footer).toContain("? keys · q quit"));
+    await eventually(() => expect(footer).toContain(`v${VERSION}`));
   });
 
   it("shows the keys of the tab you are on with ?, and goes back there", async () => {
@@ -171,7 +176,8 @@ describe("the TUI", () => {
     app.stdin.write("?");
     await tick();
     await eventually(() => expect(app.lastFrame()).toContain("Keys on Running"));
-    expect(app.lastFrame()).toContain("show the ones that stopped too");
+    await eventually(() => expect(app.lastFrame()).toContain("show the ones that stopped too"));
+    await tick();
     app.stdin.write(" ");
     await tick();
     await eventually(() => expect(app.lastFrame()).not.toContain("Keys on Running"));
@@ -184,17 +190,22 @@ describe("the TUI", () => {
     app.stdin.write("h");
     await tick();
     await tick();
-    const lines = (app.lastFrame() ?? "").split("\n");
-    expect(lines.at(-1)).toContain("⏎ open · ← pipelines");
-    expect(lines.slice(0, -1).join("\n")).not.toContain("⏎ open · ← pipelines");
+    await eventually(() => {
+      const lines = (app.lastFrame() ?? "").split("\n");
+      expect(lines.at(-1)).toContain("⏎ open · ← pipelines");
+      expect(lines.slice(0, -1).join("\n")).not.toContain("⏎ open · ← pipelines");
+    });
+    await tick();
     app.stdin.write("j");
     await tick();
     app.stdin.write("?");
     await tick();
     await eventually(() => expect(app.lastFrame()).toContain("Keys on History"));
+    await tick();
     app.stdin.write("x");
     await tick();
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ ✓ Check #1/));
+    await tick();
     app.stdin.write("\r");
     await tick();
     await tick();
@@ -207,11 +218,13 @@ describe("the TUI", () => {
     app.stdin.write("h");
     await tick();
     await eventually(() => expect(app.lastFrame()).toContain("ACME"));
-    const frame = app.lastFrame() ?? "";
-    expect(frame).not.toContain("Acme Old");
-    expect(frame).not.toContain("ACME OLD");
-    expect(frame.match(/ACME/g)).toHaveLength(1);
-    expect(frame).toContain("GONE");
+    await eventually(() => {
+      const frame = app.lastFrame() ?? "";
+      expect(frame).not.toContain("Acme Old");
+      expect(frame).not.toContain("ACME OLD");
+      expect(frame.match(/ACME/g)).toHaveLength(1);
+      expect(frame).toContain("GONE");
+    });
   });
 
   it("cuts a long pipeline name in History short, never into its count", async () => {
@@ -238,22 +251,29 @@ describe("the TUI", () => {
     await tick();
     await eventually(() => expect(app.lastFrame()).toContain("running, step 2 of 3"));
 
+    await tick();
+
     app.stdin.write("D");
     await tick();
     await eventually(() => expect(app.lastFrame()).not.toContain("Delete run"));
+
+    await tick();
 
     app.stdin.write("j");
     await tick();
     app.stdin.write("D");
     await tick();
     await eventually(() => expect(app.lastFrame()).toContain("Delete run #1 of Check?"));
-    expect(app.lastFrame()).toContain("running, step 2 of 3");
+    await eventually(() => expect(app.lastFrame()).toContain("running, step 2 of 3"));
+    await tick();
     app.stdin.write(ARROW_LEFT);
     await tick();
     app.stdin.write("\r");
     await tick();
     await tick();
-    expect(forgetRuns).toHaveBeenCalledWith(["aaaaaaaaaaaa"]);
+    await eventually(() => expect(forgetRuns).toHaveBeenCalledWith(["aaaaaaaaaaaa"]));
+
+    await tick();
 
     app.stdin.write(ARROW_LEFT);
     await tick();
@@ -269,7 +289,7 @@ describe("the TUI", () => {
     await tick();
     app.stdin.write("e");
     await eventually(() => expect(app.lastFrame()).toContain('Workspace "Acme"'));
-    expect(app.lastFrame()).toContain("which your team shares");
+    await eventually(() => expect(app.lastFrame()).toContain("which your team shares"));
     await tick();
     for (const key of " Labs") app.stdin.write(key);
     await tick();
@@ -283,18 +303,21 @@ describe("the TUI", () => {
     const app = await open(services({ editing: { ...services().editing, removeBolt } }));
     app.stdin.write("D");
     await tick();
-    const frame = app.lastFrame() ?? "";
-    expect(frame).toContain('Delete "Work on api"?');
-    expect(frame).toContain("Work on web");
-    expect(frame).toContain("Workspaces");
-    expect(frame).toContain("what it started keeps running");
-    expect(frame.indexOf('Delete "Work on api"?')).toBeLessThan(frame.indexOf("Work on web"));
+    await eventually(() => {
+      const frame = app.lastFrame() ?? "";
+      expect(frame).toContain('Delete "Work on api"?');
+      expect(frame).toContain("Work on web");
+      expect(frame).toContain("Workspaces");
+      expect(frame).toContain("what it started keeps running");
+      expect(frame.indexOf('Delete "Work on api"?')).toBeLessThan(frame.indexOf("Work on web"));
+    });
+    await tick();
     app.stdin.write(ARROW_LEFT);
     await tick();
     app.stdin.write("\r");
     await tick();
     await tick();
-    expect(removeBolt).toHaveBeenCalledWith(acme.workspace.file, "Work on api");
+    await eventually(() => expect(removeBolt).toHaveBeenCalledWith(acme.workspace.file, "Work on api"));
   });
 
   it("asks about removing a step on its row in the editor, and esc keeps it", async () => {
@@ -306,14 +329,18 @@ describe("the TUI", () => {
     await tick();
     app.stdin.write("D");
     await eventually(() => expect(app.lastFrame()).toContain("Remove this step?"));
-    const frame = app.lastFrame() ?? "";
-    expect(frame).toContain("⚡ Work on api");
-    expect(frame).toContain("pnpm dev");
+    await eventually(() => {
+      const frame = app.lastFrame() ?? "";
+      expect(frame).toContain("⚡ Work on api");
+      expect(frame).toContain("pnpm dev");
+    });
+    await tick();
     app.stdin.write("\u001B");
     await tick();
     await tick();
     await eventually(() => expect(app.lastFrame()).not.toContain("Remove this step?"));
-    expect(removeStep).not.toHaveBeenCalled();
+    await eventually(() => expect(removeStep).not.toHaveBeenCalled());
+    await tick();
     app.stdin.write("D");
     await eventually(() => expect(app.lastFrame()).toContain("Remove this step?"));
     await tick();
@@ -337,18 +364,20 @@ describe("the TUI", () => {
     app.stdin.write("\r");
     await tick();
     await tick();
-    const frame = app.lastFrame() ?? "";
-    expect(frame).toContain("Running, step 2 of 3");
-    expect(frame).toMatch(/❯ ▾ ● run test\s+running/);
-    expect(frame).toContain("compiling the tests");
-    expect(frame).toMatch(/· run build\s+waiting/);
-    expect(frame).toMatch(/● Tests/);
+    await eventually(() => {
+      const frame = app.lastFrame() ?? "";
+      expect(frame).toContain("Running, step 2 of 3");
+      expect(frame).toMatch(/❯ ▾ ● run test\s+running/);
+      expect(frame).toContain("compiling the tests");
+      expect(frame).toMatch(/· run build\s+waiting/);
+      expect(frame).toMatch(/● Tests/);
+    });
   });
 
   it("lists projects before personal workspaces, and flags one waiting for trust", async () => {
     const frame = (await open(services())).lastFrame() ?? "";
     expect(frame.indexOf("infra")).toBeLessThan(frame.indexOf("Morning"));
-    expect(frame).toContain("infra !");
+    await eventually(() => expect(frame).toContain("infra !"));
     // Grouped, and said in words: no unexplained marks. Read from the list alone — the
     // left column — since the panel beside it names the workspace too.
     const list = frame.split("\n").map((line) => line.slice(0, 28)).join("\n");
@@ -365,13 +394,17 @@ describe("the TUI", () => {
     await tick();
     await eventually(() => expect(app.lastFrame()).toContain("❯ Work on web"));
 
+    await tick();
+
     app.stdin.write("\r");
     await tick();
     await eventually(() => expect(run).toHaveBeenCalledWith(acme, "Work on web", expect.objectContaining({ dryRun: false })));
-    const frame = app.lastFrame() ?? "";
-    expect(frame).toContain("Acme › Work on web");
-    expect(frame).toContain("✓ open the step 0 folder");
-    expect(frame).toContain("All done.");
+    await eventually(() => {
+      const frame = app.lastFrame() ?? "";
+      expect(frame).toContain("Acme › Work on web");
+      expect(frame).toContain("✓ open the step 0 folder");
+      expect(frame).toContain("All done.");
+    });
 
     app.stdin.write("\r");
     await tick();
@@ -400,14 +433,15 @@ describe("the TUI", () => {
     const app = await open(services({ run, questions }));
     app.stdin.write(ARROW_DOWN);
     await eventually(() => expect(app.lastFrame()).toContain("❯ Work on web"));
+    await tick();
     app.stdin.write("\r");
     await eventually(() => expect(app.lastFrame()).toContain("Deploy the web?"));
-    expect(app.lastFrame()).toContain("Cancel");
-    expect(run).not.toHaveBeenCalled();
+    await eventually(() => expect(app.lastFrame()).toContain("Cancel"));
+    await eventually(() => expect(run).not.toHaveBeenCalled());
     await tick();
     app.stdin.write("\u001B");
     await eventually(() => expect(app.lastFrame()).not.toContain("Deploy the web?"));
-    expect(run).not.toHaveBeenCalled();
+    await eventually(() => expect(run).not.toHaveBeenCalled());
 
     await tick();
     app.stdin.write("\r");
@@ -427,17 +461,18 @@ describe("the TUI", () => {
     const app = await open(services({ run, inputs, questions }));
     app.stdin.write(ARROW_DOWN);
     await eventually(() => expect(app.lastFrame()).toContain("❯ Work on web"));
+    await tick();
     app.stdin.write("\r");
     await eventually(() => expect(app.lastFrame()).toContain('Run "Work on web" in Acme'));
-    expect(app.lastFrame()).toContain("Deploy where?");
-    expect(app.lastFrame()).toMatch(/Which tag\?[^\n]*\n[^\n]*› +latest/);
-    expect(app.lastFrame()).not.toContain("*");
+    await eventually(() => expect(app.lastFrame()).toContain("Deploy where?"));
+    await eventually(() => expect(app.lastFrame()).toMatch(/Which tag\?[^\n]*\n[^\n]*› +latest/));
+    await eventually(() => expect(app.lastFrame()).not.toContain("*"));
     await tick();
     app.stdin.write(ARROW_RIGHT);
     await tick();
     app.stdin.write("\u0013");
     await eventually(() => expect(app.lastFrame()).toContain("Deploy to production?"));
-    expect(run).not.toHaveBeenCalled();
+    await eventually(() => expect(run).not.toHaveBeenCalled());
     await tick();
     app.stdin.write("y");
     await eventually(() => expect(run).toHaveBeenCalledWith(acme, "Work on web", expect.objectContaining({ inputs: { env: "production", tag: "latest" } })));
@@ -449,14 +484,16 @@ describe("the TUI", () => {
     const app = await open(services({ run, inputs }));
     app.stdin.write(ARROW_DOWN);
     await eventually(() => expect(app.lastFrame()).toContain("❯ Work on web"));
+    await tick();
     app.stdin.write("\r");
     await eventually(() => expect(app.lastFrame()).toContain("Which tag?"));
     await tick();
     for (const char of "v1; reboot") app.stdin.write(char);
     await eventually(() => expect(app.lastFrame()).toContain("› v1; reboot"));
+    await tick();
     app.stdin.write("\u0013");
     await eventually(() => expect(app.lastFrame()).toContain("takes plain words"));
-    expect(run).not.toHaveBeenCalled();
+    await eventually(() => expect(run).not.toHaveBeenCalled());
   });
 
   it("says in a pipeline's details that it asks first", async () => {
@@ -472,7 +509,7 @@ describe("the TUI", () => {
     await tick();
     await eventually(() => expect(run).toHaveBeenCalledWith(acme, "Work on api", expect.objectContaining({ dryRun: true })));
     await eventually(() => expect(app.lastFrame()).toContain("Ready to run. That's what it would do; nothing ran."));
-    expect(app.lastFrame()).toContain("checking");
+    await eventually(() => expect(app.lastFrame()).toContain("checking"));
   });
 
   it("switches workspace from the list", async () => {
@@ -482,7 +519,7 @@ describe("the TUI", () => {
     app.stdin.write(ARROW_DOWN);
     await tick();
     await eventually(() => expect(app.lastFrame()).toContain("Database"));
-    expect(app.lastFrame()).toContain("not allowed yet — t");
+    await eventually(() => expect(app.lastFrame()).toContain("not allowed yet — t"));
   });
 
   it("searches across every workspace and runs the hit", async () => {
@@ -494,12 +531,14 @@ describe("the TUI", () => {
       app.stdin.write(char);
       await tick();
     }
-    expect(app.lastFrame()).toContain("❯ infra › Database");
+    await eventually(() => expect(app.lastFrame()).toContain("❯ infra › Database"));
+    await tick();
     app.stdin.write("\r");
     await tick();
     // infra isn't trusted and Database runs a command: it asks rather than run half of it.
-    expect(app.lastFrame()).toContain("Trust infra?");
-    expect(run).not.toHaveBeenCalled();
+    await eventually(() => expect(app.lastFrame()).toContain("Trust infra?"));
+    await eventually(() => expect(run).not.toHaveBeenCalled());
+    await tick();
     app.stdin.write("\r");
     await tick();
     await tick();
@@ -510,7 +549,8 @@ describe("the TUI", () => {
       app.stdin.write(char);
       await tick();
     }
-    expect(app.lastFrame()).toContain("❯ Acme › Work on web");
+    await eventually(() => expect(app.lastFrame()).toContain("❯ Acme › Work on web"));
+    await tick();
     app.stdin.write("\r");
     await tick();
     await eventually(() => expect(run).toHaveBeenCalledWith(acme, "Work on web", expect.anything()));
@@ -530,13 +570,14 @@ describe("the TUI", () => {
     app.stdin.write("t");
     await tick();
     await eventually(() => expect(app.lastFrame()).toContain("Trust infra?"));
+    await tick();
     app.stdin.write("\r");
     await tick();
     await tick();
     await tick();
-    expect(trust).not.toHaveBeenCalled();
-    expect(run).not.toHaveBeenCalled();
-    expect(app.lastFrame()).not.toContain("Trust infra?");
+    await eventually(() => expect(trust).not.toHaveBeenCalled());
+    await eventually(() => expect(run).not.toHaveBeenCalled());
+    await eventually(() => expect(app.lastFrame()).not.toContain("Trust infra?"));
   });
 
   it("shows what trust would allow, and trusts only on y", async () => {
@@ -549,26 +590,30 @@ describe("the TUI", () => {
     app.stdin.write("t");
     await tick();
     await eventually(() => expect(app.lastFrame()).toContain("Trust infra?"));
-    expect(app.lastFrame()).toContain("postgres");
+    await eventually(() => expect(app.lastFrame()).toContain("postgres"));
+
+    await tick();
 
     app.stdin.write("x");
     await tick();
-    expect(trust).not.toHaveBeenCalled();
+    await eventually(() => expect(trust).not.toHaveBeenCalled());
 
     // Buttons: it starts on Cancel, so ⏎ alone allows nothing; ← then ⏎ trusts.
     app.stdin.write("t");
     await tick();
     await eventually(() => expect(app.lastFrame()).toMatch(/Trust this file[\s\S]*Cancel/));
+    await tick();
     app.stdin.write("\r");
     await tick();
-    expect(trust).not.toHaveBeenCalled();
+    await eventually(() => expect(trust).not.toHaveBeenCalled());
+    await tick();
     app.stdin.write("t");
     await tick();
     app.stdin.write("\u001B[D");
     await tick();
     app.stdin.write("\r");
     await tick();
-    expect(trust).toHaveBeenCalledWith(infra.workspace.file, infra.hash);
+    await eventually(() => expect(trust).toHaveBeenCalledWith(infra.workspace.file, infra.hash));
   });
 
   it("scrolls a long log on a run's page, and stays where you scrolled to", async () => {
@@ -602,7 +647,7 @@ describe("the TUI", () => {
     await tick();
     await tick();
     const paged = shown()[0] ?? 0;
-    expect(paged).toBeGreaterThan(5);
+    await eventually(() => expect(paged).toBeGreaterThan(5));
 
     // ↓ past the only step reads on a line at a time; u goes back up to the top.
     app.stdin.write("\u001B[B");
@@ -627,8 +672,8 @@ describe("the TUI", () => {
       await tick();
     }
     await tick();
-    expect(run).not.toHaveBeenCalled();
-    expect(forgetProject).not.toHaveBeenCalled();
+    await eventually(() => expect(run).not.toHaveBeenCalled());
+    await eventually(() => expect(forgetProject).not.toHaveBeenCalled());
     // Still on the workspaces: D asks about the workspace again, not about a bolt.
     app.stdin.write("D");
     await tick();
@@ -645,16 +690,17 @@ describe("the TUI", () => {
     app.stdin.write("D");
     await tick();
     await eventually(() => expect(app.lastFrame()).toContain('Remove "Acme"?'));
-    expect(app.lastFrame()).toContain("stays in the repository");
-    expect(app.lastFrame()).toContain("infra");
-    expect(app.lastFrame()).toContain("Work on api");
+    await eventually(() => expect(app.lastFrame()).toContain("stays in the repository"));
+    await eventually(() => expect(app.lastFrame()).toContain("infra"));
+    await eventually(() => expect(app.lastFrame()).toContain("Work on api"));
+    await tick();
     app.stdin.write(ARROW_LEFT);
     await tick();
     app.stdin.write("\r");
     await tick();
     await tick();
-    expect(forgetProject).toHaveBeenCalledWith(acme.workspace.file);
-    expect(removePersonalWorkspace).not.toHaveBeenCalled();
+    await eventually(() => expect(forgetProject).toHaveBeenCalledWith(acme.workspace.file));
+    await eventually(() => expect(removePersonalWorkspace).not.toHaveBeenCalled());
   });
 
   it("offers + add a pipeline in an empty workspace, and ⏎ opens the form instead of running", async () => {
@@ -664,10 +710,11 @@ describe("the TUI", () => {
     app.stdin.write(ARROW_RIGHT);
     await tick();
     await eventually(() => expect(app.lastFrame()).toContain("+ add a pipeline"));
+    await tick();
     app.stdin.write("\r");
     await tick();
     await eventually(() => expect(app.lastFrame()).toContain("A new pipeline in Notes"));
-    expect(run).not.toHaveBeenCalled();
+    await eventually(() => expect(run).not.toHaveBeenCalled());
   });
 
   it("asks before running a pipeline that would start only half, and runs it once trusted", async () => {
@@ -699,16 +746,16 @@ describe("the TUI", () => {
     app.stdin.write("\r");
     await tick();
     await eventually(() => expect(app.lastFrame()).toContain("Trust Shop?"));
-    expect(app.lastFrame()).toContain('"Work on web" needs some of these');
-    expect(app.lastFrame()).toMatch(/Trust and run[\s\S]*Cancel/);
-    expect(ran).toEqual([]);
+    await eventually(() => expect(app.lastFrame()).toContain('"Work on web" needs some of these'));
+    await eventually(() => expect(app.lastFrame()).toMatch(/Trust and run[\s\S]*Cancel/));
+    await eventually(() => expect(ran).toEqual([]));
 
     // Cancel runs nothing at all, rather than the half that was allowed.
     app.stdin.write("\r");
     await tick();
     await tick();
-    expect(ran).toEqual([]);
-    expect(app.lastFrame()).toContain("didn't run");
+    await eventually(() => expect(ran).toEqual([]));
+    await eventually(() => expect(app.lastFrame()).toContain("didn't run"));
 
     // A bolt with nothing waiting for trust runs straight away.
     app.stdin.write(ARROW_DOWN);
@@ -717,7 +764,8 @@ describe("the TUI", () => {
     await tick();
     app.stdin.write("\r");
     await tick();
-    expect(ran).toEqual(["Docs:untrusted"]);
+    await eventually(() => expect(ran).toEqual(["Docs:untrusted"]));
+    await tick();
     app.stdin.write("\u001B");
     await tick();
 
@@ -733,7 +781,7 @@ describe("the TUI", () => {
     app.stdin.write("\r");
     for (let i = 0; i < 5; i++) await tick();
     expect(api.trust).toHaveBeenCalled();
-    expect(ran).toEqual(["Docs:untrusted", "Work on web:trusted"]);
+    await eventually(() => expect(ran).toEqual(["Docs:untrusted", "Work on web:trusted"]));
   });
 
   it("shows the selected pipeline whole in its box: its order, the pipelines it runs opened up, what each runs", async () => {
@@ -746,8 +794,8 @@ describe("the TUI", () => {
     });
     const app = render(<App services={services({}, { reads: [shop], here: shop.workspace.file, unreadable: [] })} glyphs={unicode} size={{ columns: 100, rows: 30 }} />);
     await eventually(() => expect(app.lastFrame()).toContain("order  Database ──▶ Work on web"));
-    expect(app.lastFrame()).toMatch(/ 1\. ⚡ ?Database[\s\S]* {4}1\. start Docker services: db[\s\S]* 2\. start web +after db[\s\S]*pnpm dev · in apps\/web · restarted if it crashes[\s\S]* 3\. wait until port 3000 is open +after web[\s\S]* 4\. open/);
-    expect(app.lastFrame()).not.toContain("v view");
+    await eventually(() => expect(app.lastFrame()).toMatch(/ 1\. ⚡ ?Database[\s\S]* {4}1\. start Docker services: db[\s\S]* 2\. start web +after db[\s\S]*pnpm dev · in apps\/web · restarted if it crashes[\s\S]* 3\. wait until port 3000 is open +after web[\s\S]* 4\. open/));
+    await eventually(() => expect(app.lastFrame()).not.toContain("v view"));
   });
 
   it("keeps a step that isn't allowed yet where the file has it, numbered by what it waits for", async () => {
@@ -764,9 +812,9 @@ describe("the TUI", () => {
     );
     const app = render(<App services={services({}, { reads: [shop], here: shop.workspace.file, unreadable: [] })} glyphs={unicode} size={{ columns: 100, rows: 30 }} />);
     await eventually(() => expect(app.lastFrame()).toContain("When you run it, it will:"));
-    expect(app.lastFrame()).toMatch(/start Docker services from docker-com.* +not allowed yet — t │/);
-    expect(app.lastFrame()).not.toContain("Docker services: Docker services");
-    expect(app.lastFrame()).toMatch(/ 1\. ⚡ ?Database[\s\S]* {4}1\. open[\s\S]* 2\. start web +after db +not allowed yet[\s\S]*pnpm dev[\s\S]* 3\. wait until port 3000 is open +after web[\s\S]* 4\. open http:\/\/localhost:3000 +after up/);
+    await eventually(() => expect(app.lastFrame()).toMatch(/start Docker services from docker-com.* +not allowed yet — t │/));
+    await eventually(() => expect(app.lastFrame()).not.toContain("Docker services: Docker services"));
+    await eventually(() => expect(app.lastFrame()).toMatch(/ 1\. ⚡ ?Database[\s\S]* {4}1\. open[\s\S]* 2\. start web +after db +not allowed yet[\s\S]*pnpm dev[\s\S]* 3\. wait until port 3000 is open +after web[\s\S]* 4\. open http:\/\/localhost:3000 +after up/));
   });
 
   it("shows a pipeline's problems on its row and in its box, and the file's in the header, without a check to run", async () => {
@@ -781,24 +829,28 @@ describe("the TUI", () => {
     const check = async () => ({ ...shop, diagnostics: [...shop.diagnostics, { level: "error" as const, at: "pipelines[0].steps[1].folder", message: "no such folder: /dev/shop/web", pipeline: "dev" }] });
     const app = render(<App services={services({ check }, { reads: [shop], here: shop.workspace.file, unreadable: [] })} glyphs={unicode} size={{ columns: 110, rows: 30 }} />);
     await eventually(() => expect(app.lastFrame()).toContain("no such folder: /dev/shop/web"));
-    const frame = app.lastFrame() ?? "";
-    expect(frame).toMatch(/1\. ⚡ ?Services +✗ no pipeline by that name/);
-    expect(frame).toMatch(/❯ dev +✗ 2 problems/);
-    expect(frame).not.toMatch(/Docs +✗/);
-    expect(frame).toContain('✗ "dev" runs a pipeline called "Services", which this file does not declare');
-    expect(frame).toContain('Pick one of this file\'s pipelines, or add one called "Services"');
-    expect(frame).toMatch(/! "nmae"/);
-    expect(frame).not.toContain("c to check");
+    await eventually(() => {
+      const frame = app.lastFrame() ?? "";
+      expect(frame).toMatch(/1\. ⚡ ?Services +✗ no pipeline by that name/);
+      expect(frame).toMatch(/❯ dev +✗ 2 problems/);
+      expect(frame).not.toMatch(/Docs +✗/);
+      expect(frame).toContain('✗ "dev" runs a pipeline called "Services", which this file does not declare');
+      expect(frame).toContain('Pick one of this file\'s pipelines, or add one called "Services"');
+      expect(frame).toMatch(/! "nmae"/);
+      expect(frame).not.toContain("c to check");
+    });
   });
 
   it("scrolls a long pipeline's steps with u and d", async () => {
     const long = read("/dev/long/.wisp.json", { name: "Long", pipelines: [{ label: "Morning", steps: Array.from({ length: 30 }, (_, at) => ({ url: `https://site${at + 1}.example.com`, label: `site ${at + 1}` })) }] });
     const app = await open(services({}, { reads: [long], here: long.workspace.file, unreadable: [] }));
     await eventually(() => expect(app.lastFrame()).toMatch(/\d+ more below · u d scroll/));
-    expect(app.lastFrame()).toContain(" 1. open site 1");
+    await eventually(() => expect(app.lastFrame()).toContain(" 1. open site 1"));
+    await tick();
     app.stdin.write("d");
     await eventually(() => expect(app.lastFrame()).toMatch(/5 above · \d+ more below · u d scroll/));
-    expect(app.lastFrame()).not.toContain(" 1. open site 1");
+    await eventually(() => expect(app.lastFrame()).not.toContain(" 1. open site 1"));
+    await tick();
     app.stdin.write("u");
     await eventually(() => expect(app.lastFrame()).toContain(" 1. open site 1"));
   });
@@ -807,13 +859,16 @@ describe("the TUI", () => {
     const app = await open(services({ history: async () => [] }));
     await tick();
     await eventually(() => expect(app.lastFrame()).toMatch(/1 Pipelines +2 Running +3 History/));
+    await tick();
     app.stdin.write("3");
     await tick();
     await tick();
     await eventually(() => expect(app.lastFrame()).toContain("Nothing has run yet"));
+    await tick();
     app.stdin.write("2");
     await tick();
     await eventually(() => expect(app.lastFrame()).toContain("Nothing is running"));
+    await tick();
     app.stdin.write("1");
     await tick();
     await eventually(() => expect(app.lastFrame()).toContain("Workspaces"));
@@ -832,26 +887,33 @@ describe("the TUI", () => {
     await tick();
     app.stdin.write("s");
     await eventually(() => expect(app.lastFrame()).toContain("mouse on"));
-    const frame = app.lastFrame() ?? "";
-    expect(frame).toMatch(/❯ Opening/);
-    expect(frame).toContain("in the background");
-    expect(frame).toContain("when a run fails");
-    expect(frame).toContain("● the system default");
+    await eventually(() => {
+      const frame = app.lastFrame() ?? "";
+      expect(frame).toMatch(/❯ Opening/);
+      expect(frame).toContain("in the background");
+      expect(frame).toContain("when a run fails");
+      expect(frame).toContain("● the system default");
+    });
+    await tick();
     app.stdin.write("\r");
     await eventually(() => expect(app.lastFrame()).toContain("[ Save ]"));
     await tick();
     app.stdin.write(ARROW_RIGHT);
     await eventually(() => expect(app.lastFrame()).toContain("● Visual Studio Code"));
+    await tick();
     app.stdin.write("\u0013");
     await eventually(() => expect(set).toHaveBeenCalledWith({ folder: "Visual Studio Code", file: "" }));
     await eventually(() => expect(app.lastFrame()).not.toContain("[ Save ]"));
-    expect(app.lastFrame()).toMatch(/ {2}Visual Studio Code · /);
+    await eventually(() => expect(app.lastFrame()).toMatch(/ {2}Visual Studio Code · /));
+
+    await tick();
 
     app.stdin.write("\r");
     await eventually(() => expect(app.lastFrame()).toContain("[ Save ]"));
     await tick();
     app.stdin.write(ARROW_RIGHT);
     await eventually(() => expect(app.lastFrame()).toContain("App for folders"));
+    await tick();
     app.stdin.write(ARROW_DOWN);
     await tick();
     for (const char of "Sublime Text") app.stdin.write(char);
@@ -868,20 +930,23 @@ describe("the TUI", () => {
     const app = render(<App services={{ ...api, settings: { ...api.settings, setMouse } }} mouse={mouse} glyphs={unicode} size={{ columns: 100, rows: 24 }} />);
     await tick();
     await tick();
-    expect(enable).toHaveBeenLastCalledWith(true);
+    await eventually(() => expect(enable).toHaveBeenLastCalledWith(true));
+    await tick();
     app.stdin.write("s");
     await eventually(() => expect(app.lastFrame()).toContain("mouse on"));
     for (const key of ["j", "j", "j"]) app.stdin.write(key);
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ Dashboard/));
+    await tick();
     app.stdin.write("\r");
     await eventually(() => expect(app.lastFrame()).toContain("[ Save ]"));
     await tick();
     app.stdin.write(ARROW_RIGHT);
     await eventually(() => expect(app.lastFrame()).toContain("● off"));
+    await tick();
     app.stdin.write("\u0013");
     await eventually(() => expect(setMouse).toHaveBeenCalledWith(false));
     await eventually(() => expect(app.lastFrame()).toContain("mouse off"));
-    expect(enable).toHaveBeenLastCalledWith(false);
+    await eventually(() => expect(enable).toHaveBeenLastCalledWith(false));
   });
 
   it("chooses when Wisp tells you about a run, and refuses a webhook that isn't https, from settings", async () => {
@@ -890,17 +955,22 @@ describe("the TUI", () => {
     const app = await open({ ...api, settings: { ...api.settings, setNotify } });
     app.stdin.write("s");
     await eventually(() => expect(app.lastFrame()).toContain("when a run fails"));
+    await tick();
     app.stdin.write("j");
     app.stdin.write("j");
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ Notifications/));
+    await tick();
     app.stdin.write("\r");
     await eventually(() => expect(app.lastFrame()).toContain("[ Save ]"));
     await tick();
     app.stdin.write(ARROW_RIGHT);
     await eventually(() => expect(app.lastFrame()).toContain("● when any run ends"));
+    await tick();
     app.stdin.write("\u0013");
     await eventually(() => expect(setNotify).toHaveBeenCalledWith({ when: "all", webhook: "" }));
     await eventually(() => expect(app.lastFrame()).not.toContain("[ Save ]"));
+
+    await tick();
 
     app.stdin.write("\r");
     await eventually(() => expect(app.lastFrame()).toContain("[ Save ]"));
@@ -911,7 +981,7 @@ describe("the TUI", () => {
     await tick();
     app.stdin.write("\u0013");
     await eventually(() => expect(app.lastFrame()).toContain("a web address, starting with https://"));
-    expect(setNotify).toHaveBeenCalledTimes(1);
+    await eventually(() => expect(setNotify).toHaveBeenCalledTimes(1));
   });
 
   it("sets up only the suggested pipelines left ticked", async () => {
@@ -930,13 +1000,15 @@ describe("the TUI", () => {
     const app = await open(services({ suggestSetup: async () => suggestion, setUp }, { reads: [infra], unreadable: [] }));
     await tick();
     await eventually(() => expect(app.lastFrame()).toMatch(/\[✓\] ⚡ Services[\s\S]*\[✓\] ⚡ Work on Shop[\s\S]*\[✓\] ⚡ Check/));
+    await tick();
     app.stdin.write(" "); // untick Services
     await tick();
     await eventually(() => expect(app.lastFrame()).toContain("Set up 2 pipelines"));
+    await tick();
     app.stdin.write("\r");
     await tick();
     await tick();
-    expect(setUp).toHaveBeenCalledWith(suggestion, ["Work on Shop", "Check"]);
+    await eventually(() => expect(setUp).toHaveBeenCalledWith(suggestion, ["Work on Shop", "Check"]));
   });
 
   it("stops offering setup in a folder after d, don't ask again", async () => {
@@ -946,15 +1018,16 @@ describe("the TUI", () => {
     const app = await open(services({ suggestSetup: async () => suggestion, setUp, declineSetup }, { reads: [infra], unreadable: [] }));
     await tick();
     await eventually(() => expect(app.lastFrame()).toContain("Set up this pipeline"));
-    expect(app.lastFrame()).toContain("N don't ask again");
-    expect(app.lastFrame()).toContain("[ Not now ]");
-    expect(app.lastFrame()).toContain("[ Don't ask again ]");
+    await eventually(() => expect(app.lastFrame()).toContain("N don't ask again"));
+    await eventually(() => expect(app.lastFrame()).toContain("[ Not now ]"));
+    await eventually(() => expect(app.lastFrame()).toContain("[ Don't ask again ]"));
+    await tick();
     app.stdin.write("N");
     await tick();
     await tick();
-    expect(declineSetup).toHaveBeenCalledWith("/dev/shop");
-    expect(setUp).not.toHaveBeenCalled();
-    expect(app.lastFrame()).toContain("Won't ask here again");
+    await eventually(() => expect(declineSetup).toHaveBeenCalledWith("/dev/shop"));
+    await eventually(() => expect(setUp).not.toHaveBeenCalled());
+    await eventually(() => expect(app.lastFrame()).toContain("Won't ask here again"));
   });
 
   it("says so when there are no workspaces at all", async () => {
@@ -980,14 +1053,14 @@ describe("commands that finish, down and history in the TUI", () => {
     const app = await open(services({ run }));
     app.stdin.write("\r");
     await eventually(() => expect(app.lastFrame()).toContain("All done."));
-    expect(app.lastFrame()).toContain("❯ Work on api");
-    expect(app.lastFrame()).toContain("Work on web");
-    expect(app.lastFrame()).toContain("⏎ done");
-    expect(app.lastFrame()).not.toContain("When you run it");
+    await eventually(() => expect(app.lastFrame()).toContain("❯ Work on api"));
+    await eventually(() => expect(app.lastFrame()).toContain("Work on web"));
+    await eventually(() => expect(app.lastFrame()).toContain("⏎ done"));
+    await eventually(() => expect(app.lastFrame()).not.toContain("When you run it"));
     await tick();
     app.stdin.write("\u001B");
     await eventually(() => expect(app.lastFrame()).toContain("When you run it, it will:"));
-    expect(app.lastFrame()).not.toContain("All done.");
+    await eventually(() => expect(app.lastFrame()).not.toContain("All done."));
   });
 
   it("closes a finished run on ⏎, back to the pipeline, and runs it again only on the next ⏎", async () => {
@@ -998,7 +1071,7 @@ describe("commands that finish, down and history in the TUI", () => {
     await tick();
     app.stdin.write("\r");
     await eventually(() => expect(app.lastFrame()).toContain("When you run it, it will:"));
-    expect(run).toHaveBeenCalledTimes(1);
+    await eventually(() => expect(run).toHaveBeenCalledTimes(1));
     await tick();
     app.stdin.write("\r");
     await eventually(() => expect(run).toHaveBeenCalledTimes(2));
@@ -1024,7 +1097,7 @@ describe("commands that finish, down and history in the TUI", () => {
     app.stdin.write("\r");
     await tick();
     await eventually(() => expect(app.lastFrame()).toContain("divides by zero"));
-    expect(app.lastFrame()).toMatch(/│ ✓ adds numbers[^\n]*\n[^\n]*│ ✗ divides by zero/);
+    await eventually(() => expect(app.lastFrame()).toMatch(/│ ✓ adds numbers[^\n]*\n[^\n]*│ ✗ divides by zero/));
     finish();
     await tick();
     await eventually(() => expect(app.lastFrame()).toContain("exited with code 1"));
@@ -1048,13 +1121,14 @@ describe("commands that finish, down and history in the TUI", () => {
     app.stdin.write("\u001B");
     await tick();
     await tick();
-    expect(down).not.toHaveBeenCalled();
+    await eventually(() => expect(down).not.toHaveBeenCalled());
+    await tick();
     app.stdin.write("x");
     await tick();
     app.stdin.write("\r");
     await tick();
     await tick();
-    expect(down).toHaveBeenCalledWith(shop, shop.workspace.bolts[0], { deps: true });
+    await eventually(() => expect(down).toHaveBeenCalledWith(shop, shop.workspace.bolts[0], { deps: true }));
   });
 
   it("takes the selected pipeline down with x", async () => {
@@ -1062,8 +1136,8 @@ describe("commands that finish, down and history in the TUI", () => {
     const app = await open(services({ down }));
     app.stdin.write("x");
     await tick();
-    expect(down).toHaveBeenCalledWith(acme, acme.workspace.bolts[0], { deps: false });
-    expect(app.lastFrame()).toContain("Work on api: stopped 1");
+    await eventually(() => expect(down).toHaveBeenCalledWith(acme, acme.workspace.bolts[0], { deps: false }));
+    await eventually(() => expect(app.lastFrame()).toContain("Work on api: stopped 1"));
   });
 
   it("marks a pipeline that is up", async () => {
@@ -1095,8 +1169,8 @@ describe("commands that finish, down and history in the TUI", () => {
     await tick();
     app.stdin.write("h");
     await eventually(() => expect(app.lastFrame()).toContain("Check #3"));
-    expect(app.lastFrame()).toContain("a1b2c3d fix cart total");
-    expect(app.lastFrame()).not.toContain("the dashboard");
+    await eventually(() => expect(app.lastFrame()).toContain("a1b2c3d fix cart total"));
+    await eventually(() => expect(app.lastFrame()).not.toContain("the dashboard"));
   });
 
   it("shows past runs like a CI: pipelines to filter by, numbered runs, and a run's summary, pipeline and logs", async () => {
@@ -1126,44 +1200,45 @@ describe("commands that finish, down and history in the TUI", () => {
     await tick();
     await tick();
     let frame = app.lastFrame() ?? "";
-    expect(frame).toContain("All pipelines");
-    expect(frame).toContain("Check #7");
-    expect(frame).toMatch(/✗ Check #7 +at test +a1b2c3d fix cart total +· git hook/);
-    expect(frame).toMatch(/⎇ main +3\.0s/);
+    await eventually(() => expect(frame).toContain("All pipelines"));
+    await eventually(() => expect(frame).toContain("Check #7"));
+    await eventually(() => expect(frame).toMatch(/✗ Check #7 +at test +a1b2c3d fix cart total +· git hook/));
+    await eventually(() => expect(frame).toMatch(/⎇ main +3\.0s/));
 
     // / narrows the runs as you type; nothing matching says so.
     for (const key of ["/", "z", "z"]) {
       app.stdin.write(key);
       await tick();
     }
-    expect(app.lastFrame()).toContain("No run matches “zz”");
+    await eventually(() => expect(app.lastFrame()).toContain("No run matches “zz”"));
+    await tick();
     app.stdin.write("\u001B");
     await tick();
     for (const key of ["/", "c", "a", "r", "t", "\r"]) {
       app.stdin.write(key);
       await tick();
     }
-    expect(app.lastFrame()).toContain("Check #7");
+    await eventually(() => expect(app.lastFrame()).toContain("Check #7"));
 
     // Open it: summary, pipeline with the dependency as one box, and the failed step's log.
     app.stdin.write("\r");
     await tick();
     await tick();
     frame = app.lastFrame() ?? "";
-    expect(frame).toContain("Check #7");
-    expect(frame).toContain("Triggered");
-    expect(frame).toContain("from a git hook");
-    expect(frame).toContain("env=staging");
-    expect(frame).toContain("Failed");
-    expect(frame).toContain("Database");
-    expect(frame).toContain("1 step");
-    expect(readLog).toHaveBeenCalledWith("/logs/2");
-    expect(frame).toMatch(/2 FAIL divides by zero/);
+    await eventually(() => expect(frame).toContain("Check #7"));
+    await eventually(() => expect(frame).toContain("Triggered"));
+    await eventually(() => expect(frame).toContain("from a git hook"));
+    await eventually(() => expect(frame).toContain("env=staging"));
+    await eventually(() => expect(frame).toContain("Failed"));
+    await eventually(() => expect(frame).toContain("Database"));
+    await eventually(() => expect(frame).toContain("1 step"));
+    await eventually(() => expect(readLog).toHaveBeenCalledWith("/logs/2"));
+    await eventually(() => expect(frame).toMatch(/2 FAIL divides by zero/));
 
     // The tab keys work here too: 3 is the list of runs again, 1 the bolts.
     app.stdin.write("3");
     await eventually(() => expect(app.lastFrame()).not.toContain("Triggered"));
-    expect(app.lastFrame()).toContain("Check #7");
+    await eventually(() => expect(app.lastFrame()).toContain("Check #7"));
     await eventually(() => {
       if (!(app.lastFrame() ?? "").includes("Triggered")) app.stdin.write("\r");
       expect(app.lastFrame()).toContain("Triggered");
@@ -1185,7 +1260,7 @@ describe("commands that finish, down and history in the TUI", () => {
     app.stdin.write("r");
     await tick();
     await tick();
-    expect(planRetry).toHaveBeenCalledWith(acme, entry);
+    await eventually(() => expect(planRetry).toHaveBeenCalledWith(acme, entry));
     await eventually(() => expect(retry).toHaveBeenCalledWith(acme, [], "Work on api", expect.objectContaining({ inputs: { env: "staging" } })));
   });
 });
@@ -1216,12 +1291,14 @@ describe("panes", () => {
     app.stdin.write("p");
     await tick();
     await tick();
-    const frame = app.lastFrame() ?? "";
-    expect(frame).toContain("web dev");
-    expect(frame).toContain("● running");
-    expect(frame).toContain("- Local: http://localhost:3000");
-    expect(frame).toContain("compiling 100%");
-    expect(frame).not.toContain("compiling 40%");
+    await eventually(() => {
+      const frame = app.lastFrame() ?? "";
+      expect(frame).toContain("web dev");
+      expect(frame).toContain("● running");
+      expect(frame).toContain("- Local: http://localhost:3000");
+      expect(frame).toContain("compiling 100%");
+      expect(frame).not.toContain("compiling 40%");
+    });
   });
 
   it("restart the selected command with r, and go full screen with f", async () => {
@@ -1232,7 +1309,8 @@ describe("panes", () => {
     await tick();
     app.stdin.write("r");
     await tick();
-    expect(restart).toHaveBeenCalledWith(expect.objectContaining({ id: "ab12" }));
+    await eventually(() => expect(restart).toHaveBeenCalledWith(expect.objectContaining({ id: "ab12" })));
+    await tick();
     app.stdin.write("f");
     await tick();
     await eventually(() => expect(app.lastFrame()).not.toContain("Running  History"));
@@ -1253,14 +1331,15 @@ describe("panes", () => {
       app.stdin.write(key);
       await tick();
     }
-    expect(app.lastFrame()).toContain("↑ 3 lines back");
-    expect(app.lastFrame()).not.toContain("web line 40");
+    await eventually(() => expect(app.lastFrame()).toContain("↑ 3 lines back"));
+    await eventually(() => expect(app.lastFrame()).not.toContain("web line 40"));
     // Paging far past the top stops there: one line down is one line down, not twenty.
     for (const key of ["u", "u", "u", "u", "u"]) {
       app.stdin.write(key);
       await tick();
     }
-    expect(app.lastFrame()).toMatch(/web line 1\s+│/);
+    await eventually(() => expect(app.lastFrame()).toMatch(/web line 1\s+│/));
+    await tick();
     app.stdin.write("j");
     await tick();
     await eventually(() => expect(app.lastFrame()).not.toMatch(/web line 1\s+│/));
@@ -1269,6 +1348,7 @@ describe("panes", () => {
     await tick();
     await tick();
     await eventually(() => expect(app.lastFrame()).toContain("worker line 40"));
+    await tick();
     app.stdin.write("\u001B[D");
     await tick();
     await tick();
@@ -1284,23 +1364,27 @@ describe("panes", () => {
     await tick();
     await tick();
     let frame = app.lastFrame() ?? "";
-    expect(frame).toContain("Logs │ Info │ Runs");
-    expect(frame).toContain("ready on :3000");
+    await eventually(() => expect(frame).toContain("Logs │ Info │ Runs"));
+    await eventually(() => expect(frame).toContain("ready on :3000"));
+
+    await tick();
 
     app.stdin.write("]");
     await tick();
     frame = app.lastFrame() ?? "";
-    expect(frame).toMatch(/Command +pnpm dev/);
-    expect(frame).toMatch(/State +running, PID 1/);
-    expect(frame).toContain("wisp logs ab12 -f");
-    expect(frame).not.toContain("ready on :3000");
+    await eventually(() => expect(frame).toMatch(/Command +pnpm dev/));
+    await eventually(() => expect(frame).toMatch(/State +running, PID 1/));
+    await eventually(() => expect(frame).toContain("wisp logs ab12 -f"));
+    await eventually(() => expect(frame).not.toContain("ready on :3000"));
+
+    await tick();
 
     app.stdin.write("]");
     await tick();
     frame = app.lastFrame() ?? "";
-    expect(frame).toMatch(/ab12/);
-    expect(frame).toMatch(/failed \(exit 1\) +ef56/);
-    expect(frame).not.toContain("gh78");
+    await eventually(() => expect(frame).toMatch(/ab12/));
+    await eventually(() => expect(frame).toMatch(/failed \(exit 1\) +ef56/));
+    await eventually(() => expect(frame).not.toContain("gh78"));
 
     // Back to Info, then to the next command: still on Info, now about that one.
     app.stdin.write("[");
@@ -1309,7 +1393,9 @@ describe("panes", () => {
     await tick();
     await tick();
     frame = app.lastFrame() ?? "";
-    expect(frame).toMatch(/Command +pnpm worker/);
+    await eventually(() => expect(frame).toMatch(/Command +pnpm worker/));
+
+    await tick();
 
     app.stdin.write("[");
     await tick();
@@ -1335,24 +1421,25 @@ describe("filtering logs", () => {
     }
     await tick();
     let frame = app.lastFrame() ?? "";
-    expect(frame).toContain("/ err");
-    expect(frame).toContain("2 of 5 lines");
-    expect(frame).toMatch(/3 ERROR cart total is NaN/);
-    expect(frame).toMatch(/5 error: retrying the cart/);
-    expect(frame).not.toContain("GET /cart 200");
+    await eventually(() => expect(frame).toContain("/ err"));
+    await eventually(() => expect(frame).toContain("2 of 5 lines"));
+    await eventually(() => expect(frame).toMatch(/3 ERROR cart total is NaN/));
+    await eventually(() => expect(frame).toMatch(/5 error: retrying the cart/));
+    await eventually(() => expect(frame).not.toContain("GET /cart 200"));
     // Filtering reads more of the log than the last screens.
-    expect(tail).toHaveBeenLastCalledWith("/logs/web", 20_000, 4 * 1024 * 1024);
+    await eventually(() => expect(tail).toHaveBeenLastCalledWith("/logs/web", 20_000, 4 * 1024 * 1024));
 
     // Kept while you look around; esc clears it.
     app.stdin.write("\r");
     await tick();
     await eventually(() => expect(app.lastFrame()).toContain("esc clears"));
+    await tick();
     app.stdin.write("\u001B");
     await tick();
     await tick();
     frame = app.lastFrame() ?? "";
-    expect(frame).toContain("GET /cart 200");
-    expect(frame).not.toContain("/ err");
+    await eventually(() => expect(frame).toContain("GET /cart 200"));
+    await eventually(() => expect(frame).not.toContain("/ err"));
   });
 
   it("filters every step's log of a past run, and says where the matches are", async () => {
@@ -1378,22 +1465,24 @@ describe("filtering logs", () => {
       await tick();
     }
     await tick();
-    const frame = app.lastFrame() ?? "";
-    expect(frame).toContain("2 matches in 1 step");
-    expect(frame).toMatch(/run test .*2 matches/);
-    expect(frame).toMatch(/run lint .*no match/);
-    expect(frame).toMatch(/3 FAIL divides by zero/);
-    expect(frame).toMatch(/4 FAIL rounds/);
-    expect(frame).not.toContain("subtracts");
-    // Every step's log is read for it, not only the open one's.
-    expect(readLog).toHaveBeenCalledWith("/logs/1");
+    await eventually(() => {
+      const frame = app.lastFrame() ?? "";
+      expect(frame).toContain("2 matches in 1 step");
+      expect(frame).toMatch(/run test .*2 matches/);
+      expect(frame).toMatch(/run lint .*no match/);
+      expect(frame).toMatch(/3 FAIL divides by zero/);
+      expect(frame).toMatch(/4 FAIL rounds/);
+      expect(frame).not.toContain("subtracts");
+      // Every step's log is read for it, not only the open one's.
+      expect(readLog).toHaveBeenCalledWith("/logs/1");
+    });
 
     app.stdin.write("\r");
     await tick();
     app.stdin.write("\u001B");
     await tick();
     await eventually(() => expect(app.lastFrame()).not.toContain("matches in"));
-    expect(app.lastFrame()).toContain("subtracts");
+    await eventually(() => expect(app.lastFrame()).toContain("subtracts"));
     // A second esc goes back to the runs, as before.
     app.stdin.write("\u001B");
     await tick();
@@ -1408,13 +1497,14 @@ describe("doing everything without JSON", () => {
     const app = await open(services({ suggestSetup: async () => suggestion, setUp }, { reads: [infra], unreadable: [] }));
     await tick();
     await eventually(() => expect(app.lastFrame()).toContain("Set up Shop?"));
-    expect(app.lastFrame()).toContain("compose.yaml (postgres)");
-    expect(app.lastFrame()).toContain("start Docker services: postgres, then start Shop dev");
+    await eventually(() => expect(app.lastFrame()).toContain("compose.yaml (postgres)"));
+    await eventually(() => expect(app.lastFrame()).toContain("start Docker services: postgres, then start Shop dev"));
+    await tick();
     app.stdin.write("\r");
     await tick();
     await tick();
-    expect(setUp).toHaveBeenCalledWith(suggestion, ["Work on Shop"]);
-    expect(app.lastFrame()).toContain("Trust infra?");
+    await eventually(() => expect(setUp).toHaveBeenCalledWith(suggestion, ["Work on Shop"]));
+    await eventually(() => expect(app.lastFrame()).toContain("Trust infra?"));
   });
 
   it("adds a step through a form, never showing JSON", async () => {
@@ -1424,10 +1514,12 @@ describe("doing everything without JSON", () => {
     app.stdin.write("e");
     await tick();
     await eventually(() => expect(app.lastFrame()).toContain("⚡ Work on api"));
+    await tick();
     app.stdin.write("a");
     await tick();
     // Grouped, as an action list is: what to start, what to wait for, what to open.
-    expect(app.lastFrame()).toMatch(/START[\s\S]*Run a command[\s\S]*WAIT[\s\S]*OPEN/);
+    await eventually(() => expect(app.lastFrame()).toMatch(/START[\s\S]*Run a command[\s\S]*WAIT[\s\S]*OPEN/));
+    await tick();
     app.stdin.write("1"); // pick "Run a command"
     await tick();
     await eventually(() => expect(app.lastFrame()).toContain("Command"));
@@ -1435,8 +1527,9 @@ describe("doing everything without JSON", () => {
     await tick();
     // A test finishes: Wisp guesses so, and asks nothing about restarting it.
     await eventually(() => expect(app.lastFrame()).toContain("● finishes"));
-    expect(app.lastFrame()).not.toContain("Restart");
-    expect(app.lastFrame()).toContain("Timeout");
+    await eventually(() => expect(app.lastFrame()).not.toContain("Restart"));
+    await eventually(() => expect(app.lastFrame()).toContain("Timeout"));
+    await tick();
     app.stdin.write("\r"); // to It
     app.stdin.write("\r"); // to Name
     app.stdin.write("\r"); // to In folder
@@ -1445,12 +1538,13 @@ describe("doing everything without JSON", () => {
     for (const char of "10m") app.stdin.write(char);
     await tick();
     // What it will do, said before it is saved.
-    expect(app.lastFrame()).toContain("It will: run pnpm test");
+    await eventually(() => expect(app.lastFrame()).toContain("It will: run pnpm test"));
+    await tick();
     app.stdin.write("\r"); // to the button
     app.stdin.write("\r"); // Add step
     await tick();
     await tick();
-    expect(addStep).toHaveBeenCalledWith(acme.workspace.file, "Work on api", { run: "pnpm test", finishes: true, timeout: "10m" }, 0);
+    await eventually(() => expect(addStep).toHaveBeenCalledWith(acme.workspace.file, "Work on api", { run: "pnpm test", finishes: true, timeout: "10m" }, 0));
   });
 
   it("adds a pipeline as a step, picked from this workspace's own, with what it depends on", async () => {
@@ -1466,9 +1560,9 @@ describe("doing everything without JSON", () => {
     await tick();
     app.stdin.write("3");
     await eventually(() => expect(app.lastFrame()).toContain("● Work on web"));
-    expect(app.lastFrame()).not.toMatch(/[○●] Work on api/);
-    expect(app.lastFrame()).not.toContain("Database");
-    expect(app.lastFrame()).toContain("←→ to");
+    await eventually(() => expect(app.lastFrame()).not.toMatch(/[○●] Work on api/));
+    await eventually(() => expect(app.lastFrame()).not.toContain("Database"));
+    await eventually(() => expect(app.lastFrame()).toContain("←→ to"));
     await tick();
     app.stdin.write("\u0013");
     await eventually(() => expect(addStep).toHaveBeenCalledWith(acme.workspace.file, "Work on api", { pipeline: "Work on web" }, 1));
@@ -1485,24 +1579,29 @@ describe("doing everything without JSON", () => {
     app.stdin.write("j");
     app.stdin.write("j");
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ .*3 .*pnpm build/));
+    await tick();
     app.stdin.write("\r");
     await eventually(() => expect(app.lastFrame()).toContain("[ Save step ]"));
-    expect(app.lastFrame()).toContain("↓ 1 more");
+    await eventually(() => expect(app.lastFrame()).toContain("↓ 1 more"));
     await tick();
     for (let down = 0; down < 5; down += 1) app.stdin.write("\u001B[B");
     await eventually(() => expect(app.lastFrame()).toContain("←→ move · space ticks"));
-    expect(app.lastFrame()).toContain("□ all");
-    expect(app.lastFrame()).toMatch(/↑ \d more/);
+    await eventually(() => expect(app.lastFrame()).toContain("□ all"));
+    await eventually(() => expect(app.lastFrame()).toMatch(/↑ \d more/));
+    await tick();
     app.stdin.write(" ");
     await eventually(() => expect(app.lastFrame()).toContain("■ all"));
-    expect(app.lastFrame()).toContain("■ 1 · open the apps/api folder");
-    expect(app.lastFrame()).toContain("■ 2 · run lint — pnpm lint");
+    await eventually(() => expect(app.lastFrame()).toContain("■ 1 · open the apps/api folder"));
+    await eventually(() => expect(app.lastFrame()).toContain("■ 2 · run lint — pnpm lint"));
+    await tick();
     app.stdin.write(" ");
     await eventually(() => expect(app.lastFrame()).toContain("□ 2 · run lint — pnpm lint"));
+    await tick();
     app.stdin.write(ARROW_RIGHT);
     await tick();
     app.stdin.write(" ");
     await eventually(() => expect(app.lastFrame()).toContain("□ all  1 of 2"));
+    await tick();
     app.stdin.write("\u0013");
     await eventually(() => expect(setAfter).toHaveBeenCalledWith(acme.workspace.file, "Work on api", 2, [0]));
   });
@@ -1513,12 +1612,14 @@ describe("doing everything without JSON", () => {
     const noted = read("/dev/acme/.wisp.json", { name: "Acme", pipelines: [{ label: "Work on api", notes: "The API and its database", steps: [{ folder: "apps/api" }] }] });
     const bolt = async () => ({ label: "Work on api", notes: "The API and its database", steps: [] });
     const app = await open(services({ editing: { ...services().editing, bolt, setBoltNotes, renameBolt } }, { reads: [noted], here: noted.workspace.file, unreadable: [] }));
-    expect(app.lastFrame()).toContain("The API and its database");
+    await eventually(() => expect(app.lastFrame()).toContain("The API and its database"));
+    await tick();
     app.stdin.write("e");
     await eventually(() => expect(app.lastFrame()).toContain("+  add the first step"));
     await tick();
     for (let up = 0; up < 4; up += 1) app.stdin.write("\u001B[A");
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ Notes +The API and its database/));
+    await tick();
     app.stdin.write("\r");
     await eventually(() => expect(app.lastFrame()).toContain("[ Save ]"));
     await tick();
@@ -1526,8 +1627,8 @@ describe("doing everything without JSON", () => {
     await tick();
     app.stdin.write("\u0013");
     await eventually(() => expect(setBoltNotes).toHaveBeenCalled());
-    expect(renameBolt).not.toHaveBeenCalled();
-    expect(setBoltNotes).toHaveBeenCalledWith(noted.workspace.file, "Work on api", "The API and its database too");
+    await eventually(() => expect(renameBolt).not.toHaveBeenCalled());
+    await eventually(() => expect(setBoltNotes).toHaveBeenCalledWith(noted.workspace.file, "Work on api", "The API and its database too"));
   });
 
   it("renames a pipeline and makes it keep going after a failure from the rows above its steps, each edited on the right", async () => {
@@ -1540,11 +1641,14 @@ describe("doing everything without JSON", () => {
     await tick();
     app.stdin.write("k");
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ Inputs +none/));
+    await tick();
     app.stdin.write("k");
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ Ask first +no/));
+    await tick();
     app.stdin.write("k");
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ On failure +stop/));
-    expect(app.lastFrame()).toContain("keep going");
+    await eventually(() => expect(app.lastFrame()).toContain("keep going"));
+    await tick();
     app.stdin.write("\r");
     await eventually(() => expect(app.lastFrame()).toContain("[ Save ]"));
     await tick();
@@ -1553,9 +1657,11 @@ describe("doing everything without JSON", () => {
     app.stdin.write("\u0013");
     await eventually(() => expect(setKeepGoing).toHaveBeenCalledWith(acme.workspace.file, "Work on api", true));
     await eventually(() => expect(app.lastFrame()).not.toContain("[ Save ]"));
+    await tick();
     app.stdin.write("k");
     app.stdin.write("k");
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ Name +Work on api/));
+    await tick();
     app.stdin.write("\r");
     await eventually(() => expect(app.lastFrame()).toContain("[ Save ]"));
     await tick();
@@ -1580,15 +1686,16 @@ describe("doing everything without JSON", () => {
     await tick();
     app.stdin.write("e");
     await eventually(() => expect(app.lastFrame()).toMatch(/2 .*run lint — pnpm lint +after install/));
-    expect(app.lastFrame()).toMatch(/3 .*run pnpm test +after install/);
+    await eventually(() => expect(app.lastFrame()).toMatch(/3 .*run pnpm test +after install/));
     await tick();
     app.stdin.write("j");
     app.stdin.write("j");
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ .*3 .*pnpm test/));
+    await tick();
     app.stdin.write("\r");
     await eventually(() => expect(app.lastFrame()).toContain("Depends on"));
-    expect(app.lastFrame()).toContain("■ 1 · run install");
-    expect(app.lastFrame()).toContain("□ 2 · run lint");
+    await eventually(() => expect(app.lastFrame()).toContain("■ 1 · run install"));
+    await eventually(() => expect(app.lastFrame()).toContain("□ 2 · run lint"));
     await tick();
     for (let at = 0; at < 5; at += 1) app.stdin.write(ARROW_DOWN);
     await tick();
@@ -1598,6 +1705,7 @@ describe("doing everything without JSON", () => {
     await tick();
     app.stdin.write(" ");
     await eventually(() => expect(app.lastFrame()).toContain("■ 2 · run lint"));
+    await tick();
     app.stdin.write("\u0013");
     await eventually(() => expect(setAfter).toHaveBeenCalledWith(acme.workspace.file, "Work on api", 2, [0, 1]));
   });
@@ -1609,19 +1717,22 @@ describe("doing everything without JSON", () => {
     const app = await open(services({ editing: { ...services().editing, bolt, setInput, removeInput } }));
     app.stdin.write("e");
     await eventually(() => expect(app.lastFrame()).toMatch(/Inputs +tag · Which tag\?/));
-    expect(app.lastFrame()).toMatch(/❯ .*1 .*deploy\.sh/);
+    await eventually(() => expect(app.lastFrame()).toMatch(/❯ .*1 .*deploy\.sh/));
     await tick();
     app.stdin.write("k");
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ +\+  add an input/));
+    await tick();
     app.stdin.write("\r");
     await eventually(() => expect(app.lastFrame()).toContain("[ Add input ]"));
     await tick();
     for (const char of "env") app.stdin.write(char);
     await eventually(() => expect(app.lastFrame()).toContain("› env"));
+    await tick();
     app.stdin.write("\r");
     await tick();
     for (const char of "Deploy where?") app.stdin.write(char);
     await eventually(() => expect(app.lastFrame()).toMatch(/┃ › Deploy where\?/));
+    await tick();
     app.stdin.write("\r");
     await tick();
     for (const char of "staging, production") app.stdin.write(char);
@@ -1631,8 +1742,10 @@ describe("doing everything without JSON", () => {
     await eventually(() => expect(setInput).toHaveBeenCalledWith(acme.workspace.file, "Work on api", undefined, "env", { ask: "Deploy where?", choices: ["staging", "production"] }));
 
     await eventually(() => expect(app.lastFrame()).not.toContain("[ Add input ]"));
+    await tick();
     app.stdin.write("k");
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ Inputs +tag/));
+    await tick();
     app.stdin.write("D");
     await eventually(() => expect(app.lastFrame()).toContain("Remove this input?"));
     await tick();
@@ -1649,19 +1762,23 @@ describe("doing everything without JSON", () => {
     await tick();
     app.stdin.write("k");
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ Inputs +none/));
+    await tick();
     app.stdin.write("k");
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ Ask first +no/));
+    await tick();
     app.stdin.write("\r");
     await eventually(() => expect(app.lastFrame()).toContain("[ Save ]"));
-    expect(app.lastFrame()).not.toContain("Question");
+    await eventually(() => expect(app.lastFrame()).not.toContain("Question"));
     await tick();
     app.stdin.write(ARROW_RIGHT);
     await eventually(() => expect(app.lastFrame()).toContain("● yes"));
-    expect(app.lastFrame()).toContain('Run "Work on api"?');
+    await eventually(() => expect(app.lastFrame()).toContain('Run "Work on api"?'));
+    await tick();
     app.stdin.write("\r");
     await tick();
     for (const char of "Deploy to production?") app.stdin.write(char);
     await eventually(() => expect(app.lastFrame()).toContain("› Deploy to production?"));
+    await tick();
     app.stdin.write("\u0013");
     await eventually(() => expect(setConfirm).toHaveBeenCalledWith(acme.workspace.file, "Work on api", "Deploy to production?"));
   });
@@ -1677,6 +1794,7 @@ describe("doing everything without JSON", () => {
     app.stdin.write("k");
     app.stdin.write("k");
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ Ask first +no/));
+    await tick();
     app.stdin.write("\r");
     await eventually(() => expect(app.lastFrame()).toContain("[ Save ]"));
     await tick();
@@ -1687,11 +1805,14 @@ describe("doing everything without JSON", () => {
     await eventually(() => expect(setConfirm).toHaveBeenLastCalledWith(acme.workspace.file, "Work on api", true));
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ Ask first +yes/));
 
+    await tick();
+
     app.stdin.write("\r");
     await eventually(() => expect(app.lastFrame()).toContain("● yes"));
     await tick();
     app.stdin.write(ARROW_LEFT);
     await eventually(() => expect(app.lastFrame()).toContain("● no"));
+    await tick();
     app.stdin.write("\u0013");
     await eventually(() => expect(setConfirm).toHaveBeenLastCalledWith(acme.workspace.file, "Work on api", false));
   });
@@ -1701,13 +1822,14 @@ describe("doing everything without JSON", () => {
     const app = render(<App services={services({ editing: { ...services().editing, bolt } })} glyphs={unicode} size={{ columns: 80, rows: 24 }} />);
     await tick();
     await eventually(() => expect(app.lastFrame() ?? "").not.toContain("reading your workspaces"));
+    await tick();
     app.stdin.write("e");
     await eventually(() => expect(app.lastFrame()).toContain("+  add a step"));
-    expect(app.lastFrame()).not.toContain("Step 1 · ");
+    await eventually(() => expect(app.lastFrame()).not.toContain("Step 1 · "));
     await tick();
     app.stdin.write("\r");
     await eventually(() => expect(app.lastFrame()).toContain("Step 1 · "));
-    expect(app.lastFrame()).not.toContain("+  add a step");
+    await eventually(() => expect(app.lastFrame()).not.toContain("+  add a step"));
     await tick();
     app.stdin.write("\u001B");
     await eventually(() => expect(app.lastFrame()).toContain("+  add a step"));
@@ -1739,10 +1861,10 @@ describe("doing everything without JSON", () => {
     app.stdin.write("\r"); // Create bolt
     await tick();
     await tick();
-    expect(addBolt).toHaveBeenCalledWith(acme.workspace.file, "Run the tests");
+    await eventually(() => expect(addBolt).toHaveBeenCalledWith(acme.workspace.file, "Run the tests"));
     // Straight on to its first step.
     await eventually(() => expect(app.lastFrame()).toContain("What should happen first when it runs?"));
-    expect(app.lastFrame()).toContain("⚡ Run the tests");
+    await eventually(() => expect(app.lastFrame()).toContain("⚡ Run the tests"));
   });
 
   it("shows containers next to commands, with how they are doing", async () => {
@@ -1772,11 +1894,13 @@ describe("doing everything without JSON", () => {
     await tick();
     await tick();
     await tick();
-    const frame = app2.lastFrame() ?? "";
-    // Under the bolt whose compose step starts it, in its workspace.
-    expect(frame).toMatch(/SHOP[\s\S]*Services[\s\S]*● postgres +healthy/);
-    expect(frame).toContain("on localhost:5432");
-    expect(frame).toContain("ready to accept connections");
+    await eventually(() => {
+      const frame = app2.lastFrame() ?? "";
+      // Under the bolt whose compose step starts it, in its workspace.
+      expect(frame).toMatch(/SHOP[\s\S]*Services[\s\S]*● postgres +healthy/);
+      expect(frame).toContain("on localhost:5432");
+      expect(frame).toContain("ready to accept connections");
+    });
   });
 
   it("groups what runs under the pipeline that started it, and finds things with /", async () => {
@@ -1791,16 +1915,17 @@ describe("doing everything without JSON", () => {
     await tick();
     await tick();
     let frame = app.lastFrame() ?? "";
-    expect(frame).toMatch(/ACME[\s\S]*Work on web[\s\S]*● up[\s\S]*api[\s\S]*web[\s\S]*Not from a pipeline[\s\S]*notes/);
+    await eventually(() => expect(frame).toMatch(/ACME[\s\S]*Work on web[\s\S]*● up[\s\S]*api[\s\S]*web[\s\S]*Not from a pipeline[\s\S]*notes/));
 
     for (const key of ["/", "m", "d", "b"]) {
       app.stdin.write(key);
       await tick();
     }
     frame = app.lastFrame() ?? "";
-    expect(frame).toContain("/ mdb");
-    expect(frame).toContain("notes");
-    expect(frame).not.toContain("Work on web");
+    await eventually(() => expect(frame).toContain("/ mdb"));
+    await eventually(() => expect(frame).toContain("notes"));
+    await eventually(() => expect(frame).not.toContain("Work on web"));
+    await tick();
     app.stdin.write("\u001B");
     await tick();
     await tick();
@@ -1814,7 +1939,7 @@ describe("doing everything without JSON", () => {
     await tick();
     alive = false;
     await new Promise((resolve) => setTimeout(resolve, 2200));
-    expect(app.lastFrame()).toContain("! web dev stopped (Acme) — press p to see its last output");
+    await eventually(() => expect(app.lastFrame()).toContain("! web dev stopped (Acme) — press p to see its last output"));
   });
 });
 
@@ -1846,7 +1971,7 @@ describe("editing text", () => {
     let state = { value: "npm strt", cursor: 8 };
     for (let at = 0; at < 2; at += 1) state = editAt(state.value, state.cursor, "", key({ leftArrow: true }))!;
     state = editAt(state.value, state.cursor, "a", key())!;
-    expect(state).toEqual({ value: "npm start", cursor: 7 });
+    await eventually(() => expect(state).toEqual({ value: "npm start", cursor: 7 }));
     state = editAt(state.value, state.cursor, "a", key({ ctrl: true }))!;
     expect(state.cursor).toBe(0);
   });
@@ -1872,6 +1997,7 @@ describe("a run in progress", () => {
     app.stdin.write("\r");
     await tick();
     await eventually(() => expect(app.lastFrame()).toMatch(/│ ⚡ ?Acme › Work on api +✦ [A-Z][^…]*…/));
+    await tick();
     app.stdin.write("x");
     await tick();
   });
@@ -1895,7 +2021,7 @@ describe("a run in progress", () => {
     app.stdin.write("x");
     await tick();
     expect(signal?.aborted).toBe(true);
-    expect(app.lastFrame()).toContain("Stopped — you stopped it.");
+    await eventually(() => expect(app.lastFrame()).toContain("Stopped — you stopped it."));
   });
 
   it("retries only the failed steps with r", async () => {
@@ -1914,9 +2040,10 @@ describe("a run in progress", () => {
     app.stdin.write("\r");
     await tick();
     await eventually(() => expect(app.lastFrame()).toContain(`r retry from ${plan[1]!.target.label}`));
+    await tick();
     app.stdin.write("r");
     await tick();
-    expect(retry).toHaveBeenCalledWith(acme, [plan[1]], "Work on api", expect.anything());
+    await eventually(() => expect(retry).toHaveBeenCalledWith(acme, [plan[1]], "Work on api", expect.anything()));
   });
 
   it("is the first pane, with its live output", async () => {
@@ -1935,10 +2062,12 @@ describe("a run in progress", () => {
     await tick();
     app.stdin.write("p");
     await tick();
-    const frame = app.lastFrame() ?? "";
-    expect(frame).toContain("RUNNING NOW");
-    expect(frame).toContain("Running l");
-    expect(frame).toContain("Creating an optimized production build");
+    await eventually(() => {
+      const frame = app.lastFrame() ?? "";
+      expect(frame).toContain("RUNNING NOW");
+      expect(frame).toContain("Running l");
+      expect(frame).toContain("Creating an optimized production build");
+    });
   });
 });
 
@@ -1948,12 +2077,14 @@ describe("running and history", () => {
     app.stdin.write("p");
     await tick();
     await eventually(() => expect(app.lastFrame()).toContain("Nothing is running"));
-    expect(app.lastFrame()).not.toContain("Nothing has run yet");
+    await eventually(() => expect(app.lastFrame()).not.toContain("Nothing has run yet"));
+    await tick();
     app.stdin.write("h");
     await tick();
     await tick();
     await eventually(() => expect(app.lastFrame()).toContain("History"));
-    expect(app.lastFrame()).toContain("Nothing has run yet");
+    await eventually(() => expect(app.lastFrame()).toContain("Nothing has run yet"));
+    await tick();
     app.stdin.write("p");
     await tick();
     await eventually(() => expect(app.lastFrame()).toContain("Nothing is running"));
@@ -2027,10 +2158,12 @@ describe("the mouse", () => {
     expect(mouse.emit({ kind: "click", x: header.indexOf("2 Running") + 1, y: 0 })).toBe(true);
     await tick();
     await eventually(() => expect(frame()).toContain("Nothing is running"));
+    await tick();
     mouse.emit({ kind: "click", x: header.indexOf("3 History") + 1, y: 0 });
     await tick();
     await tick();
     await eventually(() => expect(frame()).toContain("Nothing has run yet"));
+    await tick();
     mouse.emit({ kind: "click", x: header.indexOf("1 Pipelines") + 1, y: 0 });
     await tick();
     await eventually(() => expect(frame()).toContain("Workspaces"));
@@ -2043,13 +2176,16 @@ describe("the mouse", () => {
     await tick();
     await tick();
     await eventually(() => expect(frame()).toMatch(/❯ +● web dev/));
+    await tick();
     mouse.emit({ kind: "click", ...(await spot(frame, "worker")) });
     await tick();
     await tick();
     await eventually(() => expect(frame()).toMatch(/❯ +● worker/));
+    await tick();
     mouse.emit({ kind: "click", ...(await spot(frame, "Info │")) });
     await tick();
     await eventually(() => expect(frame()).toMatch(/Command +pnpm worker/));
+    await tick();
     mouse.emit({ kind: "click", ...(await spot(frame, "Runs   [ ]")) });
     await tick();
     await eventually(() => expect(frame()).toContain("wisp logs <id> prints any of them"));
@@ -2066,7 +2202,8 @@ describe("the mouse", () => {
     expect(mouse.emit({ kind: "wheel", ...log, by: -1 })).toBe(true);
     await tick();
     await eventually(() => expect(frame()).toContain("↑ 3 lines back"));
-    expect(frame()).not.toContain("line 80");
+    await eventually(() => expect(frame()).not.toContain("line 80"));
+    await tick();
     mouse.emit({ kind: "wheel", ...log, by: 1 });
     await tick();
     await eventually(() => expect(frame()).toContain("line 80"));
@@ -2080,18 +2217,20 @@ describe("the mouse", () => {
     mouse.emit({ kind: "click", ...(await spot(frame, "Work on web")) });
     await tick();
     await eventually(() => expect(frame()).toContain("❯ Work on web"));
+    await tick();
     mouse.emit({ kind: "click", ...(await spot(frame, "When you run it")) });
     await tick();
     await eventually(() => expect(frame()).toContain("❯ Work on web"));
+    await tick();
     mouse.emit({ kind: "click", ...(await spot(frame, "infra", 2)) });
     await tick();
     await eventually(() => expect(frame()).toContain("Database"));
-    expect(frame()).not.toContain("Work on web");
+    await eventually(() => expect(frame()).not.toContain("Work on web"));
     // The wheel over the workspace list moves through the workspaces.
     mouse.emit({ kind: "wheel", ...(await spot(frame, "infra !", 2)), by: 1 });
     await tick();
     await eventually(() => expect(frame()).toContain("Start the day"));
-    expect(run).not.toHaveBeenCalled();
+    await eventually(() => expect(run).not.toHaveBeenCalled());
   });
 
   it("fills in a form by clicking: a field to type in, a place in its text, the button, an option", async () => {
@@ -2117,19 +2256,22 @@ describe("the mouse", () => {
     await tick();
     await type("X");
     await eventually(() => expect(frame()).toContain("› XLint"));
+    await tick();
     mouse.emit({ kind: "click", ...(await spot(frame, "[ Create pipeline ]")) });
     await eventually(() => expect(addBolt).toHaveBeenCalledWith(acme.workspace.file, "XLint"));
     // Straight to its first step: a click on one picks it, and a click on an option chooses it.
     await eventually(() => expect(frame()).toContain("What should happen first when it runs?"));
+    await tick();
     mouse.emit({ kind: "click", ...(await spot(frame, "Run a command")) });
     await tick();
     await eventually(() => expect(frame()).toContain("The first step · "));
-    expect(frame()).not.toContain("Timeout");
+    await eventually(() => expect(frame()).not.toContain("Timeout"));
+    await tick();
     mouse.emit({ kind: "click", ...(await spot(frame, "finishes")) });
     await tick();
     await eventually(() => expect(frame()).toContain("● finishes"));
-    expect(frame()).not.toContain("Restart");
-    expect(frame()).toContain("[ Add step ]");
+    await eventually(() => expect(frame()).not.toContain("Restart"));
+    await eventually(() => expect(frame()).toContain("[ Add step ]"));
   });
 
   it("leaves the editor by its tabs, by click or 1 2 3, but not while a form is open; a new step's form goes back to the choices", async () => {
@@ -2143,6 +2285,7 @@ describe("the mouse", () => {
     await tick();
     mouse.emit({ kind: "click", ...(await spot(frame, "[ Cancel ]")) });
     await eventually(() => expect(frame()).not.toContain("[ Cancel ]"));
+    await tick();
     app.stdin.write("a");
     await eventually(() => expect(frame()).toContain("Run a command"));
     await tick();
@@ -2151,12 +2294,15 @@ describe("the mouse", () => {
     expect(mouse.emit({ kind: "click", x: header.indexOf("2 Running") + 1, y: 0 })).toBe(false);
     app.stdin.write("2");
     await tick();
-    expect(frame()).toContain("[ Add step ]");
+    await eventually(() => expect(frame()).toContain("[ Add step ]"));
+    await tick();
     mouse.emit({ kind: "click", ...(await spot(frame, "[ Back ]")) });
     await eventually(() => expect(frame()).toContain("[ Cancel ]"));
-    expect(frame()).toContain("Run a command");
+    await eventually(() => expect(frame()).toContain("Run a command"));
+    await tick();
     app.stdin.write("1");
     await eventually(() => expect(frame()).toContain("[ Add step ]"));
+    await tick();
     app.stdin.write("\u001B");
     await eventually(() => expect(frame()).toContain("[ Cancel ]"));
     await tick();
@@ -2169,6 +2315,7 @@ describe("the mouse", () => {
       if (!frame().includes("Workspaces")) app.stdin.write("1");
       expect(frame()).toContain("Workspaces");
     });
+    await tick();
     app.stdin.write("e");
     await eventually(() => expect(frame()).toContain("+  add the first step"));
     await tick();
@@ -2182,7 +2329,7 @@ describe("the mouse", () => {
     const { app, mouse, frame } = await withMouse({ ...api, editing: { ...api.editing, addBolt } });
     app.stdin.write("a");
     await eventually(() => expect(frame()).toContain("[ Create pipeline ]"));
-    expect(frame()).toContain("[ Cancel ]");
+    await eventually(() => expect(frame()).toContain("[ Cancel ]"));
     await tick();
     for (const key of "Lint") app.stdin.write(key);
     await tick();
@@ -2198,9 +2345,10 @@ describe("the mouse", () => {
     await tick();
     app.stdin.write(ARROW_RIGHT);
     await eventually(() => expect(frame()).toContain("▸ Cancel"));
+    await tick();
     app.stdin.write("\r");
     await eventually(() => expect(frame()).not.toContain("Create pipeline"));
-    expect(addBolt).not.toHaveBeenCalled();
+    await eventually(() => expect(addBolt).not.toHaveBeenCalled());
   });
 
   it("ticks pipelines to set up with a click, and sets them up from the button", async () => {
@@ -2220,10 +2368,11 @@ describe("the mouse", () => {
     mouse.emit({ kind: "click", ...(await spot(frame, "Services")) });
     await tick();
     await eventually(() => expect(frame()).toContain("[ ] ⚡ Services"));
+    await tick();
     mouse.emit({ kind: "click", ...(await spot(frame, "Set up 1 pipeline")) });
     await tick();
     await tick();
-    expect(setUp).toHaveBeenCalledWith(suggestion, ["Check"]);
+    await eventually(() => expect(setUp).toHaveBeenCalledWith(suggestion, ["Check"]));
   });
 
   it("leaves settings by its tabs, by click or 1 2 3, but not while a category is open", async () => {
@@ -2231,13 +2380,15 @@ describe("the mouse", () => {
     const header = frame().split("\n")[0] ?? "";
     app.stdin.write("s");
     await eventually(() => expect(frame()).toContain("mouse on"));
+    await tick();
     app.stdin.write("\r");
     await eventually(() => expect(frame()).toContain("[ Save ]"));
     await tick();
     expect(mouse.emit({ kind: "click", x: header.indexOf("2 Running") + 1, y: 0 })).toBe(false);
     app.stdin.write("2");
     await tick();
-    expect(frame()).toContain("[ Save ]");
+    await eventually(() => expect(frame()).toContain("[ Save ]"));
+    await tick();
     app.stdin.write("\u001B");
     await eventually(() => expect(frame()).not.toContain("[ Save ]"));
     await eventually(() => expect(mouse.emit({ kind: "click", x: header.indexOf("3 History") + 1, y: 0 })).toBe(true));
@@ -2261,17 +2412,21 @@ describe("the mouse", () => {
     const { app, mouse, frame } = await withMouse({ ...api, settings: { ...api.settings, setMouse } });
     app.stdin.write("s");
     await eventually(() => expect(frame()).toContain("mouse on"));
+    await tick();
     mouse.emit({ kind: "click", ...(await spot(frame, "Dashboard")) });
     await eventually(() => expect(frame()).toMatch(/❯ Dashboard/));
-    expect(frame()).not.toContain("[ Save ]");
+    await eventually(() => expect(frame()).not.toContain("[ Save ]"));
+    await tick();
     mouse.emit({ kind: "click", ...(await spot(frame, "Dashboard")) });
     await eventually(() => expect(frame()).toContain("[ Save ]"));
+    await tick();
     mouse.emit({ kind: "click", ...(await spot(frame, "○ off")) });
     await eventually(() => expect(frame()).toContain("● off"));
+    await tick();
     mouse.emit({ kind: "click", ...(await spot(frame, "[ Save ]")) });
     await eventually(() => expect(setMouse).toHaveBeenCalledWith(false));
     await eventually(() => expect(frame()).toContain("mouse off"));
-    expect(app.lastFrame()).not.toContain("[ Save ]");
+    await eventually(() => expect(app.lastFrame()).not.toContain("[ Save ]"));
   });
 
   it("chooses a step in the pipeline editor with a click, and opens it with a second", async () => {
@@ -2284,10 +2439,11 @@ describe("the mouse", () => {
     mouse.emit({ kind: "click", ...(await spot(frame, "💻 run pnpm dev")) });
     await tick();
     await eventually(() => expect(frame()).toMatch(/❯ .*pnpm dev/));
+    await tick();
     mouse.emit({ kind: "click", ...(await spot(frame, "💻 run pnpm dev")) });
     await tick();
     await eventually(() => expect(frame()).toContain("[ Save step ]"));
-    expect(frame()).toContain("Step 2 · ");
+    await eventually(() => expect(frame()).toContain("Step 2 · "));
   });
 
   it("chooses and opens runs in History, shows a step's log with a click, and filters by pipeline", async () => {
@@ -2315,14 +2471,17 @@ describe("the mouse", () => {
     mouse.emit({ kind: "click", ...(await spot(frame, "Work on web #3")) });
     await tick();
     await eventually(() => expect(frame()).toMatch(/❯ ✓ Work on web #3/));
+    await tick();
     mouse.emit({ kind: "click", ...(await spot(frame, "Work on web #3")) });
     await tick();
     await eventually(() => expect(frame()).toContain("Total duration"));
+    await tick();
     app.stdin.write("\u001B");
     await tick();
 
     mouse.emit({ kind: "click", ...(await spot(frame, "Check #7")) });
     await eventually(() => expect(frame()).toMatch(/❯ ✗ Check #7/));
+    await tick();
     mouse.emit({ kind: "click", ...(await spot(frame, "Check #7")) });
     await tick();
     await tick();
@@ -2331,17 +2490,18 @@ describe("the mouse", () => {
     mouse.emit({ kind: "click", ...(await spot(frame, "run test")) });
     await tick();
     await eventually(() => expect(frame()).not.toContain("FAIL divides by zero"));
+    await tick();
     mouse.emit({ kind: "click", ...(await spot(frame, "run lint")) });
     await tick();
     await tick();
     await eventually(() => expect(frame()).toContain("lint line 1"));
-    expect(readLog).toHaveBeenCalledWith("/logs/1");
+    await eventually(() => expect(readLog).toHaveBeenCalledWith("/logs/1"));
     const log = at(frame(), "lint line 2");
     mouse.emit({ kind: "wheel", ...log, by: 1 });
     mouse.emit({ kind: "wheel", ...log, by: 1 });
     await tick();
     await eventually(() => expect(frame()).not.toContain("run postgres"));
-    expect(frame()).toContain("lint line 9");
+    await eventually(() => expect(frame()).toContain("lint line 9"));
 
     // Back to the runs: the bolts on the left filter them.
     app.stdin.write("\u001B");
@@ -2349,6 +2509,6 @@ describe("the mouse", () => {
     mouse.emit({ kind: "click", ...(await spot(frame, "Work on web   ")) });
     await tick();
     await eventually(() => expect(frame()).toMatch(/Work on web +1 run/));
-    expect(frame()).not.toContain("Check #7");
+    await eventually(() => expect(frame()).not.toContain("Check #7"));
   });
 });

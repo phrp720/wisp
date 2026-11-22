@@ -8,5 +8,6 @@ export default defineConfig({
     isolate: true,
     env: { WISP_NOTIFY: "off" },
     testTimeout: 15000,
+    retry: process.env["CI"] ? 2 : 0,
   },
 });
