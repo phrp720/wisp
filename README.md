@@ -21,10 +21,7 @@
 </p>
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: light)" srcset="website/public/demo/cli-light.gif" />
-    <img src="website/public/demo/cli.gif" alt="wisp api: the database, the API server and the page, started in order, each step ticking off" width="800" />
-  </picture>
+  <img src="website/public/demo/cli.gif" alt="wisp api: the database, the API server and the page, started in order, each step ticking off" width="800" />
 </p>
 
 <p align="center">
@@ -41,10 +38,7 @@ A **pipeline** is a name and its steps, in a `.wisp.json` next to your code or i
 workspace. Steps start together unless they say what they wait for:
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: light)" srcset="website/public/pipeline-light.svg" />
-    <img src="website/public/pipeline-dark.svg" alt="The Dev pipeline: db and web start together; api waits for db; a wait for port 3000 waits for api; the page opens once both are done" width="628" />
-  </picture>
+  <img src="website/public/pipeline-dark.svg" alt="The Dev pipeline: db and web start together; api waits for db; a wait for port 3000 waits for api; the page opens once both are done" width="628" />
 </p>
 
 ```json
@@ -88,10 +82,7 @@ Then Wisp:
   and `wisp help agents` prints the whole reference. An agent can't approve its own commands.
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: light)" srcset="website/public/demo/dashboard-light.gif" />
-    <img src="website/public/demo/dashboard.gif" alt="Wisp's dashboard: running a pipeline in its box, its server's live output on the Running tab, then the History tab" width="900" />
-  </picture>
+  <img src="website/public/demo/dashboard.gif" alt="Wisp's dashboard: running a pipeline in its box, its server's live output on the Running tab, then the History tab" width="900" />
 </p>
 
 ## Install
