@@ -1,6 +1,6 @@
 import { tildify } from "../../core/paths.js";
 import { discoverWorkspaces, slugify, sharedNames } from "../../core/workspaces.js";
-import { counts, cyan, dim, green, red, title, yellow } from "../format.js";
+import { counts, cyan, dim, green, red, title, yellow } from "../lib/format.js";
 import { emitJson, maybeProject } from "../lib/context.js";
 import type { CommandDef } from "../lib/define.js";
 import type { WorkspaceRead } from "../../core/types.js";

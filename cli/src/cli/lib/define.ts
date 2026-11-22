@@ -1,7 +1,7 @@
 import { Command } from "commander";
 
 import { WispError } from "../../core/errors.js";
-import { dim, red } from "../format.js";
+import { dim, red } from "./format.js";
 
 /**
  * One command, declared rather than assembled.

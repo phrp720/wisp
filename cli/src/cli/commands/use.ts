@@ -1,10 +1,10 @@
 import { recordProject } from "../../core/config.js";
 import { listHistory, type HistoryEntry } from "../../core/history.js";
 import { WispError } from "../../core/errors.js";
-import { matchPipeline, planRetry, resolvePipeline, runPlan, stagesOf, switchToWorkspace, type PlannedStep } from "../../core/switch.js";
+import { matchPipeline, planRetry, resolvePipeline, runPlan, stagesOf, switchToWorkspace, type PlannedStep } from "../../core/run/index.js";
 import { beforeRun } from "../lib/ask.js";
 import type { RunMode, SwitchOptions, SwitchResult, SwitchTarget, TargetResult, Workspace } from "../../core/types.js";
-import { bold, cyan, dim, green, kindLabel, plural, red, title, yellow } from "../format.js";
+import { bold, cyan, dim, green, kindLabel, plural, red, title, yellow } from "../lib/format.js";
 import { emitJson, resolveRun } from "../lib/context.js";
 import type { CommandDef } from "../lib/define.js";
 import { diagnosticSummary, named as showNamed, printWithheld, resultLine, trustLine } from "../lib/render.js";
@@ -12,7 +12,7 @@ import { tildify } from "../../core/paths.js";
 import { trustProject } from "../../core/trust.js";
 import { waitingForTrust } from "../../core/waiting.js";
 import { slugify, pipelineSlug } from "../../core/workspaces.js";
-import { Prompter } from "../prompt.js";
+import { Prompter } from "../lib/prompt.js";
 
 export interface UseOptions {
   dryRun?: boolean;

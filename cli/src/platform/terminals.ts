@@ -1,4 +1,4 @@
-import { posixCommandLine } from "../core/shell.js";
+import { posixCommandLine } from "../core/system/shell.js";
 import type { Invocation } from "../core/types.js";
 
 /**

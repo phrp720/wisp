@@ -1,5 +1,5 @@
 import type { Invocation } from "../core/types.js";
-import { which } from "../core/which.js";
+import { which } from "../core/system/which.js";
 import { launch, run } from "./spawn.js";
 import { LINUX_TERMINALS, findIn } from "./terminals.js";
 import type { Platform, TerminalRequest } from "./types.js";

@@ -1,12 +1,12 @@
 import { getNotify, getOpenWithDefaults, type NotifyChoice, setNotify, setOpenWithDefaults } from "../../core/config.js";
-import { detectEnvironment } from "../../core/environment.js";
+import { detectEnvironment } from "../../core/system/environment.js";
 import { WispError } from "../../core/errors.js";
 import { addWebhook, type Delivery, lastDelivery, LONG_RUN_MS, maskWebhook, readDeliveries, removeWebhook, sendNotification } from "../../core/notify.js";
-import { readProjectFile } from "../../core/project.js";
+import { readProjectFile } from "../../core/project/index.js";
 import type { NotifyWhen } from "../../core/types.js";
 import { getPlatform } from "../../platform/index.js";
 import { MULTIPLEXERS } from "../../platform/terminals.js";
-import { ago, dim, green, red } from "../format.js";
+import { ago, dim, green, red } from "../lib/format.js";
 import { emitJson, everything, workspaceFor } from "../lib/context.js";
 import type { CommandDef } from "../lib/define.js";
 

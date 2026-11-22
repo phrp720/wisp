@@ -1,7 +1,7 @@
 import { tildify } from "../../core/paths.js";
-import { listRuns } from "../../core/processes.js";
+import { listRuns } from "../../core/system/processes.js";
 import { discoverWorkspaces } from "../../core/workspaces.js";
-import { counts, dim, plural, red, title } from "../format.js";
+import { counts, dim, plural, red, title } from "../lib/format.js";
 import { emitJson, maybeProject } from "../lib/context.js";
 import { workspaceSummaries } from "./list.js";
 import { workspaceJson } from "./show.js";

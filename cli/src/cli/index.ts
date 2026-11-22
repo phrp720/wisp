@@ -3,7 +3,7 @@ import { Command } from "commander";
 
 import { securePrivateFolders } from "../core/paths.js";
 import { status } from "./commands/status.js";
-import { dim } from "./format.js";
+import { dim } from "./lib/format.js";
 import { withImplicitUse } from "./lib/argv.js";
 import { COMMANDS, verbs } from "./lib/commands.js";
 import { fail, register, reportUsageErrorsAsJson } from "./lib/define.js";

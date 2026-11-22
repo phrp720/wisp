@@ -1,9 +1,9 @@
 import { render } from "ink";
 
-import { stopAttached } from "../core/switch.js";
+import { stopAttached } from "../core/run/index.js";
 import { App } from "./App.js";
-import { mouseStdin, terminalMouse } from "./mouse.js";
-import { inPlaceStdout } from "./screen.js";
+import { mouseStdin, terminalMouse } from "./terminal/mouse.js";
+import { inPlaceStdout } from "./terminal/screen.js";
 import { ENTER_SCREEN, LEAVE_SCREEN, realServices } from "./services.js";
 
 /**

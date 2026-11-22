@@ -1,4 +1,4 @@
-import { posixCommandLine } from "../core/shell.js";
+import { posixCommandLine } from "../core/system/shell.js";
 import type { Invocation } from "../core/types.js";
 import { run } from "./spawn.js";
 import { CROSS_PLATFORM_TERMINALS, findIn, type TerminalSpec } from "./terminals.js";

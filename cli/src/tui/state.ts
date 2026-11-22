@@ -3,12 +3,12 @@
 import { useStdout } from "ink";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { Container } from "../core/docker.js";
+import type { Container } from "../core/system/docker.js";
 import type { HistoryEntry, HistoryStep, StepProgress } from "../core/history.js";
 import { tildify } from "../core/paths.js";
-import type { RunStatus } from "../core/processes.js";
+import type { RunStatus } from "../core/system/processes.js";
 import type { InputSpec, StepKind, SwitchResult, SwitchTarget, TargetResult, WorkspaceRead } from "../core/types.js";
-import { describeWait } from "../core/wait.js";
+import { describeWait } from "../core/system/wait.js";
 import { type SetupSuggestion } from "./model.js";
 
 export type Focus = "workspaces" | "bolts";

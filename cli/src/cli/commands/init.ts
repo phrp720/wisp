@@ -3,14 +3,14 @@ import { relative } from "node:path";
 import { createPersonalWorkspace } from "../../core/edit.js";
 import { tildify } from "../../core/paths.js";
 import { WispError } from "../../core/errors.js";
-import { PROJECT_FILE, findProjectFile } from "../../core/project.js";
-import { bolts as draftPipelines, draftProject, emptyProject, guessName, writeProjectDraft } from "../../core/scaffold.js";
+import { PROJECT_FILE, findProjectFile } from "../../core/project/index.js";
+import { bolts as draftPipelines, draftProject, emptyProject, guessName, writeProjectDraft } from "../../core/init/scaffold.js";
 import { slugify } from "../../core/workspaces.js";
 
-import { cyan, dim, green, yellow } from "../format.js";
+import { cyan, dim, green, yellow } from "../lib/format.js";
 import { emitJson } from "../lib/context.js";
 import type { CommandDef } from "../lib/define.js";
-import { Prompter, checklist } from "../prompt.js";
+import { Prompter, checklist } from "../lib/prompt.js";
 
 export const init: CommandDef<{ force?: boolean; yes?: boolean; print?: boolean; only?: string; empty?: boolean; name?: string; personal?: boolean; json?: boolean }> = {
   name: "init",

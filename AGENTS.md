@@ -7,10 +7,18 @@ Notes for AI coding agents working on Wisp's own code. To *use* Wisp, run
 
 - `cli/`: Wisp itself, published as `@squaredasher/wisp`.
   - `src/core`: the file format, trust, discovery, running pipelines, history. No CLI or TUI code.
+    `core/project` reads and checks a `.wisp.json`; `core/run` plans and runs pipelines
+    (import each through its `index.ts`). `core/system` talks to the machine (processes,
+    shells, docker, waits), `core/init` guesses a file for `wisp init`, `core/text` formats.
   - `src/platform`: everything specific to macOS, Linux and Windows.
-  - `src/cli`: the `wisp` command. `src/cli/spec.ts` is the agent reference.
-  - `src/tui`: the full-screen TUI (Ink + React). `App.tsx` holds state and keys; each screen
-    has its own file (`home`, `running`, `history`, `panels`, `dialogs`, `editor`).
+  - `src/cli`: the `wisp` command. `commands/` has one file per command, `lib/` what they
+    share. `src/cli/spec.ts` is the agent reference.
+  - `src/tui`: the full-screen TUI (Ink + React). `App.tsx` holds state and keys, `watch.ts`
+    what it polls. `screens/` has one file per screen, `components/` the parts screens
+    share, `terminal/` mouse, glyphs and colours.
+  - `tests/`: every test, at the same path as the code it tests (`src/core/run/plan.ts` is tested
+    in `tests/core/run/`). `tests/support/` holds shared setup. `pnpm typecheck` checks the tests
+    too; `tsconfig.build.json` builds only `src`.
 - `website/`: the landing page and docs (VitePress), served by a Cloudflare Worker.
 - `schema/wisp.schema.json`: the file's JSON Schema. Its address is in every `.wisp.json`, so it stays here.
 - `docs/SPEC.md`: generated from `cli/src/cli/spec.ts`. Never edit it by hand.
@@ -37,4 +45,4 @@ pnpm website:build # after changing website/
 - Wisp never runs a cloned file's commands until a person approves them with `wisp trust`.
   Don't add a way around that, and don't run `wisp trust` on a person's behalf.
 - Docs and website text: no em dashes (—). Use commas, colons, brackets or a new sentence.
-- Tests live beside the code (`*.test.ts`, `*.test.tsx`). Add one with every behaviour change.
+- Tests live in `cli/tests/`, mirroring `cli/src/` (`*.test.ts`, `*.test.tsx`). Add one with every behaviour change.

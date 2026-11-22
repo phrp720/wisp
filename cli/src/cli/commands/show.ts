@@ -1,7 +1,7 @@
 import { tildify } from "../../core/paths.js";
-import { listRuns } from "../../core/processes.js";
-import { collectPipelineTargets, collectDownTargets } from "../../core/switch.js";
-import { bold, counts, dim, title } from "../format.js";
+import { listRuns } from "../../core/system/processes.js";
+import { collectPipelineTargets, collectDownTargets } from "../../core/run/index.js";
+import { bold, counts, dim, title } from "../lib/format.js";
 import { emitJson, maybeProject, workspaceFor } from "../lib/context.js";
 import type { CommandDef } from "../lib/define.js";
 import type { WorkspaceRead } from "../../core/types.js";

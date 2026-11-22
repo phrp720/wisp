@@ -1,13 +1,13 @@
 
 import { WispError } from "../../core/errors.js";
 import { tildify } from "../../core/paths.js";
-import { PROJECT_FILE, findProjectFile, readProjectFile } from "../../core/project.js";
+import { PROJECT_FILE, findProjectFile, readProjectFile } from "../../core/project/index.js";
 import { listTrustedProjects, revokeProject, trustProject } from "../../core/trust.js";
-import { bold, cyan, dim, green, plural, red, yellow } from "../format.js";
+import { bold, cyan, dim, green, plural, red, yellow } from "../lib/format.js";
 import { emitJson } from "../lib/context.js";
 import type { CommandDef } from "../lib/define.js";
 import { printWithheld } from "../lib/render.js";
-import { Prompter } from "../prompt.js";
+import { Prompter } from "../lib/prompt.js";
 
 export const trust: CommandDef<{ revoke?: boolean; list?: boolean; yes?: boolean; json?: boolean }> = {
   name: "trust",

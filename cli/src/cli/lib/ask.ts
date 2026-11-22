@@ -1,8 +1,8 @@
 import { WispError } from "../../core/errors.js";
 import { checkValue, parseGiven, type InputValues } from "../../core/inputs.js";
-import { inputsFor, questionsFor } from "../../core/switch.js";
+import { inputsFor, questionsFor } from "../../core/run/index.js";
 import type { Pipeline, InputSpec, Workspace } from "../../core/types.js";
-import { choose, Prompter } from "../prompt.js";
+import { choose, Prompter } from "./prompt.js";
 
 export interface AskOptions {
   yes?: boolean;

@@ -2,8 +2,8 @@ import { dirname } from "node:path";
 
 import { WispError } from "../../core/errors.js";
 import { tildify } from "../../core/paths.js";
-import { PROJECT_FILE, checkProject, findProjectFile } from "../../core/project.js";
-import { bold, counts, cyan, dim, green, kindLabel, plural, title, yellow } from "../format.js";
+import { PROJECT_FILE, checkProject, findProjectFile } from "../../core/project/index.js";
+import { bold, counts, cyan, dim, green, kindLabel, plural, title, yellow } from "../lib/format.js";
 import { emitJson } from "../lib/context.js";
 import type { CommandDef } from "../lib/define.js";
 import { countDiagnostics, named, printPipelines, printDiagnostics, trustLine, whereLine } from "../lib/render.js";

@@ -4,7 +4,7 @@ import { basename, dirname, join } from "node:path";
 
 import { WispError } from "../../core/errors.js";
 import { configDir, tildify } from "../../core/paths.js";
-import { dim, green } from "../format.js";
+import { dim, green } from "../lib/format.js";
 import { SHELLS } from "../lib/complete.js";
 import type { CommandDef } from "../lib/define.js";
 

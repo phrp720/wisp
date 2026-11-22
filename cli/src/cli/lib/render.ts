@@ -1,10 +1,10 @@
 import { dirname } from "node:path";
 import { tildify } from "../../core/paths.js";
-import type { RunStatus } from "../../core/processes.js";
-import { pipelineStatus, collectPipelineTargets, collectDownTargets, stagesOfTargets } from "../../core/switch.js";
+import type { RunStatus } from "../../core/system/processes.js";
+import { pipelineStatus, collectPipelineTargets, collectDownTargets, stagesOfTargets } from "../../core/run/index.js";
 import type { Pipeline, Diagnostic, SwitchTarget, Withheld, Workspace, WorkspaceRead } from "../../core/types.js";
 import { hasWords, slugify, pipelineSlug } from "../../core/workspaces.js";
-import { bold, cyan, dim, green, kindLabel, plural, red, yellow } from "../format.js";
+import { bold, cyan, dim, green, kindLabel, plural, red, yellow } from "./format.js";
 
 /**
  * A label and the thing it names — once, when they are the same. An inline `{ "run":

@@ -4,8 +4,8 @@ import { join } from "node:path";
 
 import type { Platform } from "../platform/types.js";
 import { getNotify } from "./config.js";
-import type { Environment } from "./environment.js";
-import { describeDuration } from "./duration.js";
+import type { Environment } from "./system/environment.js";
+import { describeDuration } from "./text/duration.js";
 import { WispError } from "./errors.js";
 import type { Notified } from "./history.js";
 import { readJson, stateDir, withLock, writeJson } from "./paths.js";

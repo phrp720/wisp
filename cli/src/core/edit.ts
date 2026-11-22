@@ -1,13 +1,13 @@
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 
-import { parseDuration } from "./duration.js";
+import { parseDuration } from "./text/duration.js";
 import { WispError, describe } from "./errors.js";
 import { INPUT_NAME } from "./inputs.js";
 import { workspacesDir } from "./paths.js";
-import { PROJECT_FILE, PROJECT_SCHEMA_URL, parseWait, readProjectFile } from "./project.js";
-import { pickColor } from "./colors.js";
-import { formatProjectFile } from "./scaffold.js";
+import { PROJECT_FILE, PROJECT_SCHEMA_URL, parseWait, readProjectFile } from "./project/index.js";
+import { pickColor } from "./text/colors.js";
+import { formatProjectFile } from "./init/scaffold.js";
 import { localFileFor, trustProject } from "./trust.js";
 import { SLUG, slugify } from "./workspaces.js";
 

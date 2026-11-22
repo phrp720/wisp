@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { addKnownProjects, loadConfig, setRoots } from "../../core/config.js";
 import { expandHome, tildify } from "../../core/paths.js";
 import { scanForProjects } from "../../core/scan.js";
-import { dim, green, plural } from "../format.js";
+import { dim, green, plural } from "../lib/format.js";
 import type { CommandDef } from "../lib/define.js";
 
 export const scan: CommandDef<{ remember?: boolean; depth?: string }> = {

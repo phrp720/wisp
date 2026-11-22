@@ -3,8 +3,8 @@ import { resolve } from "node:path";
 
 import { WispError } from "../../core/errors.js";
 import { expandHome } from "../../core/paths.js";
-import { PROJECT_FILE, findProjectFile, readProjectFile } from "../../core/project.js";
-import { matchPipeline } from "../../core/switch.js";
+import { PROJECT_FILE, findProjectFile, readProjectFile } from "../../core/project/index.js";
+import { matchPipeline } from "../../core/run/index.js";
 import type { WorkspaceRead } from "../../core/types.js";
 import { discoverWorkspaces, matchWorkspace, resolveWorkspace, slugify, pipelineSlug } from "../../core/workspaces.js";
 

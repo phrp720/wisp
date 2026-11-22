@@ -12,7 +12,6 @@
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
     "noFallthroughCasesInSwitch": true,
-    "declaration": true,
     "sourceMap": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
@@ -22,15 +21,10 @@
     "types": [
       "node"
     ],
-    "rootDir": "src",
-    "outDir": "dist",
     "jsx": "react-jsx"
   },
   "include": [
-    "src/**/*"
-  ],
-  "exclude": [
-    "src/**/*.test.ts",
-    "src/**/*.test.tsx"
+    "src/**/*",
+    "tests/**/*"
   ]
 }

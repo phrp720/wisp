@@ -1,13 +1,13 @@
 import { WispError } from "../../core/errors.js";
 import { tildify } from "../../core/paths.js";
-import { listRuns } from "../../core/processes.js";
+import { listRuns } from "../../core/system/processes.js";
 import type { WorkspaceRead } from "../../core/types.js";
 import { discoverWorkspaces, slugify, pipelineSlug } from "../../core/workspaces.js";
-import { counts, dim } from "../format.js";
+import { counts, dim } from "../lib/format.js";
 import { maybeProject, workspaceFor } from "../lib/context.js";
 import type { CommandDef } from "../lib/define.js";
 import { upMark } from "../lib/render.js";
-import { choose } from "../prompt.js";
+import { choose } from "../lib/prompt.js";
 import { list } from "./list.js";
 import { show } from "./show.js";
 import { use, type UseOptions } from "./use.js";

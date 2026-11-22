@@ -349,7 +349,7 @@ export interface SwitchResult {
   /** Stopped before it finished, by you: neither a success nor a failure. */
   cancelled?: boolean;
   /** What it set out to do, step by step — so the failed part can be run again. */
-  plan?: import("./switch.js").PlannedStep[];
+  plan?: import("./run/index.js").PlannedStep[];
   inputs?: Record<string, string>;
 }
 

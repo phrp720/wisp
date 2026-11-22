@@ -1,30 +1,30 @@
 import { Box, Text, useApp, useInput } from "ink";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
-import { type Container, containerMood, type ContainerStats } from "../core/docker.js";
+import { containerMood } from "../core/system/docker.js";
 import { describe } from "../core/errors.js";
-import type { HistoryEntry } from "../core/history.js";
 import { checkValue } from "../core/inputs.js";
 import { tildify } from "../core/paths.js";
-import type { RunStatus } from "../core/processes.js";
-import { composeFiles, retryPlan } from "../core/switch.js";
+import { composeFiles, retryPlan } from "../core/run/index.js";
 import type { Pipeline, Diagnostic, SwitchResult, WorkspaceRead } from "../core/types.js";
-import { flow } from "./steps.js";
-import { Footer, Header, headerTabAt, runningStatus, webhookWarning } from "./chrome.js";
-import { SetupPanel, TrustPanel } from "./dialogs.js";
-import { PipelineEditor } from "./editor.js";
-import { Choice, Form } from "./forms.js";
-import { type Glyphs, glyphs as defaultGlyphs } from "./glyphs.js";
-import { HistoryScreen } from "./history.js";
-import { pipelineWindow, Empty, FIRST_PIPELINE_LINE, SearchPanel, WorkspaceList, workspaceListWidth, WorkspacePanel, workspaceRows } from "./home.js";
+import { flow } from "./components/steps.js";
+import { Footer, Header, headerTabAt, runningStatus, webhookWarning } from "./components/chrome.js";
+import { SetupPanel, TrustPanel } from "./components/dialogs.js";
+import { PipelineEditor } from "./screens/editor.js";
+import { Choice, Form } from "./components/forms.js";
+import { type Glyphs, glyphs as defaultGlyphs } from "./terminal/glyphs.js";
+import { HistoryScreen } from "./screens/history.js";
+import { pipelineWindow, Empty, FIRST_PIPELINE_LINE, SearchPanel, WorkspaceList, workspaceListWidth, WorkspacePanel, workspaceRows } from "./screens/home.js";
 import { type Library, ordered, search, type Services } from "./model.js";
-import { HelpPanel, RunProgress } from "./panels.js";
-import { SettingsScreen } from "./settings.js";
-import { type MouseListener, MouseContext, type MouseSource } from "./mouse.js";
-import { filterPanes, groupPanes, logWindow, nextTab, nextWithLog, paneKey, PanesPanel, paneSpotAt, shownTab } from "./running.js";
+import { HelpPanel, RunProgress } from "./components/panels.js";
+import { SettingsScreen } from "./screens/settings.js";
+import { type MouseListener, MouseContext, type MouseSource } from "./terminal/mouse.js";
+import { PanesPanel } from "./screens/running.js";
+import { filterPanes, groupPanes, logWindow, nextTab, nextWithLog, paneKey, paneSpotAt, shownTab } from "./screens/panes.js";
 import { type Activity, clamp, type Focus, markFirst, needsTrust, type Notice, type PaneItem, type RunState, SELF_DRIVEN, useLatest, useTerminalSize, type View, visibleRuns, waitingForTrust } from "./state.js";
-import { spell } from "./spells.js";
-import { TONE } from "./tones.js";
+import { spell } from "./terminal/spells.js";
+import { useContainers, useContainerStats, useRecent, useRuns, useSelectedLog } from "./watch.js";
+import { TONE } from "./terminal/tones.js";
 
 export interface AppProps {
   services: Services;
@@ -53,8 +53,6 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
   const [view, setView, viewRef] = useLatest<View>({ kind: "browse" });
   const [message, setMessage, messageRef] = useLatest<string | undefined>(undefined);
   const [tick, setTick] = useState(0);
-  const [runs, setRuns] = useState<RunStatus[]>([]);
-  const [log, setLog] = useState("");
   const busy = useRef(false);
   const [active, setActive, activeRef] = useLatest<RunState | undefined>(undefined);
   const [detailScroll, setDetailScroll] = useState(0);
@@ -65,20 +63,11 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
     if (activeRef.current?.done) setRunPinned(false);
   }, [wsIndex, pipelineIndex, activeRef]);
   const abort = useRef<AbortController | undefined>(undefined);
-  const [containers, setContainers] = useState<Container[]>([]);
-  const [dockerError, setDockerError] = useState<string>();
-  const [stats, setStats] = useState<Map<string, ContainerStats>>(new Map());
   const [notice, setNotice] = useState<Notice>();
-  // Past runs, for the last result beside each bolt and the recent runs under them.
-  const [recent, setRecent] = useState<HistoryEntry[]>([]);
-  const [webhooksFailing, setWebhooksFailing] = useState(0);
   const [showGraph, setShowGraph] = useState(true);
   const [screenHint, setScreenHint] = useState<string>();
   // Whether the finished run is the one being looked at in Running, so it does not vanish mid-read.
   const watchingDone = useRef(false);
-  // What was true at the last look, to tell what has changed since.
-  const seenRuns = useRef<Map<string, boolean> | undefined>(undefined);
-  const seenContainers = useRef<Map<string, string> | undefined>(undefined);
   // Stops asked for here are not news, and neither are files saved here.
   const expected = useRef<Set<string>>(new Set());
   const savedAt = useRef(0);
@@ -206,8 +195,16 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
     return () => clearInterval(timer);
   }, [spinning]);
 
-  // Runs are watched all the time, cheaply: they are what marks a bolt as up.
-  const watching = true;
+  // Containers of every compose file a trusted workspace starts: watched like runs, so a
+  // database that dies says so, and a bolt knows whether its services are up.
+  const files = useMemo(() => [...new Set(reads.flatMap((read) => composeFiles(read.workspace)))], [reads]);
+  const panesOpen = view.kind === "processes";
+  const [runs, setRuns] = useRuns(services, view.kind, notify, expected);
+  const { containers, dockerError } = useContainers(services, files, panesOpen, notify, expected);
+  const stats = useContainerStats(services, panesOpen, containers);
+  // Past runs, for the last result beside each bolt and the recent runs under them.
+  const { recent, webhooksFailing } = useRecent(services, active?.done, view.kind === "settings");
+
   const paneItems: PaneItem[] =
     view.kind === "processes"
       ? filterPanes(
@@ -234,8 +231,6 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
   const selectedItem = view.kind === "processes" ? paneItems[processIndex] : undefined;
   const selectedRun = selectedItem?.type === "run" ? selectedItem.run : undefined;
   const watchingActive = selectedItem?.type === "current";
-  // The log the panel beside the list shows: the run in progress's output, or the selected one's.
-  const shownLog = watchingActive ? (active?.output ?? []).join("\n") : log;
   watchingDone.current = view.kind === "processes" && watchingActive;
   const selectedContainer = selectedItem?.type === "container" ? selectedItem.container : undefined;
   // Filtering a log reads more of it: the filter should find what scrolled out of the last screens.
@@ -243,148 +238,9 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
   // A finished step of the pipeline: what it printed in that run, as History keeps it.
   const selectedStepLog = selectedItem?.type === "step" ? selectedItem.step.log : undefined;
   const selectedStepLive = selectedItem?.type === "step" && selectedItem.step.state === "running";
-  useEffect(() => {
-    if (selectedItem?.type !== "step") return;
-    let alive = true;
-    const read = () => {
-      if (!selectedStepLog) return setLog("");
-      void services
-        .readLog(selectedStepLog)
-        .then((text) => alive && setLog(text))
-        .catch(() => alive && setLog(""));
-    };
-    read();
-    const timer = selectedStepLive ? setInterval(read, 1000) : undefined;
-    return () => {
-      alive = false;
-      if (timer) clearInterval(timer);
-    };
-  }, [selectedItem?.type, selectedStepLog, selectedStepLive, services]);
-  useEffect(() => {
-    if (!selectedContainer) return;
-    let alive = true;
-    const refresh = async () => {
-      const text = await services.containerLogs(selectedContainer.name, filteringLog ? 5000 : 1000);
-      if (alive) setLog(text);
-    };
-    void refresh();
-    const timer = setInterval(refresh, 1000);
-    return () => {
-      alive = false;
-      clearInterval(timer);
-    };
-  }, [selectedContainer?.name, services, filteringLog]);
-  const askedAbout = useRef(new Set<string>());
-  useEffect(() => {
-    if (!watching) return;
-    let alive = true;
-    const refresh = async () => {
-      const next = await services.runs();
-      if (!alive) return;
-      setRuns(next);
-      // Anything that stopped or started since the last look — unless it was asked for here.
-      const before = seenRuns.current;
-      if (before) {
-        for (const run of next) {
-          const was = before.get(run.id);
-          if (was === true && !run.alive) {
-            if (expected.current.delete(run.id)) continue;
-            // Finished by itself is news, not trouble; only a failure or a crash is red.
-            if (run.exitCode === 0) notify(`${run.label} finished (${run.workspaceName})`, "info");
-            else if (run.exitCode !== undefined) notify(`${run.label} failed, exit code ${run.exitCode} (${run.workspaceName}) — press p to see why`, "bad");
-            else notify(`${run.label} stopped (${run.workspaceName}) — press p to see its last output`, "bad");
-          } else if (was === undefined && run.alive && !expected.current.has(run.id)) {
-            notify(`${run.label} started (${run.workspaceName})`, "good");
-          }
-          // Once per question: a command that went quiet asking something can't be answered
-          // in the background, so say so, and how to fix the bolt.
-          if (run.alive && run.waiting && !askedAbout.current.has(run.id)) {
-            askedAbout.current.add(run.id);
-            notify(`${run.label} is waiting for an answer: "${run.waiting}". Give it a flag like --yes, or run commands in a terminal window (s)`, "bad");
-          }
-        }
-      }
-      seenRuns.current = new Map(next.map((run) => [run.id, run.alive]));
-    };
-    void refresh();
-    const timer = setInterval(refresh, view.kind === "processes" ? 1000 : 2000);
-    return () => {
-      alive = false;
-      clearInterval(timer);
-    };
-  }, [watching, services, view.kind]);
-
-  // Containers of every compose file a trusted workspace starts: watched like runs, so a
-  // database that dies says so, and a bolt knows whether its services are up.
-  const files = useMemo(() => [...new Set(reads.flatMap((read) => composeFiles(read.workspace)))], [reads]);
-  const panesOpen = view.kind === "processes";
-  useEffect(() => {
-    if (files.length === 0) {
-      setContainers([]);
-      return;
-    }
-    let alive = true;
-    const refresh = async () => {
-      const { containers: next, error } = await services.containers(files);
-      if (!alive) return;
-      setContainers(next);
-      setDockerError(error);
-      const before = seenContainers.current;
-      if (before) {
-        for (const container of next) {
-          const was = before.get(container.name);
-          const now = containerMood(container).word;
-          if (!was || was === now) continue;
-          if (expected.current.delete(container.name)) continue;
-          if (now === "unhealthy") notify(`${container.service} is unhealthy — press p to see its logs`, "bad");
-          else if (now === "exited" || now === "dead") notify(`${container.service} stopped (${container.status}) — press p to see why`, "bad");
-          else if ((now === "healthy" || now === "running") && (was === "unhealthy" || was === "exited" || was === "starting" || was === "restarting")) {
-            notify(`${container.service} is ${now === "healthy" ? "healthy" : "running"} again`, "good");
-          }
-        }
-      }
-      seenContainers.current = new Map(next.map((container) => [container.name, containerMood(container).word]));
-    };
-    void refresh();
-    const timer = setInterval(refresh, panesOpen ? 1500 : 3000);
-    return () => {
-      alive = false;
-      clearInterval(timer);
-    };
-  }, [files.join("|"), panesOpen, services, notify]);
-  useEffect(() => {
-    if (!panesOpen) return;
-    const names = containers.filter((container) => container.state === "running").map((container) => container.name);
-    if (names.length === 0) return;
-    let alive = true;
-    const refresh = async () => {
-      const next = await services.containerStats(names);
-      if (alive) setStats(next);
-    };
-    void refresh();
-    const timer = setInterval(refresh, 3000);
-    return () => {
-      alive = false;
-      clearInterval(timer);
-    };
-  }, [panesOpen, containers.map((container) => `${container.name}:${container.state}`).join("|"), services]);
-
-  useEffect(() => {
-    let alive = true;
-    const load = async () => {
-      const [next, failingHooks] = await Promise.all([services.history().catch(() => []), services.settings.failingWebhooks?.().catch(() => 0) ?? Promise.resolve(0)]);
-      if (alive) {
-        setRecent(next);
-        setWebhooksFailing(failingHooks);
-      }
-    };
-    void load();
-    const timer = setInterval(load, 5000);
-    return () => {
-      alive = false;
-      clearInterval(timer);
-    };
-  }, [services, active?.done, view.kind === "settings"]);
+  const log = useSelectedLog(services, { selectedItem, selectedRun, selectedContainer, selectedStepLog, selectedStepLive, filteringLog });
+  // The log the panel beside the list shows: the run in progress's output, or the selected one's.
+  const shownLog = watchingActive ? (active?.output ?? []).join("\n") : log;
 
   // Workspace files edited elsewhere — in an editor, by a `git pull` — are read again.
   const watched = useMemo(() => reads.map((read) => read.workspace.file), [reads]);
@@ -397,25 +253,6 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
     });
   }, [watched.join("|"), services]);
 
-  useEffect(() => {
-    if (!selectedRun) {
-      if (!selectedContainer && selectedItem?.type !== "step") setLog("");
-      return;
-    }
-    let alive = true;
-    const refresh = async () => {
-      // Raw lines, not lines shown: a screen-clearing server (Vite) pads each message with a
-      // screenful of blank ones, which cleaning drops. The bytes keep it cheap.
-      const text = await (filteringLog ? services.tail(selectedRun.log, 20_000, 4 * 1024 * 1024) : services.tail(selectedRun.log, 5000));
-      if (alive) setLog(text);
-    };
-    void refresh();
-    const timer = setInterval(refresh, 500);
-    return () => {
-      alive = false;
-      clearInterval(timer);
-    };
-  }, [selectedRun?.id, selectedRun?.log, services, filteringLog]);
 
   /**
    * Run steps — a whole bolt, or a retry of part of one — showing each as it goes. The

@@ -1,9 +1,9 @@
 import { renamePipeline } from "../../core/edit.js";
 import { WispError } from "../../core/errors.js";
-import { readProjectFile } from "../../core/project.js";
-import { matchPipeline } from "../../core/switch.js";
+import { readProjectFile } from "../../core/project/index.js";
+import { matchPipeline } from "../../core/run/index.js";
 import { slugify } from "../../core/workspaces.js";
-import { bold, dim, green, yellow } from "../format.js";
+import { bold, dim, green, yellow } from "../lib/format.js";
 import { emitJson, workspaceFor } from "../lib/context.js";
 import type { CommandDef } from "../lib/define.js";
 import { shortest } from "../lib/render.js";

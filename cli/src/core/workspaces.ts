@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { loadConfig } from "./config.js";
 import { WispError, describe } from "./errors.js";
 import { tildify, workspacesDir } from "./paths.js";
-import { readProjectFile, type ReadOptions } from "./project.js";
+import { readProjectFile, type ReadOptions } from "./project/index.js";
 import type { Workspace, WorkspaceRead } from "./types.js";
 
 /** A workspace file Wisp knows about but could not read. */

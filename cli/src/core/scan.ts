@@ -2,7 +2,7 @@ import { readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 import { expandHome } from "./paths.js";
-import { PROJECT_FILE } from "./project.js";
+import { PROJECT_FILE } from "./project/index.js";
 
 /**
  * Directories never worth descending into: dependencies, build output, caches. Scanning

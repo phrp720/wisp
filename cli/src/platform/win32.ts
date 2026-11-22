@@ -1,6 +1,6 @@
 import type { Invocation } from "../core/types.js";
-import { which } from "../core/which.js";
-import { pwshQuote } from "../core/shell.js";
+import { which } from "../core/system/which.js";
+import { pwshQuote } from "../core/system/shell.js";
 import { launch, run } from "./spawn.js";
 import { CROSS_PLATFORM_TERMINALS, findIn, type TerminalSpec } from "./terminals.js";
 import type { Platform, TerminalRequest } from "./types.js";

@@ -1,11 +1,11 @@
 import { getOpenWithDefaults } from "../../core/config.js";
-import { detectEnvironment } from "../../core/environment.js";
+import { detectEnvironment } from "../../core/system/environment.js";
 import { configDir, stateDir, tildify, workspacesDir } from "../../core/paths.js";
-import { osName } from "../../core/project.js";
-import { defaultShell } from "../../core/shell.js";
-import { which } from "../../core/which.js";
+import { osName } from "../../core/project/index.js";
+import { defaultShell } from "../../core/system/shell.js";
+import { which } from "../../core/system/which.js";
 import { getPlatform } from "../../platform/index.js";
-import { bold, dim, green, yellow } from "../format.js";
+import { bold, dim, green, yellow } from "../lib/format.js";
 import { emitJson } from "../lib/context.js";
 import type { CommandDef } from "../lib/define.js";
 import { VERSION } from "../version.js";

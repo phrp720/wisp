@@ -1,9 +1,9 @@
-import type { Container, ContainerStats } from "../core/docker.js";
+import type { Container, ContainerStats } from "../core/system/docker.js";
 import type { RawPipeline, RawInput, RawStep } from "../core/edit.js";
-import type { Environment } from "../core/environment.js";
+import type { Environment } from "../core/system/environment.js";
 import type { HistoryEntry } from "../core/history.js";
-import type { RunStatus, StartResult } from "../core/processes.js";
-import type { DownResult, PlannedStep } from "../core/switch.js";
+import type { RunStatus, StartResult } from "../core/system/processes.js";
+import type { DownResult, PlannedStep } from "../core/run/index.js";
 import type { NotifyChoice } from "../core/config.js";
 import type { Delivery } from "../core/notify.js";
 import type { Pipeline, InputSpec, NotifySettings, SwitchResult, SwitchTarget, TargetResult, WorkspaceRead } from "../core/types.js";

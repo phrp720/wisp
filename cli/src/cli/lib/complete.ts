@@ -1,7 +1,7 @@
-import { installedEditors } from "../../core/editors.js";
+import { installedEditors } from "../../core/system/editors.js";
 import { currentOS } from "../../core/paths.js";
-import { listRuns } from "../../core/processes.js";
-import { matchPipeline } from "../../core/switch.js";
+import { listRuns } from "../../core/system/processes.js";
+import { matchPipeline } from "../../core/run/index.js";
 import type { Workspace, WorkspaceRead } from "../../core/types.js";
 import { matchWorkspace, slugify, pipelineSlug } from "../../core/workspaces.js";
 import { getPlatform } from "../../platform/index.js";

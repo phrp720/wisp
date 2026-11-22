@@ -10,8 +10,8 @@ import {
   stopRun,
   tail,
   type RunStatus,
-} from "../../core/processes.js";
-import { ago, bold, dim, green, plural, red, yellow } from "../format.js";
+} from "../../core/system/processes.js";
+import { ago, bold, dim, green, plural, red, yellow } from "../lib/format.js";
 import { emitJson } from "../lib/context.js";
 import type { CommandDef } from "../lib/define.js";
 
@@ -43,7 +43,7 @@ export const ps: CommandDef<{ all?: boolean; clear?: boolean; json?: boolean }> 
     }
 
     // A table, as a process manager shows one: what it is, how it is, for how long.
-    const { tail: readTail } = await import("../../core/processes.js");
+    const { tail: readTail } = await import("../../core/system/processes.js");
     const rows = await Promise.all(
       shown.map(async (run) => {
         const restarts = run.log ? ((await readTail(run.log, 2000)).match(/\[wisp\] restarting/g)?.length ?? 0) : 0;
