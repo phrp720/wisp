@@ -298,7 +298,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
           dryRun,
           signal: controller.signal,
           ...(Object.keys(inputs).length > 0 ? { inputs } : {}),
-          onPlan: (targets) => update((state) => ({ ...state, steps: targets.map((target) => ({ target, state: "pending" })) })),
+          onPlan: (targets, waits) => update((state) => ({ ...state, steps: targets.map((target) => ({ target, state: "pending" })), ...(waits ? { waits } : {}) })),
           onStep: (target, info) => {
             update((state) => ({ ...state, steps: markFirst(state.steps, target, (step) => ({ ...step, state: "running" })) }));
             // An attached command's output takes the pane; a window's stays in the window.
@@ -1195,7 +1195,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
                   : inBox
                     ? (room: number) => (
                         <Box flexDirection="column" height={room} borderStyle={glyphs.border} borderColor={inBox.done ? (inBox.result?.cancelled ? "gray" : inBox.error || inBox.steps.some((step) => step.result && !step.result.ok && !step.result.skipped) ? "red" : "green") : TONE.accent} paddingX={1} overflow="hidden">
-                          <RunProgress view={inBox} glyphs={glyphs} height={Math.max(1, room - 2)} tick={tick} />
+                          <RunProgress view={inBox} glyphs={glyphs} height={Math.max(1, room - 2)} tick={tick} width={columns - workspaceListWidth(columns) - 8} />
                         </Box>
                       )
                     : undefined

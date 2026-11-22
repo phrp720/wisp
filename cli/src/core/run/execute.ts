@@ -72,7 +72,7 @@ export async function runPlan(
   const runningLogs = new Map<number, string>();
   const stageAt = stagesOf(steps);
   let halted: string | undefined;
-  options.onPlan?.(steps.map((step) => step.target));
+  options.onPlan?.(steps.map((step) => step.target), waitsOn);
 
   const owned = (result: TargetResult, at: number): HistoryStep => {
     const owner = steps[at]?.bolt;

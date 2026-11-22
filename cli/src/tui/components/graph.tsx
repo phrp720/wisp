@@ -1,6 +1,7 @@
 import { Box, Text } from "ink";
 
 import type { StepProgress } from "../../core/history.js";
+import type { RunState } from "../state.js";
 import type { Glyphs } from "../terminal/glyphs.js";
 import { collapseDag, drawDag, type DagLine } from "./dag.js";
 
@@ -103,4 +104,21 @@ export function StepGraph({ graph, glyphs }: { graph: FittedGraph; glyphs: Glyph
       ))}
     </Box>
   );
+}
+
+export function liveGraph(active: RunState): GraphNode[] {
+  return active.steps.map((step, at) => {
+    const result = step.result;
+    const ms = result?.durationMs ?? 0;
+    const detail = step.state === "done" && ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : step.state === "done" && ms > 0 ? `${ms}ms` : "";
+    return {
+      label: step.target.name ?? step.target.label,
+      after: active.waits?.[at] ?? [],
+      ok: step.state !== "done" || Boolean(result?.ok),
+      ...(detail ? { detail } : {}),
+      ...(step.state === "running" ? { state: "running" as const } : step.state === "pending" ? { state: "waiting" as const } : {}),
+      ...(result?.skipped ? { skipped: true } : {}),
+      ...(result?.cancelled ? { cancelled: true } : {}),
+    };
+  });
 }

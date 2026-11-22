@@ -62,6 +62,30 @@ describe("commands that finish, down and history in the TUI", () => {
     await eventually(() => expect(app.lastFrame()).toContain("exited with code 1"));
   });
 
+  it("draws the run as a graph while it goes: what is done, what runs, what waits", async () => {
+    let finish: () => void = () => undefined;
+    const app = await open(
+      services({
+        run: async (target, _bolt, callbacks) => {
+          const step = (label: string) => ({ kind: "command" as const, id: `command:${label}`, label, value: label });
+          const [up, session, ready, open] = [step("up"), step("session"), step("ready"), step("open")];
+          callbacks.onPlan([up, session, ready, open], [[], [0], [0], [2]]);
+          callbacks.onStep(up, { attached: false });
+          callbacks.onResult({ ...up, ok: true, durationMs: 1200 });
+          callbacks.onStep(session, { attached: false });
+          callbacks.onStep(ready, { attached: false });
+          callbacks.onResult({ ...ready, ok: false, error: "no answer" });
+          await new Promise<void>((resolve) => (finish = resolve));
+          return { workspace: target.workspace, targets: [], dryRun: false, ok: false } as SwitchResult;
+        },
+      }),
+    );
+    app.stdin.write("\r");
+    await eventually(() => expect(app.lastFrame()).toMatch(/✓ up 1\.2s[^\n]*─┬─▶[^\n]*● session/));
+    expect(app.lastFrame()).toMatch(/╰─▶[^\n]*✗ ready[^\n]*▶[^\n]*· open/);
+    finish();
+  });
+
   it("asks, when the pipeline needed others, whether to stop those too", async () => {
     const shop = read("/dev/shop/.wisp.json", {
       name: "Shop",

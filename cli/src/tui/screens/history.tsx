@@ -519,7 +519,7 @@ function RunDetail(props: {
           {filtering ? (
             found && found.length > 0 ? <Text color="yellow">{`${found.length} match${found.length === 1 ? "" : "es"}`}</Text> : <Text dimColor>{step.log ? (read ? "no match" : "reading…") : "no output"}</Text>
           ) : step.error ? (
-            <Text color="red">{step.error}</Text>
+            <Text color={step.cancelled ? "gray" : "red"}>{step.error}</Text>
           ) : step.note && !step.note.startsWith("logs:") ? (
             <Text dimColor>{step.note}</Text>
           ) : null}
@@ -742,7 +742,7 @@ export function pipeline(entry: HistoryEntry): GraphNode[] {
   const stageOf = (step: HistoryStep, at: number) => step.stage ?? at + 1;
   const owners = [...new Set(steps.map((step) => step.bolt ?? baseLabel(entry.bolt)))];
   const ownerOf = (step: HistoryStep) => (step.bolt ? (step.workspace ? `${step.workspace} › ${step.bolt}` : step.bolt) : baseLabel(entry.bolt));
-  const nodes: (GraphNode & { key: string; stage: number; steps: number; ms: number; done: number; running?: boolean })[] = [];
+  const nodes: (GraphNode & { key: string; stage: number; steps: number; ms: number; done: number; running?: boolean; stopped?: boolean })[] = [];
   const nodeOfStep: number[] = [];
   steps.forEach((step, at) => {
     const key = owners.length > 1 ? ownerOf(step) : `${at}`;
@@ -759,7 +759,8 @@ export function pipeline(entry: HistoryEntry): GraphNode[] {
     if (step.state) return;
     node.done += 1;
     node.ms += step.durationMs;
-    node.ok = node.ok && step.ok;
+    if (step.cancelled) node.stopped = true;
+    else node.ok = node.ok && (step.ok || Boolean(step.skipped));
     node.skipped = Boolean(node.skipped && step.skipped);
   });
 
@@ -794,7 +795,7 @@ export function pipeline(entry: HistoryEntry): GraphNode[] {
     });
   }
 
-  return nodes.map(({ label, ok, skipped, steps: count, ms, done, running, after }) => {
+  return nodes.map(({ label, ok, skipped, steps: count, ms, done, running, stopped, after }) => {
     const state = running ? ("running" as const) : done < count ? ("running" as const) : undefined;
     const waiting = done === 0 && !running;
     const detail = owners.length > 1 ? `${count} step${count === 1 ? "" : "s"}${ms > 0 ? ` ${formatDuration(ms)}` : ""}` : ms > 0 ? formatDuration(ms) : "";
@@ -803,6 +804,7 @@ export function pipeline(entry: HistoryEntry): GraphNode[] {
       after,
       ...(detail ? { detail } : {}),
       ok,
+      ...(stopped && ok && !state ? { cancelled: true } : {}),
       ...(skipped && !state ? { skipped } : {}),
       ...(waiting ? { state: "waiting" as const } : state ? { state } : {}),
     };

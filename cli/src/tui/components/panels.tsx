@@ -6,11 +6,12 @@ import { retryPlan } from "../../core/run/index.js";
 import type { Diagnostic } from "../../core/types.js";
 import type { Glyphs } from "../terminal/glyphs.js";
 import { describeStep, windowed } from "../model.js";
+import { fitGraph, graphBudget, liveGraph, StepGraph } from "./graph.js";
 import type { RunState } from "../state.js";
 import { spell } from "../terminal/spells.js";
 import { TONE } from "../terminal/tones.js";
 
-export function RunProgress({ view, glyphs, height, tick }: { view: RunState; glyphs: Glyphs; height: number; tick: number }) {
+export function RunProgress({ view, glyphs, height, tick, width = 80 }: { view: RunState; glyphs: Glyphs; height: number; tick: number; width?: number }) {
   const retryable = view.done && view.result ? retryPlan(view.result).length : 0;
   const background = view.steps.filter((step) => step.result?.run).length;
   const hint = !view.done
@@ -27,7 +28,8 @@ export function RunProgress({ view, glyphs, height, tick }: { view: RunState; gl
   const links = view.steps.filter((step) => step.result?.kind === "link" && step.result.note?.startsWith("no display"));
   const output = view.output.length > 0 && view.output[view.output.length - 1] === "" ? view.output.slice(0, -1) : view.output;
   const summary = view.done ? 2 + links.length : 0;
-  const stepRoom = Math.max(1, height - 3 - summary);
+  const live = fitGraph(liveGraph(view), width, graphBudget(height - 3 - summary), glyphs);
+  const stepRoom = Math.max(1, height - 3 - summary - (live ? live.height : 0));
   const outputRoom = output.length > 0 ? Math.max(0, Math.min(output.length, Math.floor((stepRoom - 1) / 2))) : 0;
   const { items } = windowed(view.steps, Math.max(0, view.steps.findIndex((step) => step.state === "running")), Math.max(1, stepRoom - (outputRoom ? outputRoom + 1 : 0)));
 
@@ -42,7 +44,7 @@ export function RunProgress({ view, glyphs, height, tick }: { view: RunState; gl
         </Text>
         {view.dryRun || view.done ? null : <Text color={TONE.accent}>{`   ${glyphs.spark} ${spell()}…`}</Text>}
       </Text>
-      <Text> </Text>
+      {live ? <Box flexShrink={0} marginBottom={1}><StepGraph graph={live} glyphs={glyphs} /></Box> : <Text> </Text>}
       {items.map((step, index) => {
         const result = step.result;
         const mark =

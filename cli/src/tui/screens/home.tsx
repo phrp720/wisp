@@ -107,6 +107,10 @@ export function pipelineWindow<T>(bolts: T[], pipelineIndex: number, height: num
   return { ...windowed(bolts, pipelineIndex, rows), split: false, topHeight: height, stepRoom: Math.max(1, listRoom - rows - (asking ? 1 : 0)) };
 }
 
+function takenDown(entry: HistoryEntry): boolean {
+  return / \(down\)$/.test(entry.bolt);
+}
+
 interface PipelineState {
   text: string;
   color: string;
@@ -136,7 +140,8 @@ export function WorkspacePanel(props: {
   const problems = (props.diagnostics ?? read.diagnostics).filter((entry) => entry.level !== "note" && entry.at !== "trust");
   const problemsOf = (entry: Pipeline) => problems.filter((problem) => problem.pipeline?.toLowerCase() === entry.label.toLowerCase());
   const fileProblems = problems.filter((problem) => !problem.pipeline || !read.workspace.bolts.some((entry) => entry.label.toLowerCase() === problem.pipeline?.toLowerCase()));
-  const lastRun = (label: string) => history.find((entry) => baseLabel(entry.bolt) === label);
+  const lastRun = (label: string) => history.find((entry) => baseLabel(entry.bolt) === label && !takenDown(entry));
+  const latest = (label: string) => history.find((entry) => baseLabel(entry.bolt) === label);
   const { workspace } = read;
   const bolts = workspace.bolts;
   const selected = bolts[Math.min(pipelineIndex, Math.max(0, bolts.length - 1))];
@@ -151,10 +156,16 @@ export function WorkspacePanel(props: {
     }
     const errors = problemsOf(entry).filter((problem) => problem.level === "error").length;
     if (errors > 0) return { text: `${glyphs.fail} ${errors} problem${errors === 1 ? "" : "s"}`, color: "red" };
+    const newest = latest(entry.label);
+    if (newest && takenDown(newest) && !newest.running) {
+      return newest.ok ? { text: `${glyphs.skip} stopped ${since(newest.startedAt)}`, color: "gray", dim: true } : { text: `${glyphs.fail} stopping failed ${since(newest.startedAt)}`, color: "red" };
+    }
     const last = lastRun(entry.label);
     if (!last) return undefined;
     if (last.running) return { text: `${glyphs.dot} running, step ${Math.min(last.steps.length + 1, last.total ?? last.steps.length + 1)} of ${last.total ?? "?"}`, color: "cyan" };
     if (last.interrupted) return { text: `! interrupted ${since(last.startedAt)}`, color: "yellow" };
+    if (last.cancelled) return { text: `${glyphs.cancel} cancelled ${since(last.startedAt)}`, color: "gray", dim: true };
+    if (last.cancelled) return { text: `${glyphs.cancel} cancelled ${since(last.startedAt)}`, color: "gray", dim: true };
     return last.ok ? { text: `${glyphs.ok} ${since(last.startedAt)}`, color: "green", dim: true } : { text: `${glyphs.fail} failed ${since(last.startedAt)}`, color: "red" };
   };
 
@@ -296,8 +307,9 @@ function PipelineDetails(props: {
   const notes = bolt.notes ? twoLines(bolt.notes, full ? width : width - 2) : [];
   const inputNames = (bolt.inputs ?? []).map((input) => input.name);
   const { workspace } = read;
-  const plan = full && props.graph ? planGraph(read, bolt, glyphs) : [];
-  const nodes = planGraph(read, bolt, glyphs);
+  const nodes = planGraph(read, bolt, glyphs, { runs, containers, last });
+  const plan = full && props.graph ? nodes : [];
+  const live = nodes.some((node) => node.state === "running");
   const together = !hasEdges(nodes) && bolt.steps.every((step) => step.kind !== "pipeline") ? nodes.length : 0;
   const needs = flow(read, bolt);
   const neededBy = usedBy(read, bolt);
@@ -363,7 +375,7 @@ function PipelineDetails(props: {
         <Text dimColor>{full ? "It has no steps yet — press e to add some." : "  It has no steps yet — press e to add some."}</Text>
       ) : (
         <Box flexDirection="column" paddingLeft={full ? 0 : 2} flexShrink={0}>
-          <Text dimColor>{together > 1 ? `When you run it, these ${together} run at the same time${bolt.keepGoing ? ", and it keeps going if one fails" : ""}:` : bolt.keepGoing ? "When you run it, it will (and keep going if a step fails):" : "When you run it, it will:"}</Text>
+          <Text dimColor>{live ? (last ? `Running now, from #${last.number ?? ""}:` : "Running now:") : together > 1 ? `When you run it, these ${together} run at the same time${bolt.keepGoing ? ", and it keeps going if one fails" : ""}:` : bolt.keepGoing ? "When you run it, it will (and keep going if a step fails):" : "When you run it, it will:"}</Text>
           {drawn ? (
             <Box marginBottom={1}>
               <StepGraph graph={drawn} glyphs={glyphs} />

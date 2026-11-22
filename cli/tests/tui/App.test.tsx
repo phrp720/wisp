@@ -764,6 +764,54 @@ describe("the TUI", () => {
     expect(app.lastFrame()).toContain("1. start db");
   });
 
+  it("marks in the graph the steps that are up right now", async () => {
+    const shop = read("/dev/shop/.wisp.json", {
+      name: "Shop",
+      pipelines: [{ label: "Dev", steps: [{ run: "node db.mjs", label: "db" }, { run: "pnpm dev", label: "web", after: "db" }, { wait: "localhost:3000", label: "up", after: "web" }] }],
+    });
+    const web = { kind: "background", workspace: shop.workspace.file, workspaceName: "Shop", pid: 1, startedAt: new Date().toISOString(), alive: true, log: "/l", id: "w1", label: "web", command: "pnpm dev", asset: "command:web" };
+    const app = render(<App services={services({ runs: async () => [web] as never }, { reads: [shop], here: shop.workspace.file, unreadable: [] })} glyphs={unicode} size={{ columns: 120, rows: 40 }} />);
+    await eventually(() => expect(app.lastFrame()).toMatch(/│ · db │ ─+▶ │ ● web │ ─+▶ │ · up │/));
+  });
+
+  it("shows what the last run did while what it started is still up", async () => {
+    const shop = read("/dev/shop/.wisp.json", {
+      name: "Shop",
+      pipelines: [{ label: "Dev", steps: [{ run: "node db.mjs", label: "db" }, { run: "pnpm dev", label: "web", after: "db" }, { wait: "localhost:3000", label: "up", after: "web" }, { url: "http://localhost:3000", after: "up" }] }],
+    });
+    const alive = (label: string, id: string) => ({ kind: "background", workspace: shop.workspace.file, workspaceName: "Shop", pid: 1, startedAt: new Date().toISOString(), alive: true, log: "/l", id, label, command: label, asset: `command:${label}` });
+    const step = (kind: string, label: string) => ({ kind, label, value: label, ok: true, durationMs: 10 });
+    const last = { id: "a1b2c3d4e5f6", number: 14, workspace: shop.workspace.file, workspaceName: "Shop", bolt: "Dev", startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), ok: true, steps: [step("command", "db"), step("command", "web"), step("wait", "up"), step("link", "http://localhost:3000")] };
+    const app = render(<App services={services({ runs: async () => [alive("db", "d1"), alive("web", "w1")] as never, history: async () => [last] as never }, { reads: [shop], here: shop.workspace.file, unreadable: [] })} glyphs={unicode} size={{ columns: 120, rows: 40 }} />);
+    await eventually(() => expect(app.lastFrame()).toMatch(/│ ● db │ ─+▶ │ ● web │ ─+▶ │ ✓ up │ ─+▶ │ ✓ http:\/\/localhost:3000 │/));
+    expect(app.lastFrame()).toContain("Running now, from #14:");
+  });
+
+  it("says a pipeline was stopped, not that it ran, after it was taken down", async () => {
+    const shop = read("/dev/shop/.wisp.json", { name: "Shop", pipelines: [{ label: "Dev", steps: [{ run: "pnpm dev", label: "web" }] }] });
+    const entry = (id: string, bolt: string, number: number, minutes: number) => ({ id, number, workspace: shop.workspace.file, workspaceName: "Shop", bolt, startedAt: new Date(Date.now() - minutes * 60_000).toISOString(), finishedAt: new Date(Date.now() - minutes * 60_000).toISOString(), ok: true, steps: [] });
+    const app = render(<App services={services({ history: async () => [entry("bbb", "Dev (down)", 15, 1), entry("aaa", "Dev", 14, 7)] as never }, { reads: [shop], here: shop.workspace.file, unreadable: [] })} glyphs={unicode} size={{ columns: 120, rows: 40 }} />);
+    await eventually(() => expect(app.lastFrame()).toContain("– stopped 1m ago"));
+    expect(app.lastFrame()).toContain("last run ✓ #14");
+    expect(app.lastFrame()).not.toContain("✓ 1m ago");
+  });
+
+  it("says a cancelled run was cancelled, not that it failed", async () => {
+    const shop = read("/dev/shop/.wisp.json", { name: "Shop", pipelines: [{ label: "Dev", steps: [{ run: "pnpm dev", label: "web" }] }] });
+    const cancelled = { id: "ccc", number: 11, workspace: shop.workspace.file, workspaceName: "Shop", bolt: "Dev", startedAt: new Date(Date.now() - 60_000).toISOString(), finishedAt: new Date().toISOString(), ok: false, cancelled: true, steps: [] };
+    const app = render(<App services={services({ history: async () => [cancelled] as never }, { reads: [shop], here: shop.workspace.file, unreadable: [] })} glyphs={unicode} size={{ columns: 120, rows: 40 }} />);
+    await eventually(() => expect(app.lastFrame()).toContain("⊘ cancelled 1m ago"));
+    expect(app.lastFrame()).not.toContain("failed");
+  });
+
+  it("says a cancelled run was cancelled, not that it failed", async () => {
+    const shop = read("/dev/shop/.wisp.json", { name: "Shop", pipelines: [{ label: "Dev", steps: [{ run: "pnpm dev", label: "web" }] }] });
+    const cancelled = { id: "ccc", number: 11, workspace: shop.workspace.file, workspaceName: "Shop", bolt: "Dev", startedAt: new Date(Date.now() - 60_000).toISOString(), finishedAt: new Date().toISOString(), ok: false, cancelled: true, steps: [] };
+    const app = render(<App services={services({ history: async () => [cancelled] as never }, { reads: [shop], here: shop.workspace.file, unreadable: [] })} glyphs={unicode} size={{ columns: 120, rows: 40 }} />);
+    await eventually(() => expect(app.lastFrame()).toContain("⊘ cancelled 1m ago"));
+    expect(app.lastFrame()).not.toContain("failed");
+  });
+
   it("draws no graph for steps that all run at once, and says so above them", async () => {
     const shop = read("/dev/shop/.wisp.json", {
       name: "Shop",

@@ -21,7 +21,7 @@ export interface Library {
 
 export interface RunCallbacks {
   dryRun: boolean;
-  onPlan: (targets: SwitchTarget[]) => void;
+  onPlan: (targets: SwitchTarget[], waits?: number[][]) => void;
   onStep: (target: SwitchTarget, info: { attached: boolean }) => void;
   onResult: (result: TargetResult) => void;
   onOutput?: (target: SwitchTarget, chunk: string) => void;

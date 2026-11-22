@@ -410,6 +410,15 @@ describe("a run's pipeline, from before runs kept their edges", () => {
     const graph = pipeline(entry);
     expect(graph.map((node) => node.after.map((at) => graph[at]?.label))).toEqual([[], ["up"], ["up"], ["session", "ready"]]);
   });
+
+  it("draws a step you stopped as cancelled, not failed", async () => {
+    const { pipeline } = await import("../../../src/tui/screens/history.js");
+    const step = (label: string, stage: number, extra: object) => ({ kind: "command", label, value: label, durationMs: 1, stage, ...extra }) as never;
+    const entry = { id: "stop", workspace: "/w", workspaceName: "W", bolt: "Dev", startedAt: "2026-01-01T00:00:00.000Z", finishedAt: "2026-01-01T00:00:01.000Z", ok: false, cancelled: true, steps: [step("postgres", 1, { ok: false, cancelled: true, error: "you stopped the run" }), step("web", 2, { ok: false, skipped: true })] } as never;
+    const [postgres, web] = pipeline(entry);
+    expect(postgres).toMatchObject({ label: "postgres", cancelled: true, ok: true });
+    expect(web).toMatchObject({ label: "web", skipped: true });
+  });
 });
 
 describe("telling you a run failed", () => {

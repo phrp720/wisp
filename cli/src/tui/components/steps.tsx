@@ -5,6 +5,7 @@ import { containerMood, type Container } from "../../core/system/docker.js";
 import { describeDuration } from "../../core/text/duration.js";
 import { tildify } from "../../core/paths.js";
 import type { RunStatus } from "../../core/system/processes.js";
+import { allSteps, type HistoryEntry, type HistoryStep } from "../../core/history.js";
 import { composeTarget, stagesOfTargets, stepTargets } from "../../core/run/index.js";
 import type { Pipeline, SwitchTarget, WorkspaceRead } from "../../core/types.js";
 import type { GraphNode } from "./graph.js";
@@ -55,13 +56,51 @@ export function shownTargets(read: WorkspaceRead, bolt: Pipeline): Shown[] {
   });
 }
 
-export function planGraph(read: WorkspaceRead, bolt: Pipeline, glyphs: Glyphs): GraphNode[] {
+export interface LiveState {
+  runs: RunStatus[];
+  containers: Container[];
+  last?: HistoryEntry | undefined;
+}
+
+export function planGraph(read: WorkspaceRead, bolt: Pipeline, glyphs: Glyphs, live: LiveState = { runs: [], containers: [] }): GraphNode[] {
   const all = shownTargets(read, bolt);
   const byName = new Map(all.flatMap((target, at) => (target.name ? [[target.name, at] as const] : [])));
-  return all.map((target) => {
+  const statuses = all.map((target) => (target.held || target.kind === "pipeline" ? undefined : statusOf(target, read, live.runs, live.containers, glyphs)));
+  const up = statuses.some(Boolean);
+  const last = live.last && (live.last.running || up) ? live.last : undefined;
+  const past = last ? lastSteps(all, last) : [];
+  return all.map((target, at) => {
     const label = target.kind === "pipeline" ? `${glyphs.bolt}${target.label}` : (target.name ?? target.label);
     const after = (target.after ?? []).flatMap((name) => (byName.has(name) ? [byName.get(name) as number] : []));
-    return { label, ok: true, state: "waiting" as const, after, ...(target.held ? { detail: "not trusted yet" } : {}) };
+    const base = { label, after, ...(target.held ? { detail: "not trusted yet" } : {}) };
+    const status = statuses[at];
+    if (status) return { ...base, ok: status.color !== TONE.failed, ...(status.color === TONE.failed ? {} : { state: "running" as const }) };
+    const step = past[at];
+    if (!step || step.state === "waiting") return { ...base, ok: true, state: "waiting" as const };
+    if (step.state === "running") return { ...base, ok: true, state: "running" as const };
+    const lasting = target.kind === "compose" || (target.kind === "command" && !target.finishes);
+    if (lasting && step.ok && !last?.running) return { ...base, ok: true, state: "waiting" as const };
+    return { ...base, ok: step.ok, ...(step.skipped ? { skipped: true } : {}), ...(step.cancelled ? { cancelled: true } : {}) };
+  });
+}
+
+function lastSteps(all: Shown[], entry: HistoryEntry): ((HistoryStep & { state?: string }) | undefined)[] {
+  const steps = allSteps(entry);
+  const used = new Set<number>();
+  return all.map((target) => {
+    if (target.kind === "pipeline") {
+      const owned = steps.filter((step) => step.bolt?.toLowerCase() === target.label.toLowerCase());
+      if (owned.length === 0) return undefined;
+      const running = owned.find((step) => step.state === "running");
+      const waiting = owned.every((step) => step.state === "waiting");
+      return { ...(owned[0] as HistoryStep), ok: owned.every((step) => step.ok || step.skipped), ...(running ? { state: "running" } : waiting ? { state: "waiting" } : {}) };
+    }
+    const free = (step: HistoryStep, index: number) => !used.has(index) && !step.bolt && step.kind === target.kind;
+    let at = steps.findIndex((step, index) => free(step, index) && step.label === target.label);
+    if (at < 0 && target.name) at = steps.findIndex((step, index) => free(step, index) && step.label === target.name);
+    if (at < 0) return undefined;
+    used.add(at);
+    return steps[at];
   });
 }
 

@@ -99,6 +99,7 @@ export interface RunState {
   bolt: string;
   dryRun: boolean;
   steps: StepState[];
+  waits?: number[][];
   done: boolean;
   error?: string;
   output: string[];

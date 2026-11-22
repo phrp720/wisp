@@ -373,7 +373,7 @@ export interface SwitchOptions {
   /** How commands run. Defaults to `auto`. */
   mode?: RunMode;
   /** Called once with every step the run will take, before the first starts. */
-  onPlan?: (targets: SwitchTarget[]) => void;
+  onPlan?: (targets: SwitchTarget[], waits?: number[][]) => void;
   /**
    * Called before each step starts, so a caller can show progress. `attached` says the
    * step is a command whose output is about to arrive through `onOutput`.
