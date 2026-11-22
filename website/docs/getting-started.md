@@ -35,7 +35,7 @@ Makefile and [more](./file#wisp-init)) and suggests pipelines, each with what it
 the ones you want: space unticks, `⏎` writes. Opening `wisp` in a project with no file
 offers the same.
 
-![wisp init: it suggests three pipelines, keeps two, writes the file, then wisp trust allows it and wisp blog runs it](/demo/init.gif)
+<Recording name="init" alt="wisp init: it suggests three pipelines, keeps two, writes the file, then wisp trust allows it and wisp blog runs it" />
 
 ## 3. Allow it
 
@@ -55,7 +55,7 @@ wisp            # the dashboard: every pipeline, what's running, history
 
 A name is any whole word of the pipeline's label, or its slug: `api` runs *Work on api*.
 
-![wisp api: the database, the API server and the page, started in order, each step ticking off](/demo/cli.gif)
+<Recording name="cli" alt="wisp api: the database, the API server and the page, started in order, each step ticking off" />
 
 Servers keep running in the background: `wisp ps` lists them, `wisp down api` stops them.
 `wisp list` shows your workspaces, and `wisp scan ~/dev` finds projects you haven't used yet.

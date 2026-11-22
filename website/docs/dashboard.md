@@ -4,7 +4,7 @@
 started, look back at past runs, and make pipelines through forms. It works the same at your
 desk, over SSH and in tmux.
 
-![Wisp's dashboard: running a pipeline in its box, its server's live output on the Running tab, then the History tab](/demo/dashboard.gif)
+<Recording name="dashboard" alt="Wisp's dashboard: running a pipeline in its box, its server's live output on the Running tab, then the History tab" />
 
 ## Three tabs
 
@@ -32,7 +32,7 @@ open something) and each has a **Depends on** list of the other steps to tick. `
 step after the selected one, already depending on it. `D` removes it, `K` `J` move it.
 `E` opens the file itself if you'd rather.
 
-![Making a pipeline in the dashboard: name it, then add a command, a wait and a website through short forms, then run it](/demo/editor.gif)
+<Recording name="editor" alt="Making a pipeline in the dashboard: name it, then add a command, a wait and a website through short forms, then run it" />
 
 ## The mouse
 

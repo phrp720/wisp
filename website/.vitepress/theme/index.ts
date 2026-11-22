@@ -5,6 +5,7 @@ import { h } from "vue";
 import Footer from "./components/Footer.vue";
 import Home from "./components/Home.vue";
 import Orb from "./components/Orb.vue";
+import Recording from "./components/Recording.vue";
 import "./style.css";
 
 export default {
@@ -21,5 +22,6 @@ export default {
   enhanceApp({ app }) {
     // The landing page's sections, used from index.md.
     app.component("Home", Home);
+    app.component("Recording", Recording);
   },
 } satisfies Theme;

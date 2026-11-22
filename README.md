@@ -21,7 +21,10 @@
 </p>
 
 <p align="center">
-  <img src="website/public/demo/cli.gif" alt="wisp api: the database, the API server and the page, started in order, each step ticking off" width="800" />
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="website/public/demo/cli-light.gif" />
+    <img src="website/public/demo/cli.gif" alt="wisp api: the database, the API server and the page, started in order, each step ticking off" width="800" />
+  </picture>
 </p>
 
 <p align="center">
@@ -98,11 +101,17 @@ e.g. `wisp shop deploy` for the Deploy pipeline of your Shop project. Each use c
 pipeline to copy: [Use cases](https://willowisp.dev/docs/use-cases).
 
 <p align="center">
-  <img src="website/public/demo/dashboard.gif" alt="Wisp's dashboard: running a pipeline in its box, its server's live output on the Running tab, then the History tab" width="900" />
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="website/public/demo/dashboard-light.gif" />
+    <img src="website/public/demo/dashboard.gif" alt="Wisp's dashboard: running a pipeline in its box, its server's live output on the Running tab, then the History tab" width="900" />
+  </picture>
 </p>
 
 <p align="center">
-  <img src="website/public/demo/server.gif" alt="wisp shop deploy, from the home folder: it asks where, asks before it goes, then builds and ships" width="640" />
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="website/public/demo/server-light.gif" />
+    <img src="website/public/demo/server.gif" alt="wisp shop deploy, from the home folder: it asks where, asks before it goes, then builds and ships" width="640" />
+  </picture>
 </p>
 
 ## Install

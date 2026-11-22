@@ -7,7 +7,7 @@ The categories are on the left, and the selected one's settings with their value
 right. `⏎` (or a click) edits them there: `[ Save ]` keeps the whole category, `[ Back ]`
 or `esc` leaves it as it was.
 
-![Wisp's settings: categories on the left; folders set to open in WebStorm, then a look at where commands run and when Wisp tells you about a run](/demo/settings.gif)
+<Recording name="settings" alt="Wisp's settings: categories on the left; folders set to open in WebStorm, then a look at where commands run and when Wisp tells you about a run" />
 
 | Category | Setting | Choices |
 |---|---|---|

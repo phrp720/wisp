@@ -211,7 +211,7 @@ const more = [
         <p class="lead">Type <code>wisp</code>: every workspace and its pipelines, what's running with its live output, and every past run. Run a pipeline with <code>⏎</code> and watch each step tick off. Edit them through forms, without touching JSON. The same over SSH and in tmux.</p>
         <a class="more" href="/docs/dashboard">Tour the dashboard →</a>
       </div>
-      <img class="recording" src="/demo/dashboard.gif" width="1400" height="760" loading="lazy" alt="Wisp's dashboard: running a pipeline in its box, its server's live output on the Running tab, then the History tab" />
+      <Recording name="dashboard" alt="Wisp's dashboard: running a pipeline in its box, its server's live output on the Running tab, then the History tab" />
     </section>
 
     <section class="wrap showcase">
@@ -221,7 +221,7 @@ const more = [
         <p class="lead">Each run is numbered, with its commit and each step's output and time. The first failure stops the run, a retry runs only what failed, and a timeout stops a step that hangs. Run a pipeline before every <code>git push</code>, or every night from cron.</p>
         <a class="more" href="/docs/runs">Runs and history →</a>
       </div>
-      <img class="recording" src="/demo/jobs.gif" width="1400" height="760" loading="lazy" alt="A Check pipeline fails at its test; History shows the run like CI, with the test's output; after the fix, --retry runs only the test, and it passes" />
+      <Recording name="jobs" alt="A Check pipeline fails at its test; History shows the run like CI, with the test's output; after the fix, --retry runs only the test, and it passes" />
     </section>
 
     <section class="wrap showcase side">
@@ -231,7 +231,7 @@ const more = [
         <p class="lead">How to deploy, update and back up the app, written once next to it. Whoever SSHs in runs <code>wisp shop deploy</code> from any folder: it asks before it goes, and every run is kept. A backup from cron messages you when it fails, and what Wisp starts keeps running after you log out.</p>
         <a class="more" href="/docs/use-cases#run-a-server">Server use cases →</a>
       </div>
-      <img class="recording" src="/demo/server.gif" width="1400" height="720" loading="lazy" alt="wisp shop deploy, from the home folder: it asks where, asks before it goes, then builds and ships" />
+      <Recording name="server" alt="wisp shop deploy, from the home folder: it asks where, asks before it goes, then builds and ships" />
     </section>
 
     <section class="band">
@@ -415,7 +415,6 @@ pre { margin: 0; font-family: var(--vp-font-family-mono); font-size: 13px; line-
 }
 .flow-arrow::after { content: ""; position: absolute; right: -2px; top: -3.25px; border-top: 4px solid transparent; border-bottom: 4px solid transparent; border-left: 6px solid var(--wisp-dim); }
 .showcase-text { max-width: 640px; }
-.recording { display: block; width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--wisp-line); box-shadow: var(--wisp-shadow); background: #1e1e2e; }
 .pillars { grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
 @media (min-width: 960px) {
   .wrap.split.wide-right { grid-template-columns: 0.85fr 1.15fr; }

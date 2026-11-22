@@ -67,7 +67,7 @@ Every run is kept, the way a CI keeps them: numbered per pipeline, with the bran
 ran on, what started it, the [values it was given](./file#inputs), and each step's time and
 output. A run shows up as soon as it starts and fills in as it goes.
 
-![A Check pipeline fails at its test; History shows the run like CI, with the test's output; after the fix, --retry runs only the test, and it passes](/demo/jobs.gif)
+<Recording name="jobs" alt="A Check pipeline fails at its test; History shows the run like CI, with the test's output; after the fix, --retry runs only the test, and it passes" />
 
 ```bash
 wisp history                 # this project's runs; --all for every project

@@ -118,7 +118,7 @@ It asks where, then asks once more before it goes. The checks run first, as a st
 
 `wisp deploy` asks both. From CI or a script: `wisp deploy --input env=production --yes`.
 
-![wisp shop deploy, from the home folder: it asks where, asks before it goes, then builds and ships](/demo/server.gif)
+<Recording name="server" alt="wisp shop deploy, from the home folder: it asks where, asks before it goes, then builds and ships" />
 
 ### Tag a release once the checks pass
 
