@@ -320,7 +320,7 @@ export function groupPanes(head: PaneItem[], runs: RunStatus[], containers: Cont
     const from = found.members.find((member) => member.type === "step");
     if (from?.type === "step" && baseLabel(from.entry.bolt) === found.group.bolt && from.entry.number) found.group.number = from.entry.number;
   }
-  nestNeededBolts(groups, history);
+  nestNeededPipelines(groups, history);
 
   // Within a workspace, its bolts by name, and what no bolt started last.
   const ordered = [...groups.values()].sort(
@@ -338,7 +338,7 @@ export function groupPanes(head: PaneItem[], runs: RunStatus[], containers: Cont
  * move under the "⚡ Services" line of the bolt that needed it, and its own group goes.
  * Run on its own since, it keeps its own place.
  */
-function nestNeededBolts(groups: Map<string, { group: PaneGroup; members: PaneItem[] }>, history: HistoryEntry[]): void {
+function nestNeededPipelines(groups: Map<string, { group: PaneGroup; members: PaneItem[] }>, history: HistoryEntry[]): void {
   for (const [key, found] of groups) {
     const { bolt, workspace } = found.group;
     if (!bolt || !workspace || !groups.has(key)) continue;
@@ -471,7 +471,7 @@ export function filterPanes(items: PaneItem[], query: string, running?: string):
 }
 
 /** The bolt a group in the Running list stands for. */
-export function groupBolt(items: PaneItem[], key: string): string | undefined {
+export function groupPipeline(items: PaneItem[], key: string): string | undefined {
   const found = items.find((item): item is PaneItem & { type: "group" } => item.type === "group" && item.group.key === key);
   return found?.group.bolt;
 }

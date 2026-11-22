@@ -1,9 +1,9 @@
 import { installedEditors } from "../../core/editors.js";
 import { currentOS } from "../../core/paths.js";
 import { listRuns } from "../../core/processes.js";
-import { matchBolt } from "../../core/switch.js";
+import { matchPipeline } from "../../core/switch.js";
 import type { Workspace, WorkspaceRead } from "../../core/types.js";
-import { matchWorkspace, slugify } from "../../core/workspaces.js";
+import { matchWorkspace, slugify, pipelineSlug } from "../../core/workspaces.js";
 import { getPlatform } from "../../platform/index.js";
 import { MULTIPLEXERS } from "../../platform/terminals.js";
 import { COMMANDS } from "./commands.js";
@@ -39,7 +39,7 @@ export const SHELLS = ["zsh", "bash", "fish"];
  * The suggestions for the last of `words`, the one being typed. `words` are what follows
  * `wisp` on the line, so `["payments-service", "se"]` asks for that workspace's bolts.
  *
- * Bolts and workspaces are offered as slugs ("work-on-api"), which need no quoting and
+ * Pipelines and workspaces are offered as slugs ("work-on-api"), which need no quoting and
  * which Wisp matches like their names.
  */
 export async function complete(words: string[], sources: CompletionSources = SOURCES): Promise<Candidate[]> {
@@ -54,7 +54,7 @@ export async function complete(words: string[], sources: CompletionSources = SOU
     if (!first) return [...commands(), ...(await herebolts(sources)), ...(await workspaceSlugs(sources))];
 
     // `wisp <name> …`: a bolt here takes nothing more; a workspace takes one of its bolts.
-    if (!command) return before.length === 1 ? await boltsOfNamed(first, sources) : [];
+    if (!command) return before.length === 1 ? await pipelinesOfNamed(first, sources) : [];
 
     const position = before.length;
     switch (command.name) {
@@ -62,7 +62,7 @@ export async function complete(words: string[], sources: CompletionSources = SOU
       case "down":
       case "restart":
         if (position === 1) return [...(await herebolts(sources)), ...(await workspaceSlugs(sources))];
-        if (position === 2) return boltsOf(await workspaceNamed(before[1] as string, sources));
+        if (position === 2) return pipelinesOf(await workspaceNamed(before[1] as string, sources));
         return [];
       case "show":
       case "pick":
@@ -123,12 +123,12 @@ function optionsOf(command: { options: [string, string][] } | undefined): Candid
 
 async function herebolts(sources: CompletionSources): Promise<Candidate[]> {
   const here = await sources.here();
-  return here ? boltsOf(here.workspace) : [];
+  return here ? pipelinesOf(here.workspace) : [];
 }
 
-function boltsOf(workspace: Workspace | undefined): Candidate[] {
+function pipelinesOf(workspace: Workspace | undefined): Candidate[] {
   if (!workspace) return [];
-  return workspace.bolts.map((bolt) => ({ value: slugify(bolt.label), description: ["pipeline", bolt.label, bolt.notes].filter(Boolean).join(" · ") }));
+  return workspace.bolts.map((bolt) => ({ value: pipelineSlug(bolt), description: ["pipeline", bolt.label, bolt.notes].filter(Boolean).join(" · ") }));
 }
 
 async function workspaceSlugs(sources: CompletionSources): Promise<Candidate[]> {
@@ -146,10 +146,10 @@ async function workspaceNamed(name: string, sources: CompletionSources): Promise
 }
 
 /** After `wisp <name>`: nothing when it is a bolt here, that workspace's bolts when it is one. */
-async function boltsOfNamed(name: string, sources: CompletionSources): Promise<Candidate[]> {
+async function pipelinesOfNamed(name: string, sources: CompletionSources): Promise<Candidate[]> {
   const here = await sources.here();
-  if (here && matchBolt(here.workspace, name).bolt) return [];
-  return boltsOf(await workspaceNamed(name, sources));
+  if (here && matchPipeline(here.workspace, name).bolt) return [];
+  return pipelinesOf(await workspaceNamed(name, sources));
 }
 
 function keep(candidates: Candidate[], typed: string): Candidate[] {

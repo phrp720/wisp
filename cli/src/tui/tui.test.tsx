@@ -62,12 +62,13 @@ function services(overrides: Partial<Services> = {}, library: Library = { reads:
     },
     editing: {
       bolt: async (_file, bolt) => ({ label: bolt, steps: [] }),
-      addBolt: async () => undefined,
-      renameBolt: async () => undefined,
-      setBoltNotes: async () => undefined,
+      addPipeline: async () => undefined,
+      renamePipeline: async () => undefined,
+      setPipelineNotes: async () => undefined,
+      setSlug: async () => undefined,
       setWorkspaceDetails: async () => undefined,
-      removeBolt: async () => undefined,
-      moveBolt: async () => undefined,
+      removePipeline: async () => undefined,
+      movePipeline: async () => undefined,
       setKeepGoing: async () => undefined,
       setConfirm: async () => undefined,
       setInput: async () => undefined,
@@ -128,6 +129,13 @@ describe("the TUI", () => {
       expect(frame).toContain("❯ Work on api");
       expect(frame).toContain("pnpm dev");
     });
+  });
+
+  it("tells two workspaces with the same name apart, and says to rename one", async () => {
+    const twin = read("/work/acme/.wisp.json", { name: "Acme", pipelines: [{ label: "Dev", steps: [{ url: "localhost:3000" }] }] });
+    const app = await open(services({}, { reads: [acme, twin], here: acme.workspace.file, unreadable: [] }));
+    await eventually(() => expect(app.lastFrame()).toContain("/work/acme"));
+    await eventually(() => expect(app.lastFrame()).toContain("another workspace is called Acme too"));
   });
 
   it("shows the pipelines in one box and the selected one in a box below, with the command that runs it", async () => {
@@ -299,8 +307,8 @@ describe("the TUI", () => {
   });
 
   it("asks about deleting a pipeline on its row, with the rest of the list still there", async () => {
-    const removeBolt = vi.fn(async () => undefined);
-    const app = await open(services({ editing: { ...services().editing, removeBolt } }));
+    const removePipeline = vi.fn(async () => undefined);
+    const app = await open(services({ editing: { ...services().editing, removePipeline } }));
     app.stdin.write("D");
     await tick();
     await eventually(() => {
@@ -317,7 +325,7 @@ describe("the TUI", () => {
     app.stdin.write("\r");
     await tick();
     await tick();
-    await eventually(() => expect(removeBolt).toHaveBeenCalledWith(acme.workspace.file, "Work on api"));
+    await eventually(() => expect(removePipeline).toHaveBeenCalledWith(acme.workspace.file, "Work on api"));
   });
 
   it("asks about removing a step on its row in the editor, and esc keeps it", async () => {
@@ -1607,11 +1615,11 @@ describe("doing everything without JSON", () => {
   });
 
   it("shows a pipeline's notes, and changes them on its Notes row without renaming it", async () => {
-    const setBoltNotes = vi.fn(async () => undefined);
-    const renameBolt = vi.fn(async () => undefined);
+    const setPipelineNotes = vi.fn(async () => undefined);
+    const renamePipeline = vi.fn(async () => undefined);
     const noted = read("/dev/acme/.wisp.json", { name: "Acme", pipelines: [{ label: "Work on api", notes: "The API and its database", steps: [{ folder: "apps/api" }] }] });
     const bolt = async () => ({ label: "Work on api", notes: "The API and its database", steps: [] });
-    const app = await open(services({ editing: { ...services().editing, bolt, setBoltNotes, renameBolt } }, { reads: [noted], here: noted.workspace.file, unreadable: [] }));
+    const app = await open(services({ editing: { ...services().editing, bolt, setPipelineNotes, renamePipeline } }, { reads: [noted], here: noted.workspace.file, unreadable: [] }));
     await eventually(() => expect(app.lastFrame()).toContain("The API and its database"));
     await tick();
     app.stdin.write("e");
@@ -1626,16 +1634,17 @@ describe("doing everything without JSON", () => {
     for (const char of " too") app.stdin.write(char);
     await tick();
     app.stdin.write("\u0013");
-    await eventually(() => expect(setBoltNotes).toHaveBeenCalled());
-    await eventually(() => expect(renameBolt).not.toHaveBeenCalled());
-    await eventually(() => expect(setBoltNotes).toHaveBeenCalledWith(noted.workspace.file, "Work on api", "The API and its database too"));
+    await eventually(() => expect(setPipelineNotes).toHaveBeenCalled());
+    await eventually(() => expect(renamePipeline).not.toHaveBeenCalled());
+    await eventually(() => expect(setPipelineNotes).toHaveBeenCalledWith(noted.workspace.file, "Work on api", "The API and its database too"));
   });
 
-  it("renames a pipeline and makes it keep going after a failure from the rows above its steps, each edited on the right", async () => {
-    const renameBolt = vi.fn(async () => undefined);
+  it("renames a pipeline, gives it a slug and makes it keep going after a failure, from the rows above its steps", async () => {
+    const renamePipeline = vi.fn(async () => undefined);
     const setKeepGoing = vi.fn(async () => undefined);
+    const setSlug = vi.fn(async () => undefined);
     const bolt = async (_file: string, label: string) => ({ label, steps: [{ folder: "apps/api" }, { run: "pnpm dev" }] });
-    const app = await open(services({ editing: { ...services().editing, bolt, renameBolt, setKeepGoing } }));
+    const app = await open(services({ editing: { ...services().editing, bolt, renamePipeline, setKeepGoing, setSlug } }));
     app.stdin.write("e");
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ .*1 .*apps\/api/));
     await tick();
@@ -1660,6 +1669,18 @@ describe("doing everything without JSON", () => {
     await tick();
     app.stdin.write("k");
     app.stdin.write("k");
+    await eventually(() => expect(app.lastFrame()).toMatch(/❯ Slug +work-on-api/));
+    await tick();
+    app.stdin.write("\r");
+    await eventually(() => expect(app.lastFrame()).toContain("[ Save ]"));
+    await tick();
+    for (const char of "api") app.stdin.write(char);
+    await tick();
+    app.stdin.write("\u0013");
+    await eventually(() => expect(setSlug).toHaveBeenCalledWith(acme.workspace.file, "Work on api", "api"));
+    await eventually(() => expect(app.lastFrame()).not.toContain("[ Save ]"));
+    await tick();
+    app.stdin.write("k");
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ Name +Work on api/));
     await tick();
     app.stdin.write("\r");
@@ -1668,7 +1689,7 @@ describe("doing everything without JSON", () => {
     for (const char of " v2") app.stdin.write(char);
     await tick();
     app.stdin.write("\u0013");
-    await eventually(() => expect(renameBolt).toHaveBeenCalledWith(acme.workspace.file, "Work on api", "Work on api v2"));
+    await eventually(() => expect(renamePipeline).toHaveBeenCalledWith(acme.workspace.file, "Work on api", "Work on api v2"));
   });
 
   it("shows what each step waits for, and sets it from the step's form, more than one if need be", async () => {
@@ -1851,8 +1872,8 @@ describe("doing everything without JSON", () => {
   });
 
   it("creates a new pipeline from a form and opens it to add steps", async () => {
-    const addBolt = vi.fn(async () => undefined);
-    const app = await open(services({ editing: { ...services().editing, addBolt } }));
+    const addPipeline = vi.fn(async () => undefined);
+    const app = await open(services({ editing: { ...services().editing, addPipeline } }));
     app.stdin.write("a");
     await tick();
     await eventually(() => expect(app.lastFrame()).toContain("A new pipeline in Acme"));
@@ -1861,7 +1882,7 @@ describe("doing everything without JSON", () => {
     app.stdin.write("\r"); // Create bolt
     await tick();
     await tick();
-    await eventually(() => expect(addBolt).toHaveBeenCalledWith(acme.workspace.file, "Run the tests"));
+    await eventually(() => expect(addPipeline).toHaveBeenCalledWith(acme.workspace.file, "Run the tests"));
     // Straight on to its first step.
     await eventually(() => expect(app.lastFrame()).toContain("What should happen first when it runs?"));
     await eventually(() => expect(app.lastFrame()).toContain("⚡ Run the tests"));
@@ -2234,9 +2255,9 @@ describe("the mouse", () => {
   });
 
   it("fills in a form by clicking: a field to type in, a place in its text, the button, an option", async () => {
-    const addBolt = vi.fn(async () => undefined);
+    const addPipeline = vi.fn(async () => undefined);
     const api = services();
-    const { app, mouse, frame } = await withMouse({ ...api, editing: { ...api.editing, addBolt } });
+    const { app, mouse, frame } = await withMouse({ ...api, editing: { ...api.editing, addPipeline } });
     const type = async (text: string) => {
       for (const key of text) {
         app.stdin.write(key);
@@ -2258,7 +2279,7 @@ describe("the mouse", () => {
     await eventually(() => expect(frame()).toContain("› XLint"));
     await tick();
     mouse.emit({ kind: "click", ...(await spot(frame, "[ Create pipeline ]")) });
-    await eventually(() => expect(addBolt).toHaveBeenCalledWith(acme.workspace.file, "XLint"));
+    await eventually(() => expect(addPipeline).toHaveBeenCalledWith(acme.workspace.file, "XLint"));
     // Straight to its first step: a click on one picks it, and a click on an option chooses it.
     await eventually(() => expect(frame()).toContain("What should happen first when it runs?"));
     await tick();
@@ -2324,9 +2345,9 @@ describe("the mouse", () => {
   });
 
   it("leaves a form from its Cancel button, by click or by keys, saving nothing", async () => {
-    const addBolt = vi.fn(async () => undefined);
+    const addPipeline = vi.fn(async () => undefined);
     const api = services();
-    const { app, mouse, frame } = await withMouse({ ...api, editing: { ...api.editing, addBolt } });
+    const { app, mouse, frame } = await withMouse({ ...api, editing: { ...api.editing, addPipeline } });
     app.stdin.write("a");
     await eventually(() => expect(frame()).toContain("[ Create pipeline ]"));
     await eventually(() => expect(frame()).toContain("[ Cancel ]"));
@@ -2348,7 +2369,7 @@ describe("the mouse", () => {
     await tick();
     app.stdin.write("\r");
     await eventually(() => expect(frame()).not.toContain("Create pipeline"));
-    await eventually(() => expect(addBolt).not.toHaveBeenCalled());
+    await eventually(() => expect(addPipeline).not.toHaveBeenCalled());
   });
 
   it("ticks pipelines to set up with a click, and sets them up from the button", async () => {

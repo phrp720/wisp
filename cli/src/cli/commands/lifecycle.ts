@@ -5,8 +5,8 @@ import { isAbsolute, join, resolve } from "node:path";
 import { WispError } from "../../core/errors.js";
 import { forgetHistory, getHistory, listHistory, withWorkspaceNames, type HistoryEntry } from "../../core/history.js";
 import { tildify } from "../../core/paths.js";
-import { downBolt, inputsFor, keepsRunning, matchBolt, questionsFor, resolveBolt, switchToWorkspace } from "../../core/switch.js";
-import type { Bolt, WorkspaceRead } from "../../core/types.js";
+import { downPipeline, inputsFor, keepsRunning, matchPipeline, questionsFor, resolvePipeline, switchToWorkspace } from "../../core/switch.js";
+import type { Pipeline, WorkspaceRead } from "../../core/types.js";
 import { ago, bold, cyan, dim, green, kindLabel, plural, red, title, yellow } from "../format.js";
 import { emitJson, everything, maybeProject, resolveRun } from "../lib/context.js";
 import type { CommandDef } from "../lib/define.js";
@@ -14,10 +14,10 @@ import { beforeRun } from "../lib/ask.js";
 import { named, resultLine } from "../lib/render.js";
 
 /** The bolt a lifecycle command means, by the same rules as running one. */
-async function target(first: string | undefined, second: string | undefined): Promise<{ read: WorkspaceRead; bolt: Bolt }> {
+async function target(first: string | undefined, second: string | undefined): Promise<{ read: WorkspaceRead; bolt: Pipeline }> {
   const { read, bolt } = await resolveRun(first, second, undefined);
   if (!bolt) throw new WispError("Name the pipeline: `wisp down api`", "NO_PIPELINE");
-  return { read, bolt: resolveBolt(read.workspace, bolt) };
+  return { read, bolt: resolvePipeline(read.workspace, bolt) };
 }
 
 export const down: CommandDef<{ deps?: boolean; dryRun?: boolean; json?: boolean }> = {
@@ -36,7 +36,7 @@ export const down: CommandDef<{ deps?: boolean; dryRun?: boolean; json?: boolean
 
   async run([first, second], options) {
     const { read, bolt } = await target(first, second);
-    const result = await downBolt(
+    const result = await downPipeline(
       read.workspace,
       bolt,
       { deps: options.deps ?? false, dryRun: options.dryRun ?? false, echo: !options.json },
@@ -77,7 +77,7 @@ export const restart: CommandDef<{ deps?: boolean; yes?: boolean; input?: string
       process.exitCode = 1;
       return;
     }
-    const stopped = await downBolt(read.workspace, bolt, { deps: options.deps ?? false, echo: true });
+    const stopped = await downPipeline(read.workspace, bolt, { deps: options.deps ?? false, echo: true });
     console.log(`${green("down")} ${title(read.workspace)} ${dim("·")} ${bold(bolt.label)} ${dim(`— ${plural(stopped.stopped.length, "command")} stopped`)}`);
 
     // Give stopped servers a moment to let go of their ports.
@@ -163,7 +163,7 @@ async function clearHistory(query: string | undefined, options: { all?: boolean;
   if (!one && !here && !options.all) {
     throw new WispError("Not in a project: name a run, or add --all to clear every project's runs", "NO_TARGET");
   }
-  const bolt = !one && query ? (here ? (matchBolt(here.workspace, query).bolt?.label ?? query) : query) : undefined;
+  const bolt = !one && query ? (here ? (matchPipeline(here.workspace, query).bolt?.label ?? query) : query) : undefined;
   const { removed, running } = await forgetHistory({
     ...(one ? { ids: [one.id] } : {}),
     ...(!one && here ? { workspace: here.workspace.file } : {}),
@@ -210,7 +210,7 @@ export const hook: CommandDef<{ remove?: boolean; list?: boolean; force?: boolea
   ],
   examples: ["wisp hook pre-push verify", "wisp hook --list", "wisp hook pre-push --remove"],
 
-  async run([name, boltRef], options) {
+  async run([name, pipelineRef], options) {
     const dir = hooksDir();
 
     if (options.list || !name) {
@@ -239,14 +239,14 @@ export const hook: CommandDef<{ remove?: boolean; list?: boolean; force?: boolea
       return;
     }
 
-    if (!boltRef) throw new WispError(`Say which pipeline ${name} runs: \`wisp hook ${name} check\``, "NO_PIPELINE");
+    if (!pipelineRef) throw new WispError(`Say which pipeline ${name} runs: \`wisp hook ${name} check\``, "NO_PIPELINE");
     if (existing && !existing.includes(MARKER) && !options.force) {
       throw new WispError(`There is already a ${name} hook, not written by Wisp. --force replaces it`, "HOOK_EXISTS");
     }
 
     const here = await maybeProject();
     if (!here) throw new WispError("Run this inside a project with a .wisp.json", "NO_PROJECT");
-    const bolt = resolveBolt(here.workspace, boltRef);
+    const bolt = resolvePipeline(here.workspace, pipelineRef);
 
     // The file by path, so the hook runs the same bolt however the repository is entered;
     // and a clear failure when wisp is missing, rather than a push that skips its checks.

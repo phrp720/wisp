@@ -11,8 +11,8 @@ import { listRuns, restartRun, stopRun, tail } from "../core/processes.js";
 import { containerAction, containerLogs, containerStats, composeContainers, DockerUnavailable } from "../core/docker.js";
 import { describe as describeError } from "../core/errors.js";
 import { PROJECT_FILE, checkProject, findProjectFile } from "../core/project.js";
-import { bolts as draftBolts, draftProject, writeProjectDraft } from "../core/scaffold.js";
-import { downBolt, inputsFor, planRetry, questionsFor, resolveBolt, runPlan, switchToWorkspace } from "../core/switch.js";
+import { bolts as draftPipelines, draftProject, writeProjectDraft } from "../core/scaffold.js";
+import { downPipeline, inputsFor, planRetry, questionsFor, resolvePipeline, runPlan, switchToWorkspace } from "../core/switch.js";
 import { forgetHistory, listHistory } from "../core/history.js";
 import { trustProject } from "../core/trust.js";
 import { which } from "../core/which.js";
@@ -84,11 +84,11 @@ export function realServices(hooks: { suspend: () => void; resume: () => void })
       ),
 
     planRetry: (read, entry) => planRetry(read.workspace, entry),
-    questions: (read, bolt, values = {}) => questionsFor(read.workspace, resolveBolt(read.workspace, bolt), values),
-    inputs: (read, bolt) => inputsFor(read.workspace, resolveBolt(read.workspace, bolt)),
+    questions: (read, bolt, values = {}) => questionsFor(read.workspace, resolvePipeline(read.workspace, bolt), values),
+    inputs: (read, bolt) => inputsFor(read.workspace, resolvePipeline(read.workspace, bolt)),
 
     down: (read, bolt, options = {}) =>
-      downBolt(read.workspace, bolt, options.deps ? { deps: true } : {}),
+      downPipeline(read.workspace, bolt, options.deps ? { deps: true } : {}),
 
     history: () => listHistory(),
     forgetRuns: async (ids) => void (await forgetHistory({ ids })),
@@ -174,13 +174,14 @@ export function realServices(hooks: { suspend: () => void; resume: () => void })
     },
 
     editing: {
-      bolt: edit.readBolt,
-      addBolt: edit.addBolt,
-      renameBolt: edit.renameBolt,
-      setBoltNotes: edit.setBoltNotes,
+      bolt: edit.readPipeline,
+      addPipeline: edit.addPipeline,
+      renamePipeline: edit.renamePipeline,
+      setPipelineNotes: edit.setPipelineNotes,
+      setSlug: edit.setSlug,
       setWorkspaceDetails: edit.setWorkspaceDetails,
-      removeBolt: edit.removeBolt,
-      moveBolt: edit.moveBolt,
+      removePipeline: edit.removePipeline,
+      movePipeline: edit.movePipeline,
       setKeepGoing: edit.setKeepGoing,
       setConfirm: edit.setConfirm,
       setInput: edit.setInput,
@@ -219,7 +220,7 @@ export function setupSuggestion(dir: string, draft: Awaited<ReturnType<typeof dr
     dir,
     name: detected.name,
     found: detected.sources,
-    bolts: draftBolts(detected).map((bolt) => ({
+    bolts: draftPipelines(detected).map((bolt) => ({
       label: bolt.label,
       steps: bolt.steps.map((step) =>
         typeof step["compose"] === "string" && detected.compose

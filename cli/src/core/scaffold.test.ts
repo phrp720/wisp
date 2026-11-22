@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { interpret } from "./project.js";
 import { detectEcosystems, section } from "./ecosystems.js";
-import { chooseBolts, draftProject, parseCompose, portFrom, writeProjectDraft } from "./scaffold.js";
+import { choosePipelines, draftProject, parseCompose, portFrom, writeProjectDraft } from "./scaffold.js";
 
 let dir: string;
 
@@ -246,10 +246,10 @@ describe("more than package.json", () => {
       { label: "Work on api", steps: [{ pipeline: "Services", label: "services" }, { run: "pnpm dev", label: "api", after: "services" }, { wait: "localhost:3000", after: ["services", "api"] }] },
       { label: "Check", steps: [{ run: "pnpm test", finishes: true }] },
     ];
-    expect(chooseBolts(all, ["work on api", "Check"])).toEqual([
+    expect(choosePipelines(all, ["work on api", "Check"])).toEqual([
       { label: "Work on api", steps: [{ run: "pnpm dev", label: "api" }, { wait: "localhost:3000", after: "api" }] },
       { label: "Check", steps: [{ run: "pnpm test", finishes: true }] },
     ]);
-    expect(chooseBolts(all)).toBe(all);
+    expect(choosePipelines(all)).toBe(all);
   });
 });

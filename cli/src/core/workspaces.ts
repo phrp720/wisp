@@ -3,7 +3,7 @@ import { join, resolve } from "node:path";
 
 import { loadConfig } from "./config.js";
 import { WispError, describe } from "./errors.js";
-import { workspacesDir } from "./paths.js";
+import { tildify, workspacesDir } from "./paths.js";
 import { readProjectFile, type ReadOptions } from "./project.js";
 import type { Workspace, WorkspaceRead } from "./types.js";
 
@@ -105,6 +105,12 @@ export function matchWorkspace<T extends { workspace: Workspace } | Workspace>(
   return { candidates: byWords.length > 0 ? byWords : bySlug };
 }
 
+export function sharedNames(workspaces: { name: string }[]): Set<string> {
+  const seen = new Map<string, number>();
+  for (const workspace of workspaces) seen.set(slugify(workspace.name), (seen.get(slugify(workspace.name)) ?? 0) + 1);
+  return new Set([...seen].filter(([, count]) => count > 1).map(([name]) => name));
+}
+
 /** Like {@link matchWorkspace}, but says what went wrong. */
 export function resolveWorkspace<T extends { workspace: Workspace } | Workspace>(query: string, items: T[]): T {
   const { match, candidates } = matchWorkspace(query, items);
@@ -114,8 +120,13 @@ export function resolveWorkspace<T extends { workspace: Workspace } | Workspace>
 
   if (candidates.length > 1) {
     // Two projects can share a name — two clones, two `api` repos — so say where each is.
-    const names = candidates.map((item) => `${of(item).name} (${of(item).file})`).join(", ");
-    throw new WispError(`"${query}" matches several workspaces: ${names}`, "AMBIGUOUS");
+    const names = candidates.map((item) => `${of(item).name} (${tildify(of(item).file)})`).join(", ");
+    const first = tildify(of(candidates[0] as T).file);
+    throw new WispError(
+      `"${query}" matches several workspaces: ${names}`,
+      "AMBIGUOUS",
+      `Run one by its file, like \`wisp use ${first} <pipeline>\`, or give one of them another name: e on it in the dashboard, or its "name" in the file.`,
+    );
   }
 
   throw new WispError(`No workspace matching "${query}"`, "NOT_FOUND");
@@ -129,6 +140,12 @@ export function hasWords(name: string, needle: string): boolean {
     if (wanted.every((word, offset) => words[at + offset] === word)) return true;
   }
   return false;
+}
+
+export const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+export function pipelineSlug(bolt: { label: string; slug?: string | undefined }): string {
+  return bolt.slug || slugify(bolt.label);
 }
 
 export function slugify(value: string): string {

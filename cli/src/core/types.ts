@@ -107,7 +107,7 @@ export type WaitSpec =
  * once per run however many bolts need it, and a command it would start is skipped when
  * Wisp already has it running.
  */
-export type BoltStep = (
+export type PipelineStep = (
   | { kind: "asset"; id: string }
   | { kind: "wait"; wait: WaitSpec }
   | { kind: "pipeline"; bolt: string }
@@ -125,18 +125,19 @@ export type BoltStep = (
  * Running one opens its assets in the order listed — the user's order, not any inherent
  * one. A bolt is a small pipeline, and a wait step is how a pipeline says "not yet".
  */
-export interface Bolt {
+export interface Pipeline {
   id: string;
   label: string;
+  slug?: string;
   notes?: string;
   color?: string;
-  steps: BoltStep[];
+  steps: PipelineStep[];
   broken?: string;
   keepGoing?: boolean;
   confirm?: string;
   inputs?: InputSpec[];
   /** Run by `wisp down` after stopping what the bolt started: `docker compose stop`. */
-  down?: BoltStep[];
+  down?: PipelineStep[];
 }
 
 /**
@@ -167,7 +168,7 @@ export interface Workspace {
   apps: AppRef[];
   /** Only the commands that may run: empty for an untrusted project file. */
   commands: Command[];
-  bolts: Bolt[];
+  bolts: Pipeline[];
 }
 
 /**
@@ -334,7 +335,7 @@ export interface SwitchResult {
   workspace: Workspace;
   targets: TargetResult[];
   dryRun: boolean;
-  bolt?: Bolt;
+  bolt?: Pipeline;
   /** The run's entry in history, for `wisp history <id>`. */
   historyId?: string;
   ok: boolean;

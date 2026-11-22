@@ -63,6 +63,7 @@ How names are matched: [Running pipelines](./running-pipelines#how-wisp-reads-a-
 |---|---|
 | `wisp list` | every workspace: yours, and the projects you've used |
 | `wisp show [workspace]` | a workspace's pipelines: slugs, notes, what's running, each one's steps |
+| `wisp rename [workspace] <pipeline> <new name>` | rename a pipeline and every step that runs it; asks for [trust](./trust) again |
 | `wisp doctor` | what works on this machine, and where Wisp keeps its files |
 | `wisp help agents` | the full reference, for AI agents (also `wisp spec`) |
 

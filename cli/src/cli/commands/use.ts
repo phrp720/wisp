@@ -1,7 +1,7 @@
 import { recordProject } from "../../core/config.js";
 import { listHistory, type HistoryEntry } from "../../core/history.js";
 import { WispError } from "../../core/errors.js";
-import { matchBolt, planRetry, resolveBolt, runPlan, stagesOf, switchToWorkspace, type PlannedStep } from "../../core/switch.js";
+import { matchPipeline, planRetry, resolvePipeline, runPlan, stagesOf, switchToWorkspace, type PlannedStep } from "../../core/switch.js";
 import { beforeRun } from "../lib/ask.js";
 import type { RunMode, SwitchOptions, SwitchResult, SwitchTarget, TargetResult, Workspace } from "../../core/types.js";
 import { bold, cyan, dim, green, kindLabel, plural, red, title, yellow } from "../format.js";
@@ -11,7 +11,7 @@ import { diagnosticSummary, named as showNamed, printWithheld, resultLine, trust
 import { tildify } from "../../core/paths.js";
 import { trustProject } from "../../core/trust.js";
 import { waitingForTrust } from "../../core/waiting.js";
-import { slugify } from "../../core/workspaces.js";
+import { slugify, pipelineSlug } from "../../core/workspaces.js";
 import { Prompter } from "../prompt.js";
 
 export interface UseOptions {
@@ -63,7 +63,7 @@ export const use: CommandDef<UseOptions> = {
       const prefix = workspaceRef ? `${workspaceRef} ` : "";
       throw new WispError(
         workspace.bolts.length > 0
-          ? `Name a pipeline of ${workspace.name}: ${workspace.bolts.map((entry) => `\`wisp ${prefix}${slugify(entry.label)}\``).join(", ")}`
+          ? `Name a pipeline of ${workspace.name}: ${workspace.bolts.map((entry) => `\`wisp ${prefix}${pipelineSlug(entry)}\``).join(", ")}`
           : `${workspace.name} has no pipelines yet`,
         "NO_PIPELINE",
       );
@@ -72,7 +72,7 @@ export const use: CommandDef<UseOptions> = {
     // Not half a run: when steps it needs wait for trust, ask (at a terminal) or stop, and
     // start nothing. A dry run goes ahead, since showing what would be skipped is its point.
     if (!options.dryRun && !options.skipUntrusted) {
-      const waitLabel = boltLabel(workspace, bolt);
+      const waitLabel = pipelineLabel(workspace, bolt);
       const waiting = waitingForTrust(read, waitLabel);
       if (waiting.length > 0) {
         const needs = `"${waitLabel}" needs ${plural(waiting.length, "thing")} this file isn't allowed to run yet`;
@@ -101,9 +101,9 @@ export const use: CommandDef<UseOptions> = {
       }
     }
 
-    const last = options.retry ? await lastRun(workspace, boltLabel(workspace, bolt)) : undefined;
+    const last = options.retry ? await lastRun(workspace, pipelineLabel(workspace, bolt)) : undefined;
     if (last && (options.input ?? []).length > 0) throw new WispError("A retry runs with the values its run had: leave out --input", "INVALID_INPUT");
-    const inputs = await beforeRun(workspace, resolveBolt(workspace, bolt), options, last ? (last.inputs ?? {}) : undefined);
+    const inputs = await beforeRun(workspace, resolvePipeline(workspace, bolt), options, last ? (last.inputs ?? {}) : undefined);
     if (!inputs) {
       console.log(dim("Nothing ran."));
       process.exitCode = 1;
@@ -114,7 +114,7 @@ export const use: CommandDef<UseOptions> = {
     if (!workspace.personal && !options.dryRun) await recordProject(workspace.file).catch(() => undefined);
 
     const json = options.json ?? false;
-    const label = boltLabel(workspace, bolt);
+    const label = pipelineLabel(workspace, bolt);
     if (!json) {
       const prefix = options.dryRun ? yellow("dry run") : green("running");
       console.log(`${prefix} ${title(workspace)} ${dim("·")} ${bold(label)}`);
@@ -227,11 +227,11 @@ export const use: CommandDef<UseOptions> = {
   },
 };
 
-function boltLabel(workspace: Workspace, ref: string): string {
+function pipelineLabel(workspace: Workspace, ref: string): string {
   // The bolt's own name, not the word typed for it: `wisp api` runs "Work on api".
   const exact = workspace.bolts.find((bolt) => bolt.id === ref || bolt.label === ref);
   if (exact) return exact.label;
-  return matchBolt(workspace, ref).bolt?.label ?? ref;
+  return matchPipeline(workspace, ref).bolt?.label ?? ref;
 }
 
 /**

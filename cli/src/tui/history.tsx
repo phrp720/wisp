@@ -32,7 +32,7 @@ export interface HistoryScreenProps {
 }
 
 /** A bolt in the sidebar: the filter, like a workflow in a CI's list. */
-export interface BoltFilter {
+export interface PipelineFilter {
   key: string;
   workspace?: string;
   workspaceName?: string;
@@ -75,7 +75,7 @@ export function HistoryScreen(props: HistoryScreenProps) {
     };
   }, [services, reloads]);
 
-  const filters = useMemo(() => boltFilters(entries ?? []), [entries]);
+  const filters = useMemo(() => pipelineFilters(entries ?? []), [entries]);
   const filter = filters[Math.min(filterIndex, filters.length - 1)];
   const shown = useMemo(
     () =>
@@ -279,7 +279,7 @@ export function HistoryScreen(props: HistoryScreenProps) {
         </Text>
         {filterLines(filters, filterIndex, height).map((line) => {
           if (line.kind === "heading") return <Text key={line.key} dimColor wrap="truncate-end">{clip(line.text, sideWidth - 4)}</Text>;
-          const entry = filters[line.at] as BoltFilter;
+          const entry = filters[line.at] as PipelineFilter;
           const selected = line.at === filterIndex;
           return (
             <Box key={entry.key}>
@@ -360,7 +360,7 @@ export function historySideWidth(columns: number): number {
  * The bolts on the left that fit, line by line: a workspace's name before its first bolt.
  * Drawn from this, and clicks are matched against it.
  */
-export function filterLines(filters: BoltFilter[], filterIndex: number, height: number): ({ kind: "heading"; key: string; text: string } | { kind: "filter"; at: number })[] {
+export function filterLines(filters: PipelineFilter[], filterIndex: number, height: number): ({ kind: "heading"; key: string; text: string } | { kind: "filter"; at: number })[] {
   const { items, offset } = windowed(filters, filterIndex, height - 3);
   const lines: ({ kind: "heading"; key: string; text: string } | { kind: "filter"; at: number })[] = [];
   items.forEach((entry, position) => {
@@ -813,8 +813,8 @@ export function describeHistoryStep(step: HistoryStep): string {
 }
 
 /** The sidebar: every bolt that has run, grouped by workspace, after "All bolts". */
-function boltFilters(entries: HistoryEntry[]): BoltFilter[] {
-  const byKey = new Map<string, BoltFilter>();
+function pipelineFilters(entries: HistoryEntry[]): PipelineFilter[] {
+  const byKey = new Map<string, PipelineFilter>();
   for (const entry of entries) {
     const bolt = baseLabel(entry.bolt);
     const key = `${entry.workspace}#${bolt}`;

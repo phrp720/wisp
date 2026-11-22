@@ -9,6 +9,7 @@ import { PROJECT_FILE, PROJECT_SCHEMA_URL, parseWait, readProjectFile } from "./
 import { pickColor } from "./colors.js";
 import { formatProjectFile } from "./scaffold.js";
 import { localFileFor, trustProject } from "./trust.js";
+import { SLUG, slugify } from "./workspaces.js";
 
 /**
  * Changing a workspace file without anyone writing JSON.
@@ -21,8 +22,9 @@ import { localFileFor, trustProject } from "./trust.js";
 /** A step as it is written in the file. */
 export type RawStep = Record<string, unknown>;
 
-export interface RawBolt {
+export interface RawPipeline {
   label: string;
+  slug?: string;
   notes?: string;
   keepGoing?: boolean;
   confirm?: string | boolean;
@@ -39,12 +41,12 @@ export interface RawInput {
   default?: string | number;
 }
 
-const BOLT_ORDER = ["label", "notes", "color", "keepGoing", "confirm", "inputs", "steps", "down"];
+const PIPELINE_ORDER = ["label", "slug", "notes", "color", "keepGoing", "confirm", "inputs", "steps", "down"];
 
-function tidyBolt(bolt: RawBolt): RawBolt {
-  const known = BOLT_ORDER.filter((key) => bolt[key] !== undefined).map((key) => [key, bolt[key]]);
-  const rest = Object.entries(bolt).filter(([key]) => !BOLT_ORDER.includes(key));
-  return Object.fromEntries([...known, ...rest]) as RawBolt;
+function tidyPipeline(bolt: RawPipeline): RawPipeline {
+  const known = PIPELINE_ORDER.filter((key) => bolt[key] !== undefined).map((key) => [key, bolt[key]]);
+  const rest = Object.entries(bolt).filter(([key]) => !PIPELINE_ORDER.includes(key));
+  return Object.fromEntries([...known, ...rest]) as RawPipeline;
 }
 
 /**
@@ -267,10 +269,10 @@ export function describeRawStep(step: RawStep): string {
 async function locate(file: string, bolt?: string): Promise<{ path: string; raw: Record<string, unknown> }> {
   const main = await readRaw(file);
   if (!bolt) return { path: file, raw: main };
-  if (findBolt(main, bolt) >= 0) return { path: file, raw: main };
+  if (findPipeline(main, bolt) >= 0) return { path: file, raw: main };
   const localPath = localFileFor(file);
   const local = await readRaw(localPath).catch(() => undefined);
-  if (local && findBolt(local, bolt) >= 0) return { path: localPath, raw: local };
+  if (local && findPipeline(local, bolt) >= 0) return { path: localPath, raw: local };
   throw new WispError(`No pipeline called "${bolt}" in ${file}`, "NOT_FOUND");
 }
 
@@ -288,8 +290,8 @@ async function readRaw(file: string): Promise<Record<string, unknown>> {
   return parsed as Record<string, unknown>;
 }
 
-function findBolt(raw: Record<string, unknown>, label: string): number {
-  const bolts = Array.isArray(raw["pipelines"]) ? (raw["pipelines"] as RawBolt[]) : [];
+function findPipeline(raw: Record<string, unknown>, label: string): number {
+  const bolts = Array.isArray(raw["pipelines"]) ? (raw["pipelines"] as RawPipeline[]) : [];
   return bolts.findIndex((bolt) => typeof bolt?.label === "string" && bolt.label.toLowerCase() === label.toLowerCase());
 }
 
@@ -299,11 +301,11 @@ const ORDER = ["$schema", "name", "icon", "color", "notes", "pipelines"];
  * Write a file back, laid out by hand as `init` does — and keep trust when it was there:
  * the person changing it is the person who trusted it, and they just saw the change.
  */
-async function save(file: string, raw: Record<string, unknown>, trustFile: string): Promise<void> {
+async function save(file: string, raw: Record<string, unknown>, trustFile: string, keepTrust = true): Promise<void> {
   const before = await readProjectFile(trustFile).catch(() => undefined);
   const keys = [...ORDER.filter((key) => key in raw), ...Object.keys(raw).filter((key) => !ORDER.includes(key))];
   await writeFile(file, formatProjectFile(keys.map((key) => [key, raw[key]])), "utf8");
-  if (before && !before.workspace.personal && before.trust === "trusted") await trustProject(trustFile);
+  if (keepTrust && before && !before.workspace.personal && before.trust === "trusted") await trustProject(trustFile);
 }
 
 export interface WorkspaceDetails {
@@ -336,73 +338,86 @@ export async function setWorkspaceDetails(file: string, details: WorkspaceDetail
 }
 
 /** Apply a change to one bolt, wherever it is written. */
-export async function changeBolt(file: string, bolt: string, change: (bolt: RawBolt) => RawBolt | undefined): Promise<void> {
+export async function changePipeline(file: string, bolt: string, change: (bolt: RawPipeline) => RawPipeline | undefined): Promise<void> {
   const { path, raw } = await locate(file, bolt);
-  const bolts = [...((raw["pipelines"] as RawBolt[]) ?? [])];
-  const index = findBolt(raw, bolt);
-  const next = change({ ...(bolts[index] as RawBolt), steps: [...((bolts[index] as RawBolt).steps ?? [])] });
-  if (next) bolts[index] = tidyBolt(next);
+  const bolts = [...((raw["pipelines"] as RawPipeline[]) ?? [])];
+  const index = findPipeline(raw, bolt);
+  const next = change({ ...(bolts[index] as RawPipeline), steps: [...((bolts[index] as RawPipeline).steps ?? [])] });
+  if (next) bolts[index] = tidyPipeline(next);
   else bolts.splice(index, 1);
   await save(path, { ...raw, pipelines: bolts }, file);
 }
 
-export async function addBolt(file: string, label: string): Promise<void> {
+export async function addPipeline(file: string, label: string): Promise<void> {
   const name = label.trim();
   if (!name) throw new WispError("A pipeline needs a name", "INVALID_INPUT");
   const raw = await readRaw(file);
-  if (findBolt(raw, name) >= 0) throw new WispError(`There is already a pipeline called "${name}"`, "DUPLICATE_NAME");
-  const existing = (raw["pipelines"] as RawBolt[]) ?? [];
+  if (findPipeline(raw, name) >= 0) throw new WispError(`There is already a pipeline called "${name}"`, "DUPLICATE_NAME");
+  const existing = (raw["pipelines"] as RawPipeline[]) ?? [];
   // A colour of its own, so it is told apart from its neighbours at a glance.
   const color = pickColor(existing.map((bolt) => bolt.color));
   const bolts = [...existing, { label: name, color, steps: [] }];
   await save(file, { ...raw, pipelines: bolts }, file);
 }
 
-export async function renameBolt(file: string, bolt: string, label: string): Promise<void> {
+export async function renamePipeline(file: string, bolt: string, label: string, options: { keepTrust?: boolean } = {}): Promise<void> {
   const name = label.trim();
   if (!name) throw new WispError("A pipeline needs a name", "INVALID_INPUT");
-  if (name.toLowerCase() !== bolt.toLowerCase() && findBolt(await readRaw(file), name) >= 0) {
+  if (name.toLowerCase() !== bolt.toLowerCase() && findPipeline(await readRaw(file), name) >= 0) {
     throw new WispError(`There is already a pipeline called "${name}"`, "DUPLICATE_NAME");
   }
   const { path, raw } = await locate(file, bolt);
-  const bolts = (raw["pipelines"] as RawBolt[]) ?? [];
-  const index = findBolt(raw, bolt);
-  const old = (bolts[index] as RawBolt).label.toLowerCase();
+  const bolts = (raw["pipelines"] as RawPipeline[]) ?? [];
+  const index = findPipeline(raw, bolt);
+  const old = (bolts[index] as RawPipeline).label.toLowerCase();
   const runsIt = (step: RawStep) => typeof step["pipeline"] === "string" && step["pipeline"].toLowerCase() === old;
   const renamed = (steps: RawStep[]) => steps.map((step) => (runsIt(step) ? { ...step, pipeline: name } : step));
   const next = bolts.map((entry, at) => {
     const pointing = entry.steps.some(runsIt) || (entry.down ?? []).some(runsIt);
     if (at !== index && !pointing) return entry;
-    return tidyBolt({ ...entry, ...(at === index ? { label: name } : {}), steps: renamed(entry.steps), ...(entry.down ? { down: renamed(entry.down) } : {}) });
+    return tidyPipeline({ ...entry, ...(at === index ? { label: name } : {}), steps: renamed(entry.steps), ...(entry.down ? { down: renamed(entry.down) } : {}) });
   });
-  await save(path, { ...raw, pipelines: next }, file);
+  await save(path, { ...raw, pipelines: next }, file, options.keepTrust ?? true);
 }
 
-export async function setBoltNotes(file: string, bolt: string, notes: string): Promise<void> {
+export async function setSlug(file: string, bolt: string, slug: string): Promise<void> {
+  const wanted = slug.trim();
+  if (wanted && !SLUG.test(wanted)) throw new WispError("A slug is lowercase letters, digits and hyphens, like dev-stack", "INVALID_INPUT");
+  const raw = await readRaw(file);
+  const others = ((raw["pipelines"] as RawPipeline[]) ?? []).filter((entry) => entry.label.toLowerCase() !== bolt.toLowerCase());
+  const taken = others.find((entry) => (typeof entry["slug"] === "string" && entry["slug"] ? entry["slug"] : slugify(entry.label)) === wanted);
+  if (wanted && taken) throw new WispError(`"${taken.label}" already answers to ${wanted}`, "DUPLICATE_NAME");
+  await changePipeline(file, bolt, (current) => {
+    const { slug: _slug, ...rest } = current;
+    return wanted && wanted !== slugify(current.label) ? { ...rest, slug: wanted } : rest;
+  });
+}
+
+export async function setPipelineNotes(file: string, bolt: string, notes: string): Promise<void> {
   const text = notes.trim();
-  await changeBolt(file, bolt, (current) => {
+  await changePipeline(file, bolt, (current) => {
     const { label, notes: _notes, ...rest } = current;
     return text ? { label, notes: text, ...rest } : { label, ...rest };
   });
 }
 
-export async function removeBolt(file: string, bolt: string): Promise<void> {
-  await changeBolt(file, bolt, () => undefined);
+export async function removePipeline(file: string, bolt: string): Promise<void> {
+  await changePipeline(file, bolt, () => undefined);
 }
 
-export async function moveBolt(file: string, bolt: string, by: -1 | 1): Promise<void> {
+export async function movePipeline(file: string, bolt: string, by: -1 | 1): Promise<void> {
   const raw = await readRaw(file);
-  const bolts = [...((raw["pipelines"] as RawBolt[]) ?? [])];
-  const index = findBolt(raw, bolt);
+  const bolts = [...((raw["pipelines"] as RawPipeline[]) ?? [])];
+  const index = findPipeline(raw, bolt);
   const to = index + by;
   if (index < 0 || to < 0 || to >= bolts.length) return;
-  [bolts[index], bolts[to]] = [bolts[to] as RawBolt, bolts[index] as RawBolt];
+  [bolts[index], bolts[to]] = [bolts[to] as RawPipeline, bolts[index] as RawPipeline];
   await save(file, { ...raw, pipelines: bolts }, file);
 }
 
 export async function setConfirm(file: string, bolt: string, confirm: string | boolean): Promise<void> {
   const value = typeof confirm === "string" ? confirm.trim() || false : confirm;
-  await changeBolt(file, bolt, (current) => {
+  await changePipeline(file, bolt, (current) => {
     const { confirm: _confirm, ...rest } = current;
     return value === false ? rest : { ...rest, confirm: value };
   });
@@ -437,7 +452,7 @@ function renamePlaceholder<T>(value: T, from: string, to: string): T {
 }
 
 export async function setInput(file: string, bolt: string, previous: string | undefined, name: string, input: RawInput): Promise<void> {
-  await changeBolt(file, bolt, (current) => {
+  await changePipeline(file, bolt, (current) => {
     const entries = Object.entries(current.inputs ?? {});
     const at = previous === undefined ? -1 : entries.findIndex(([key]) => key === previous);
     if (at >= 0) entries[at] = [name, input];
@@ -454,7 +469,7 @@ export async function setInput(file: string, bolt: string, previous: string | un
 }
 
 export async function removeInput(file: string, bolt: string, name: string): Promise<void> {
-  await changeBolt(file, bolt, (current) => {
+  await changePipeline(file, bolt, (current) => {
     const { inputs, ...rest } = current;
     const left = Object.entries(inputs ?? {}).filter(([key]) => key !== name);
     return left.length > 0 ? { ...rest, inputs: Object.fromEntries(left) } : rest;
@@ -462,22 +477,22 @@ export async function removeInput(file: string, bolt: string, name: string): Pro
 }
 
 export async function setKeepGoing(file: string, bolt: string, keepGoing: boolean): Promise<void> {
-  await changeBolt(file, bolt, (current) => {
+  await changePipeline(file, bolt, (current) => {
     const { keepGoing: _keepGoing, ...rest } = current;
     return keepGoing ? { ...rest, keepGoing: true } : rest;
   });
 }
 
 /** A bolt as written, for the editor to show. */
-export async function readBolt(file: string, bolt: string): Promise<RawBolt> {
+export async function readPipeline(file: string, bolt: string): Promise<RawPipeline> {
   const { raw } = await locate(file, bolt);
-  const found = (raw["pipelines"] as RawBolt[])[findBolt(raw, bolt)] as RawBolt;
+  const found = (raw["pipelines"] as RawPipeline[])[findPipeline(raw, bolt)] as RawPipeline;
   return { ...found, steps: [...(found.steps ?? [])] };
 }
 
 /** The steps of a bolt as written, for the editor to list. */
-export async function boltSteps(file: string, bolt: string): Promise<RawStep[]> {
-  return (await readBolt(file, bolt)).steps;
+export async function pipelineSteps(file: string, bolt: string): Promise<RawStep[]> {
+  return (await readPipeline(file, bolt)).steps;
 }
 
 function labelOf(step: RawStep): string | undefined {
@@ -522,7 +537,7 @@ export function suggestLabel(step: RawStep, taken: string[]): string {
 }
 
 export async function addStep(file: string, bolt: string, step: RawStep, at?: number): Promise<void> {
-  await changeBolt(file, bolt, (current) => {
+  await changePipeline(file, bolt, (current) => {
     const steps = [...current.steps];
     steps.splice(at ?? steps.length, 0, step);
     return { ...current, steps };
@@ -530,7 +545,7 @@ export async function addStep(file: string, bolt: string, step: RawStep, at?: nu
 }
 
 export async function replaceStep(file: string, bolt: string, index: number, step: RawStep): Promise<void> {
-  await changeBolt(file, bolt, (current) => {
+  await changePipeline(file, bolt, (current) => {
     const before = current.steps[index];
     const kept = withAfter(step, before ? afterOf(before) : []);
     const from = before ? labelOf(before) : undefined;
@@ -541,7 +556,7 @@ export async function replaceStep(file: string, bolt: string, index: number, ste
 }
 
 export async function removeStep(file: string, bolt: string, index: number): Promise<void> {
-  await changeBolt(file, bolt, (current) => {
+  await changePipeline(file, bolt, (current) => {
     const gone = current.steps[index];
     const steps = current.steps.filter((_entry, at) => at !== index);
     const name = gone ? labelOf(gone) : undefined;
@@ -551,7 +566,7 @@ export async function removeStep(file: string, bolt: string, index: number): Pro
 
 export async function moveStep(file: string, bolt: string, index: number, by: -1 | 1): Promise<number> {
   let at = index;
-  await changeBolt(file, bolt, (current) => {
+  await changePipeline(file, bolt, (current) => {
     const steps = [...current.steps];
     const to = index + by;
     if (to < 0 || to >= steps.length) return current;
@@ -563,7 +578,7 @@ export async function moveStep(file: string, bolt: string, index: number, by: -1
 }
 
 export async function setAfter(file: string, bolt: string, index: number, on: number[]): Promise<void> {
-  await changeBolt(file, bolt, (current) => {
+  await changePipeline(file, bolt, (current) => {
     const steps = [...current.steps];
     const taken = steps.flatMap((step) => (labelOf(step) ? [labelOf(step) as string] : []));
     const names = on

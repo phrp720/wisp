@@ -4,9 +4,9 @@ import { resolve } from "node:path";
 import { WispError } from "../../core/errors.js";
 import { expandHome } from "../../core/paths.js";
 import { PROJECT_FILE, findProjectFile, readProjectFile } from "../../core/project.js";
-import { matchBolt } from "../../core/switch.js";
+import { matchPipeline } from "../../core/switch.js";
 import type { WorkspaceRead } from "../../core/types.js";
-import { discoverWorkspaces, matchWorkspace, resolveWorkspace, slugify } from "../../core/workspaces.js";
+import { discoverWorkspaces, matchWorkspace, resolveWorkspace, slugify, pipelineSlug } from "../../core/workspaces.js";
 
 /**
  * Every workspace Wisp knows, plus the project you are standing in if it is not known
@@ -76,16 +76,16 @@ export async function resolveRun(
   if (first && !flag) {
     const here = await maybeProject();
     if (here) {
-      const { bolt: match, candidates } = matchBolt(here.workspace, first);
+      const { bolt: match, candidates } = matchPipeline(here.workspace, first);
       if (match) return { read: here, bolt: first };
       if (candidates.length > 1) {
         throw new WispError(
-          `"${first}" matches several pipelines: ${candidates.map((candidate) => `${candidate.label} (${slugify(candidate.label)})`).join(", ")}`,
+          `"${first}" matches several pipelines: ${candidates.map((candidate) => `${candidate.label} (${pipelineSlug(candidate)})`).join(", ")}`,
           "AMBIGUOUS",
         );
       }
     }
-    throw await noBoltHere(first, here);
+    throw await noPipelineHere(first, here);
   }
 
   return {
@@ -95,28 +95,28 @@ export async function resolveRun(
   };
 }
 
-async function noBoltHere(word: string, here: WorkspaceRead | undefined): Promise<WispError> {
+async function noPipelineHere(word: string, here: WorkspaceRead | undefined): Promise<WispError> {
   const all = await everything();
   const others = all.filter((read) => read.workspace.file !== here?.workspace.file);
   const workspace = matchWorkspace(word, others).match;
-  const elsewhere = boltsEverywhere(word, others);
+  const elsewhere = pipelinesEverywhere(word, others);
 
   const typed = slugify(word);
-  const close = typed ? (here?.workspace.bolts ?? []).filter((entry) => slugify(entry.label).split("-").some((part) => part.startsWith(typed))) : [];
+  const close = typed ? (here?.workspace.bolts ?? []).filter((entry) => pipelineSlug(entry).split("-").some((part) => part.startsWith(typed))) : [];
 
   const said = here
     ? `${here.workspace.name} has no pipeline called "${word}".`
     : `"${word}" is not a pipeline here: this folder has no ${PROJECT_FILE}.`;
   const next = [
-    close.length > 0 ? `Did you mean ${close.map((entry) => `\`wisp ${slugify(entry.label)}\``).join(", ")}?` : "",
+    close.length > 0 ? `Did you mean ${close.map((entry) => `\`wisp ${pipelineSlug(entry)}\``).join(", ")}?` : "",
     workspace
       ? `${workspace.workspace.name} is a workspace: \`wisp show ${slugify(workspace.workspace.name)}\` lists its pipelines, \`wisp pick ${slugify(workspace.workspace.name)}\` picks one.`
       : "",
     elsewhere.length > 0
-      ? `Elsewhere: ${elsewhere.map((hit) => `\`wisp ${slugify(hit.read.workspace.name)} ${slugify(hit.label)}\``).join(", ")}.`
+      ? `Elsewhere: ${elsewhere.map((hit) => `\`wisp ${slugify(hit.read.workspace.name)} ${hit.slug}\``).join(", ")}.`
       : "",
     close.length === 0 && !workspace && elsewhere.length === 0 && here && here.workspace.bolts.length > 0
-      ? `It has ${here.workspace.bolts.map((entry) => slugify(entry.label)).join(", ")}.`
+      ? `It has ${here.workspace.bolts.map((entry) => pipelineSlug(entry)).join(", ")}.`
       : "",
     !workspace && elsewhere.length === 0 && !here ? "`wisp list` shows your workspaces." : "",
   ].filter(Boolean);
@@ -131,14 +131,14 @@ export function emitJson(value: unknown): void {
  * The bolts named `word` in every workspace: by name or slug when any is, else by the one
  * bolt in a workspace that the word is part of.
  */
-function boltsEverywhere(word: string, reads: WorkspaceRead[]): { read: WorkspaceRead; label: string }[] {
+function pipelinesEverywhere(word: string, reads: WorkspaceRead[]): { read: WorkspaceRead; label: string; slug: string }[] {
   const needle = word.trim().toLowerCase();
   const hits = reads.flatMap((read) => {
-    const { bolt } = matchBolt(read.workspace, word);
+    const { bolt } = matchPipeline(read.workspace, word);
     if (!bolt) return [];
-    const exact = bolt.label.toLowerCase() === needle || slugify(bolt.label) === slugify(word);
-    return [{ read, label: bolt.label, exact }];
+    const exact = bolt.label.toLowerCase() === needle || pipelineSlug(bolt) === slugify(word) || slugify(bolt.label) === slugify(word);
+    return [{ read, label: bolt.label, slug: pipelineSlug(bolt), exact }];
   });
   const exact = hits.filter((hit) => hit.exact);
-  return (exact.length > 0 ? exact : hits).map(({ read, label }) => ({ read, label }));
+  return (exact.length > 0 ? exact : hits).map(({ read, label, slug }) => ({ read, label, slug }));
 }

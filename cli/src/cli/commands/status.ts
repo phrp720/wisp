@@ -3,7 +3,7 @@ import { listRuns } from "../../core/processes.js";
 import { discoverWorkspaces } from "../../core/workspaces.js";
 import { counts, dim, plural, red, title } from "../format.js";
 import { maybeProject } from "../lib/context.js";
-import { diagnosticSummary, printBolts, shortest, trustLine } from "../lib/render.js";
+import { diagnosticSummary, printPipelines, shortest, trustLine } from "../lib/render.js";
 
 /**
  * What bare `wisp` shows when it is not opening the TUI.
@@ -21,7 +21,7 @@ export async function status(): Promise<void> {
 
     if (workspace.bolts.length > 0) {
       console.log();
-      printBolts(workspace, false, here.withheld, await listRuns());
+      printPipelines(workspace, false, here.withheld, await listRuns());
       console.log();
       console.log(dim(`Run one with \`wisp ${shortest(workspace.bolts[0]!, workspace.bolts, true)}\`, or \`wisp pick\` to choose.`));
     } else {

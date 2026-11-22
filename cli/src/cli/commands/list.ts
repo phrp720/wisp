@@ -1,5 +1,5 @@
 import { tildify } from "../../core/paths.js";
-import { discoverWorkspaces, slugify } from "../../core/workspaces.js";
+import { discoverWorkspaces, slugify, sharedNames } from "../../core/workspaces.js";
 import { counts, cyan, dim, green, red, title, yellow } from "../format.js";
 import { emitJson, maybeProject } from "../lib/context.js";
 import type { CommandDef } from "../lib/define.js";
@@ -48,6 +48,11 @@ export const list: CommandDef<{ json?: boolean }> = {
     }
 
     for (const failure of unreadable) console.log(`${red("✗")} ${dim(tildify(failure.file))} ${failure.error}`);
+    for (const shared of sharedNames(reads.map((read) => read.workspace))) {
+      const same = reads.filter((read) => slugify(read.workspace.name) === shared);
+      console.log(yellow(`\n! ${same.length} workspaces are called ${same[0]?.workspace.name}, so \`wisp ${shared} …\` can't tell them apart.`));
+      console.log(dim(`  Give one another name (e on it in the dashboard), or run it by its file: \`wisp use ${tildify(same[0]?.workspace.file ?? "")} <pipeline>\`.`));
+    }
     console.log(dim("\n`wisp show <name>` lists a workspace's pipelines · `wisp <name> <pipeline>` runs one, from any folder · `wisp pick <name>` chooses"));
   },
 };

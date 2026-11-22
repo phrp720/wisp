@@ -5,21 +5,22 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
-  addBolt,
+  addPipeline,
+  setSlug,
   addStep,
-  boltSteps,
+  pipelineSteps,
   buildStep,
   createPersonalWorkspace,
   describeRawStep,
-  moveBolt,
+  movePipeline,
   moveStep,
-  removeBolt,
+  removePipeline,
   removePersonalWorkspace,
   removeStep,
-  renameBolt,
+  renamePipeline,
   replaceStep,
   guessFinishes,
-  setBoltNotes,
+  setPipelineNotes,
   setConfirm,
   setAfter,
   setInput,
@@ -50,7 +51,7 @@ afterEach(async () => {
 
 describe("editing a workspace without writing JSON", () => {
   it("adds pipelines and steps, and writes a file a person can read", async () => {
-    await addBolt(file, "Check");
+    await addPipeline(file, "Check");
     const { step } = buildStep("run", { run: "pnpm test", finishes: "finishes", label: "", cwd: "" });
     await addStep(file, "check", step!);
     await addStep(file, "Work on api", buildStep("wait", { wait: "http://localhost:3000" }).step!);
@@ -66,7 +67,7 @@ describe("editing a workspace without writing JSON", () => {
   });
 
   it("gives each new pipeline a colour none of the others has", async () => {
-    for (const name of ["One", "Two", "Three", "Four"]) await addBolt(file, name);
+    for (const name of ["One", "Two", "Three", "Four"]) await addPipeline(file, name);
     const raw = JSON.parse(await readFile(file, "utf8")) as { pipelines: { color?: string }[] };
     const colors = raw.pipelines.map((bolt) => bolt.color);
     expect(new Set(colors).size).toBe(colors.length);
@@ -97,7 +98,7 @@ describe("editing a workspace without writing JSON", () => {
         ],
       }),
     );
-    await renameBolt(file, "Services", "Database");
+    await renamePipeline(file, "Services", "Database");
     const bolts = JSON.parse(await readFile(file, "utf8")).pipelines;
     expect(bolts.map((bolt: { label: string }) => bolt.label)).toEqual(["Database", "Dev", "Web"]);
     expect(bolts[1].steps[0]).toEqual({ pipeline: "Database", label: "db" });
@@ -141,26 +142,26 @@ describe("editing a workspace without writing JSON", () => {
     await addStep(file, "Work on api", { run: "pnpm dev" });
     await addStep(file, "Work on api", { url: "localhost:3000" });
     await moveStep(file, "Work on api", 2, -1);
-    expect((await boltSteps(file, "Work on api")).map(describeRawStep)).toEqual(["open the apps/api folder", "open localhost:3000", "run pnpm dev"]);
+    expect((await pipelineSteps(file, "Work on api")).map(describeRawStep)).toEqual(["open the apps/api folder", "open localhost:3000", "run pnpm dev"]);
 
     await replaceStep(file, "Work on api", 2, { run: "pnpm dev --turbo", cwd: "apps/api" });
     await removeStep(file, "Work on api", 0);
-    expect((await boltSteps(file, "Work on api")).map(describeRawStep)).toEqual(["open localhost:3000", "run pnpm dev --turbo in apps/api"]);
+    expect((await pipelineSteps(file, "Work on api")).map(describeRawStep)).toEqual(["open localhost:3000", "run pnpm dev --turbo in apps/api"]);
     expect(stepValues({ run: "pnpm dev --turbo", cwd: "apps/api" })).toEqual({ run: "pnpm dev --turbo", cwd: "apps/api", finishes: "running" });
   });
 
   it("renames, reorders, makes keep going after a failure and deletes pipelines — refusing a duplicate name", async () => {
-    await addBolt(file, "Check");
-    await expect(addBolt(file, "check")).rejects.toThrow(/already a pipeline/);
-    await renameBolt(file, "Check", "Run the tests");
+    await addPipeline(file, "Check");
+    await expect(addPipeline(file, "check")).rejects.toThrow(/already a pipeline/);
+    await renamePipeline(file, "Check", "Run the tests");
     await setKeepGoing(file, "Run the tests", true);
-    await moveBolt(file, "Run the tests", -1);
+    await movePipeline(file, "Run the tests", -1);
     let read = await readProjectFile(file);
     expect(read.workspace.bolts.map((bolt) => [bolt.label, bolt.keepGoing ?? false])).toEqual([
       ["Run the tests", true],
       ["Work on api", false],
     ]);
-    await removeBolt(file, "Work on api");
+    await removePipeline(file, "Work on api");
     read = await readProjectFile(file);
     expect(read.workspace.bolts.map((bolt) => bolt.label)).toEqual(["Run the tests"]);
   });
@@ -230,11 +231,22 @@ describe("editing a workspace without writing JSON", () => {
     expect(JSON.parse(await readFile(file, "utf8")).pipelines[0]).not.toHaveProperty("confirm");
   });
 
+  it("writes a slug of its own right after the label, drops it when it's the default, and refuses a bad or taken one", async () => {
+    await setSlug(file, "Work on api", "api");
+    expect(Object.keys(JSON.parse(await readFile(file, "utf8")).pipelines[0])).toEqual(["label", "slug", "color", "steps"]);
+    expect((await readProjectFile(file)).workspace.bolts[0]?.slug).toBe("api");
+    await setSlug(file, "Work on api", "work-on-api");
+    expect(JSON.parse(await readFile(file, "utf8")).pipelines[0]).not.toHaveProperty("slug");
+    await expect(setSlug(file, "Work on api", "Not a slug")).rejects.toThrow(/lowercase letters, digits and hyphens/);
+    await addPipeline(file, "Deploy");
+    await expect(setSlug(file, "Work on api", "deploy")).rejects.toThrow(/"Deploy" already answers to deploy/);
+  });
+
   it("writes a pipeline's notes right after its label, and drops them when cleared", async () => {
-    await setBoltNotes(file, "Work on api", "  The API with its database  ");
+    await setPipelineNotes(file, "Work on api", "  The API with its database  ");
     expect(Object.keys(JSON.parse(await readFile(file, "utf8")).pipelines[0])).toEqual(["label", "notes", "color", "steps"]);
     expect((await readProjectFile(file)).workspace.bolts[0]?.notes).toBe("The API with its database");
-    await setBoltNotes(file, "Work on api", "");
+    await setPipelineNotes(file, "Work on api", "");
     expect(JSON.parse(await readFile(file, "utf8")).pipelines[0]).not.toHaveProperty("notes");
     expect((await readProjectFile(file)).workspace.bolts[0]?.notes).toBeUndefined();
   });

@@ -20,11 +20,11 @@ import { listRuns, newRunId, pidFileFor, recordWindowRun, runningFor, startRun, 
 import { restartLoop, shellInvocation, windowInvocation } from "./shell.js";
 import { normalizeUrl, sameUrl } from "./url.js";
 import { describeWait, waitFor } from "./wait.js";
-import { hasWords, slugify } from "./workspaces.js";
+import { hasWords, slugify, pipelineSlug } from "./workspaces.js";
 import type {
   AssetBase,
-  Bolt,
-  BoltStep,
+  Pipeline,
+  PipelineStep,
   InputSpec,
   Invocation,
   OpenWithDefaults,
@@ -75,9 +75,9 @@ export async function switchToWorkspace(
   options: SwitchOptions = {},
   deps: RunDeps = {},
 ): Promise<SwitchResult> {
-  const bolt = options.bolt ? resolveBolt(workspace, options.bolt) : undefined;
+  const bolt = options.bolt ? resolvePipeline(workspace, options.bolt) : undefined;
 
-  const steps: PlannedStep[] = bolt ? fillPlan(await planBolt(workspace, bolt), options.inputs ?? {}) : [];
+  const steps: PlannedStep[] = bolt ? fillPlan(await planPipeline(workspace, bolt), options.inputs ?? {}) : [];
   const result = await runPlan(workspace, steps, { ...options, label: bolt?.label ?? "" }, deps);
   return { ...result, ...(bolt ? { bolt } : {}) };
 }
@@ -90,7 +90,7 @@ export async function switchToWorkspace(
 export async function planRetry(workspace: Workspace, entry: HistoryEntry): Promise<PlannedStep[]> {
   if (entry.ok) throw new WispError(`That run of "${entry.bolt}" passed — there is nothing to retry`, "NOTHING_TO_RETRY");
   const label = entry.bolt.replace(/ \((retry|down)\)$/, "");
-  const plan = fillPlan(await planBolt(workspace, resolveBolt(workspace, label)), entry.inputs ?? {});
+  const plan = fillPlan(await planPipeline(workspace, resolvePipeline(workspace, label)), entry.inputs ?? {});
   // A retry's own history holds only the steps it retried: match those by label instead.
   const steps = entry.steps;
   const byOrder = plan.length === steps.length && plan.every((step, at) => step.target.label === steps[at]?.label);
@@ -378,12 +378,12 @@ function platformOf(context: Context): Platform {
  * bolt already being expanded is a cycle, and is refused before anything has opened.
  * Each step remembers whether its own bolt keeps going after a failure.
  */
-export async function planBolt(workspace: Workspace, bolt: Bolt): Promise<PlannedStep[]> {
+export async function planPipeline(workspace: Workspace, bolt: Pipeline): Promise<PlannedStep[]> {
   const plan: PlannedStep[] = [];
   const finished = new Map<string, string[]>();
   const firstOf = new Map<string, string>();
 
-  const expand = async (owner: Workspace, current: Bolt, stack: string[], startAfter: string[]): Promise<string[]> => {
+  const expand = async (owner: Workspace, current: Pipeline, stack: string[], startAfter: string[]): Promise<string[]> => {
     const key = `${owner.file}#${current.id}`;
     if (stack.includes(key)) {
       const names = [...stack.slice(stack.indexOf(key)), key].map((entry) => entry.split("#pipeline:")[1] ?? entry);
@@ -406,13 +406,13 @@ export async function planBolt(workspace: Workspace, bolt: Bolt): Promise<Planne
       const at = [...left].find((index) => (current.steps[index]?.after ?? []).every((name) => !left.has(byName.get(name) ?? -1)));
       if (at === undefined) throw new WispError(`"${current.label}" can't run: its steps wait for each other`, "BROKEN_PIPELINE");
       left.delete(at);
-      const step = current.steps[at] as BoltStep;
+      const step = current.steps[at] as PipelineStep;
       const after = step.after ?? [];
       const waitsFor = after.length > 0 ? [...new Set(after.flatMap((name) => doneBy.get(byName.get(name) ?? -1) ?? []))] : startAfter;
       const stepKey = `${key}#${at}`;
 
       if (step.kind === "pipeline") {
-        const keys = await expand(owner, resolveBolt(owner, step.bolt), [...stack, key], waitsFor);
+        const keys = await expand(owner, resolvePipeline(owner, step.bolt), [...stack, key], waitsFor);
         doneBy.set(at, keys.length > 0 ? keys : waitsFor);
         all.push(...keys);
         continue;
@@ -907,15 +907,15 @@ export interface DownResult {
  * Its own commands by default: `down api` should not take the database out from under
  * `web`, which needs it too. With `deps`, its dependencies' commands and teardown as well.
  */
-export async function downBolt(
+export async function downPipeline(
   workspace: Workspace,
-  bolt: Bolt,
+  bolt: Pipeline,
   options: { deps?: boolean; dryRun?: boolean; echo?: boolean; onResult?: (result: TargetResult) => void } = {},
   deps: RunDeps = {},
 ): Promise<DownResult> {
   const plan = options.deps
-    ? await planBolt(workspace, bolt)
-    : await planBolt(workspace, { ...bolt, steps: bolt.steps.filter((step) => step.kind !== "pipeline") });
+    ? await planPipeline(workspace, bolt)
+    : await planPipeline(workspace, { ...bolt, steps: bolt.steps.filter((step) => step.kind !== "pipeline") });
 
   const commands = plan.filter((step) => step.target.kind === "command");
   const runs = (await listRuns()).filter((run) => run.alive);
@@ -926,7 +926,7 @@ export async function downBolt(
 
   // Teardown: the compose services it started, then its `down` steps — this bolt's, and
   // with `deps`, each dependency's — once each.
-  const owners = options.deps ? uniqueBolts(plan) : [{ workspace, bolt: bolt.label }];
+  const owners = options.deps ? uniquePipelines(plan) : [{ workspace, bolt: bolt.label }];
   const teardownSteps: PlannedStep[] = plan
     .filter((step) => step.target.kind === "compose" && step.target.compose)
     .map((step) => ({ ...step, key: `${step.key}#stop`, deps: [], keepGoing: false, target: composeTarget(step.target.compose!, "stop") }));
@@ -934,7 +934,7 @@ export async function downBolt(
   for (const owner of owners) {
     const source = owner.workspace.bolts.find((entry) => entry.label === owner.bolt);
     if (!source?.down?.length) continue;
-    const steps = await planBolt(owner.workspace, { ...source, steps: source.down.filter((step) => step.kind !== "pipeline"), keepGoing: false });
+    const steps = await planPipeline(owner.workspace, { ...source, steps: source.down.filter((step) => step.kind !== "pipeline"), keepGoing: false });
     teardownSteps.push(
       ...steps.map((step) => ({
         ...step,
@@ -984,39 +984,39 @@ export function fillPlan(plan: PlannedStep[], values: InputValues): PlannedStep[
   return plan.map((step) => ({ ...step, target: fillTarget(step.target, values) }));
 }
 
-async function boltsOf(workspace: Workspace, bolt: Bolt): Promise<Bolt[]> {
-  const plan = await planBolt(workspace, bolt);
-  const found = [bolt, ...uniqueBolts(plan).map((owner) => owner.workspace.bolts.find((entry) => entry.label === owner.bolt))];
-  return [...new Set(found.filter((entry): entry is Bolt => entry !== undefined))];
+async function pipelinesOf(workspace: Workspace, bolt: Pipeline): Promise<Pipeline[]> {
+  const plan = await planPipeline(workspace, bolt);
+  const found = [bolt, ...uniquePipelines(plan).map((owner) => owner.workspace.bolts.find((entry) => entry.label === owner.bolt))];
+  return [...new Set(found.filter((entry): entry is Pipeline => entry !== undefined))];
 }
 
-export async function questionsFor(workspace: Workspace, bolt: Bolt, values: InputValues = {}): Promise<string[]> {
+export async function questionsFor(workspace: Workspace, bolt: Pipeline, values: InputValues = {}): Promise<string[]> {
   const questions: string[] = [];
-  for (const owner of await boltsOf(workspace, bolt)) {
+  for (const owner of await pipelinesOf(workspace, bolt)) {
     const question = owner.confirm ? fillText(owner.confirm, values) : undefined;
     if (question && !questions.includes(question)) questions.push(question);
   }
   return questions;
 }
 
-export async function inputsFor(workspace: Workspace, bolt: Bolt): Promise<InputSpec[]> {
+export async function inputsFor(workspace: Workspace, bolt: Pipeline): Promise<InputSpec[]> {
   const specs: InputSpec[] = [];
-  for (const owner of await boltsOf(workspace, bolt)) {
+  for (const owner of await pipelinesOf(workspace, bolt)) {
     for (const spec of owner.inputs ?? []) if (!specs.some((known) => known.name === spec.name)) specs.push(spec);
   }
   return specs;
 }
 
-function uniqueBolts(plan: PlannedStep[]): { workspace: Workspace; bolt: string }[] {
+function uniquePipelines(plan: PlannedStep[]): { workspace: Workspace; bolt: string }[] {
   const seen = new Map<string, { workspace: Workspace; bolt: string }>();
   for (const step of plan) seen.set(`${step.workspace.file}#${step.bolt}`, { workspace: step.workspace, bolt: step.bolt });
   return [...seen.values()];
 }
 
 /** How much of a bolt is up: its own commands, against what Wisp has running. */
-export function boltStatus(
+export function pipelineStatus(
   workspace: Workspace,
-  bolt: Bolt,
+  bolt: Pipeline,
   runs: RunStatus[],
   containers: Container[] = [],
 ): { commands: number; running: number; failing: number } {
@@ -1042,7 +1042,7 @@ export function boltStatus(
   return { commands, running, failing };
 }
 
-export function keepsRunning(read: WorkspaceRead, bolt: Bolt): string[] {
+export function keepsRunning(read: WorkspaceRead, bolt: Pipeline): string[] {
   const ids = new Set(bolt.steps.flatMap((step) => (step.kind === "asset" && step.id.startsWith("command:") ? [step.id] : [])));
   return read.declaredCommands.filter((command) => ids.has(command.id) && !command.finishes).map((command) => command.label);
 }
@@ -1056,12 +1056,12 @@ export function composeFiles(workspace: Workspace): string[] {
 /**
  * A bolt named by any distinctive part of its label.
  *
- * Bolt labels are written to be read ("API development"), which makes them the worst
+ * Pipeline labels are written to be read ("API development"), which makes them the worst
  * thing to type. One rule: an exact id or label wins, and otherwise the needle has to
  * be whole words of exactly one label. Not a prefix rule — bolts are named after jobs and jobs
  * cluster ("Work on core", "Work on the app"), so the distinguishing word is at the end.
  */
-export function matchBolt(workspace: Workspace, ref: string): { bolt?: Bolt; candidates: Bolt[] } {
+export function matchPipeline(workspace: Workspace, ref: string): { bolt?: Pipeline; candidates: Pipeline[] } {
   const needle = ref.trim().toLowerCase();
   if (!needle) return { candidates: [] };
 
@@ -1073,22 +1073,22 @@ export function matchBolt(workspace: Workspace, ref: string): { bolt?: Bolt; can
   if (exact) return { bolt: exact, candidates: [exact] };
 
   // A slug is the label with its spaces punched out — the form a shell history hands back.
-  const bySlug = bolts.filter((bolt) => slugify(bolt.label) === slugify(needle));
-  if (bySlug.length === 1) return { bolt: bySlug[0] as Bolt, candidates: bySlug };
+  const bySlug = bolts.filter((bolt) => pipelineSlug(bolt) === slugify(needle) || slugify(bolt.label) === slugify(needle));
+  if (bySlug.length === 1) return { bolt: bySlug[0] as Pipeline, candidates: bySlug };
 
   const matches = bolts.filter((bolt) => hasWords(bolt.label, needle));
-  if (matches.length === 1) return { bolt: matches[0] as Bolt, candidates: matches };
+  if (matches.length === 1) return { bolt: matches[0] as Pipeline, candidates: matches };
 
   return { candidates: matches };
 }
 
-export function findBolt(workspace: Workspace, ref: string): Bolt | undefined {
-  return matchBolt(workspace, ref).bolt;
+export function findPipeline(workspace: Workspace, ref: string): Pipeline | undefined {
+  return matchPipeline(workspace, ref).bolt;
 }
 
-/** Like {@link findBolt}, but says what went wrong. */
-export function resolveBolt(workspace: Workspace, ref: string): Bolt {
-  const { bolt, candidates } = matchBolt(workspace, ref);
+/** Like {@link findPipeline}, but says what went wrong. */
+export function resolvePipeline(workspace: Workspace, ref: string): Pipeline {
+  const { bolt, candidates } = matchPipeline(workspace, ref);
   if (bolt) return bolt;
 
   if (candidates.length > 1) {
@@ -1107,20 +1107,20 @@ export function resolveBolt(workspace: Workspace, ref: string): Bolt {
 }
 
 /** The steps a bolt lists, without its needs — for showing a bolt rather than running it. */
-export function collectBoltTargets(workspace: Workspace, bolt: Bolt): SwitchTarget[] {
+export function collectPipelineTargets(workspace: Workspace, bolt: Pipeline): SwitchTarget[] {
   return listSteps(workspace, bolt.steps);
 }
 
 /** The same, for a bolt's `down` steps. */
-export function collectDownTargets(workspace: Workspace, bolt: Bolt): SwitchTarget[] {
+export function collectDownTargets(workspace: Workspace, bolt: Pipeline): SwitchTarget[] {
   return listSteps(workspace, bolt.down ?? []);
 }
 
-function listSteps(workspace: Workspace, steps: BoltStep[]): SwitchTarget[] {
+function listSteps(workspace: Workspace, steps: PipelineStep[]): SwitchTarget[] {
   return stepTargets(workspace, steps).filter((target): target is SwitchTarget => target !== undefined);
 }
 
-export function stepTargets(workspace: Workspace, steps: BoltStep[]): (SwitchTarget | undefined)[] {
+export function stepTargets(workspace: Workspace, steps: PipelineStep[]): (SwitchTarget | undefined)[] {
   const byId = new Map(collectTargets(workspace).map((target) => [target.id, target]));
   return steps.map((step) => {
     const target = listStep(step, byId, workspace)[0];
@@ -1128,7 +1128,7 @@ export function stepTargets(workspace: Workspace, steps: BoltStep[]): (SwitchTar
   });
 }
 
-function listStep(step: BoltStep, byId: Map<string, SwitchTarget>, workspace: Workspace): SwitchTarget[] {
+function listStep(step: PipelineStep, byId: Map<string, SwitchTarget>, workspace: Workspace): SwitchTarget[] {
   return [step].flatMap((step): SwitchTarget[] => {
     if (step.kind === "wait") {
       return [{ kind: "wait", id: "wait", label: describeWait(step.wait), value: describeWait(step.wait), wait: step.wait }];

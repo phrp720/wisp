@@ -10,7 +10,7 @@ import { listRuns, matchRun, questionIn, startRun, stopRun, type RunStatus } fro
 import { loginShell, posixQuote, shellInvocation, windowsQuote } from "./shell.js";
 import { configDir, securePrivateFolders, stateDir } from "./paths.js";
 import { sameUrl } from "./url.js";
-import { matchWorkspace } from "./workspaces.js";
+import { matchWorkspace, resolveWorkspace, sharedNames } from "./workspaces.js";
 import type { Workspace } from "./types.js";
 
 let dir: string;
@@ -243,6 +243,19 @@ describe("matchWorkspace", () => {
     expect(matchWorkspace("inf", all).match).toBeUndefined();
     expect(matchWorkspace("acme-infra", all).match?.name).toBe("Acme Infra");
     expect(matchWorkspace("pers", all).match).toBeUndefined();
+  });
+  it("refuses a name two workspaces share, and says how to run one anyway", () => {
+    const twins = [{ id: "/dev/acme/.wisp.json", name: "Acme", file: "/dev/acme/.wisp.json" }, { id: "/work/acme/.wisp.json", name: "Acme", file: "/work/acme/.wisp.json" }] as Workspace[];
+    expect(sharedNames(twins)).toEqual(new Set(["acme"]));
+    expect(sharedNames(all)).toEqual(new Set());
+    let error: unknown;
+    try {
+      resolveWorkspace("acme", twins);
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toMatchObject({ code: "AMBIGUOUS", message: '"acme" matches several workspaces: Acme (/dev/acme/.wisp.json), Acme (/work/acme/.wisp.json)' });
+    expect((error as { hint: string }).hint).toContain("`wisp use /dev/acme/.wisp.json <pipeline>`");
   });
 });
 

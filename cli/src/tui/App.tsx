@@ -8,15 +8,15 @@ import { checkValue } from "../core/inputs.js";
 import { tildify } from "../core/paths.js";
 import type { RunStatus } from "../core/processes.js";
 import { composeFiles, retryPlan } from "../core/switch.js";
-import type { Bolt, Diagnostic, SwitchResult, WorkspaceRead } from "../core/types.js";
+import type { Pipeline, Diagnostic, SwitchResult, WorkspaceRead } from "../core/types.js";
 import { flow } from "./steps.js";
 import { Footer, Header, headerTabAt, runningStatus } from "./chrome.js";
 import { SetupPanel, TrustPanel } from "./dialogs.js";
-import { BoltEditor } from "./editor.js";
+import { PipelineEditor } from "./editor.js";
 import { Choice, Form } from "./forms.js";
 import { type Glyphs, glyphs as defaultGlyphs } from "./glyphs.js";
 import { HistoryScreen } from "./history.js";
-import { boltWindow, Empty, FIRST_BOLT_LINE, SearchPanel, WorkspaceList, workspaceListWidth, WorkspacePanel, workspaceRows } from "./home.js";
+import { pipelineWindow, Empty, FIRST_PIPELINE_LINE, SearchPanel, WorkspaceList, workspaceListWidth, WorkspacePanel, workspaceRows } from "./home.js";
 import { type Library, ordered, search, type Services } from "./model.js";
 import { HelpPanel, RunProgress } from "./panels.js";
 import { SettingsScreen } from "./settings.js";
@@ -48,7 +48,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
   // Read by the key handler through their refs, which update the moment they are set: keys
   // can arrive faster than React re-renders, and each must see what the one before did.
   const [wsIndex, setWsIndex, wsRef] = useLatest(0);
-  const [boltIndex, setBoltIndex, boltRef] = useLatest(0);
+  const [pipelineIndex, setPipelineIndex, pipelineRef] = useLatest(0);
   const [focus, setFocus, focusRef] = useLatest<Focus>(initial && startsOnPipelines(initial) ? "bolts" : "workspaces");
   const [view, setView, viewRef] = useLatest<View>({ kind: "browse" });
   const [message, setMessage, messageRef] = useLatest<string | undefined>(undefined);
@@ -63,7 +63,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
   useEffect(() => {
     setDetailScroll(0);
     if (activeRef.current?.done) setRunPinned(false);
-  }, [wsIndex, boltIndex, activeRef]);
+  }, [wsIndex, pipelineIndex, activeRef]);
   const abort = useRef<AbortController | undefined>(undefined);
   const [containers, setContainers] = useState<Container[]>([]);
   const [dockerError, setDockerError] = useState<string>();
@@ -138,7 +138,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
   const workspaceNames = useMemo(() => new Map(reads.map((read) => [read.workspace.file, read.workspace.name])), [reads]);
   const current = reads[Math.min(wsIndex, Math.max(0, reads.length - 1))];
   const bolts = current?.workspace.bolts ?? [];
-  const bolt = bolts[Math.min(boltIndex, Math.max(0, bolts.length - 1))];
+  const bolt = bolts[Math.min(pipelineIndex, Math.max(0, bolts.length - 1))];
   const [checked, setChecked] = useState<{ read: WorkspaceRead; diagnostics: Diagnostic[] }>();
   const formOpen = useRef(false);
   const setFormOpen = useCallback((busy: boolean) => {
@@ -411,15 +411,15 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
    * Run steps — a whole bolt, or a retry of part of one — showing each as it goes. The
    * progress is kept in `active`, whichever screen is showing.
    */
-  const selectBolt = useCallback(
+  const selectPipeline = useCallback(
     (read: WorkspaceRead, label: string) => {
       const workspaceAt = reads.findIndex((candidate) => candidate.workspace.file === read.workspace.file);
       if (workspaceAt >= 0) setWsIndex(workspaceAt);
-      const boltAt = read.workspace.bolts.findIndex((entry) => entry.label === label);
-      if (boltAt >= 0) setBoltIndex(boltAt);
+      const pipelineAt = read.workspace.bolts.findIndex((entry) => entry.label === label);
+      if (pipelineAt >= 0) setPipelineIndex(pipelineAt);
       setFocus("bolts");
     },
-    [reads, setWsIndex, setBoltIndex, setFocus],
+    [reads, setWsIndex, setPipelineIndex, setFocus],
   );
 
   const begin = useCallback(
@@ -441,7 +441,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
       const controller = new AbortController();
       abort.current = controller;
       setActive({ title, read, bolt: label, dryRun, steps: [], done: false, output: [], started: [] });
-      selectBolt(read, label);
+      selectPipeline(read, label);
       setRunPinned(true);
       setView({ kind: "browse" });
       const update = (change: (state: RunState) => RunState) => setActive((prior) => (prior ? change(prior) : prior));
@@ -479,7 +479,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
         abort.current = undefined;
       }
     },
-    [setActive, setView, selectBolt],
+    [setActive, setView, selectPipeline],
   );
 
   const pendingRun = useRef<(() => void) | undefined>(undefined);
@@ -493,11 +493,11 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
       title: string,
       recorded?: Record<string, string>,
     ) => {
-      const showBolt = () => selectBolt(read, label);
+      const showPipeline = () => selectPipeline(read, label);
       const confirmThen = (values: Record<string, string>, questions: string[]) => {
         if (questions.length === 0) return begin(read, label, dryRun, start, title, values);
         pendingRun.current = () => void begin(read, label, dryRun, start, title, values);
-        showBolt();
+        showPipeline();
         setView({ kind: "confirm-run", file: read.workspace.file, bolt: label, question: questions.join(" ") });
       };
       const questionsWith = (values: Record<string, string>) => (dryRun ? Promise.resolve([]) : services.questions(read, label, values).catch(() => []));
@@ -506,13 +506,13 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
       const ask = async (values: Record<string, string>) => confirmThen(values, await questionsWith(values));
       if (dryRun) return ask(Object.fromEntries(specs.flatMap((spec) => (spec.default ? [[spec.name, spec.default]] : []))));
       pendingInputs.current = (values) => void ask(values);
-      showBolt();
+      showPipeline();
       setView({ kind: "run-inputs", file: read.workspace.file, workspace: read.workspace.name, bolt: label, specs });
     },
-    [services, begin, selectBolt, setView],
+    [services, begin, selectPipeline, setView],
   );
 
-  const runBolt = useCallback(
+  const runPipeline = useCallback(
     async (read: WorkspaceRead, label: string, dryRun: boolean) => {
       // Not half a run: a bolt with steps waiting for trust asks first. A dry run still goes
       // ahead, since showing what would be skipped is its point.
@@ -562,7 +562,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
    * Work on web alone leaves the database up, which is right when something else uses it and
    * a surprise when nothing does.
    */
-  const stopBolt = (read: WorkspaceRead, target: Bolt, deps: boolean) => {
+  const stopPipeline = (read: WorkspaceRead, target: Pipeline, deps: boolean) => {
     setMessage(`Stopping ${target.label}${deps ? " and what it needed" : ""}…`);
     void services
       .down(read, target, { deps })
@@ -574,9 +574,9 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
       })
       .catch((error: unknown) => setMessage(describe(error)));
   };
-  const askStop = (read: WorkspaceRead, target: Bolt) => {
+  const askStop = (read: WorkspaceRead, target: Pipeline) => {
     const needs = flow(read, target).filter((name) => name !== target.label);
-    if (needs.length === 0) return stopBolt(read, target, false);
+    if (needs.length === 0) return stopPipeline(read, target, false);
     // Other bolts with something up that need the same ones: stopping those would break them.
     const sharedWith = reads.flatMap((other) =>
       other.workspace.bolts
@@ -609,10 +609,10 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
     if (notice) setNotice(undefined);
     const focus = focusRef.current;
     const wsIndex = wsRef.current;
-    const boltIndex = boltRef.current;
+    const pipelineIndex = pipelineRef.current;
     const current = reads[Math.min(wsIndex, Math.max(0, reads.length - 1))];
     const bolts = current?.workspace.bolts ?? [];
-    const bolt = bolts[Math.min(boltIndex, Math.max(0, bolts.length - 1))];
+    const bolt = bolts[Math.min(pipelineIndex, Math.max(0, bolts.length - 1))];
     if (messageRef.current) setMessage(undefined);
 
     if (view.kind === "search") {
@@ -626,11 +626,11 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
         const read = reads[hit.workspace] as WorkspaceRead;
         setWsIndex(hit.workspace);
         if (hit.bolt) {
-          setBoltIndex(Math.max(0, read.workspace.bolts.findIndex((entry) => entry.label === hit.bolt)));
+          setPipelineIndex(Math.max(0, read.workspace.bolts.findIndex((entry) => entry.label === hit.bolt)));
           setFocus("bolts");
-          void runBolt(read, hit.bolt, false);
+          void runPipeline(read, hit.bolt, false);
         } else {
-          setBoltIndex(0);
+          setPipelineIndex(0);
           setFocus("bolts");
           setView({ kind: "browse" });
         }
@@ -691,21 +691,21 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
       // A bolt: stop all of it, restart it, or go into its first task.
       if (item?.type === "group") {
         const read = reads.find((candidate) => candidate.workspace.file === item.group.workspace);
-        const boltDef = read?.workspace.bolts.find((entry) => entry.label === item.group.bolt);
+        const pipelineDef = read?.workspace.bolts.find((entry) => entry.label === item.group.bolt);
         if (key.return) return setView({ ...rest, index: at + 1, scroll: 0 });
-        if (input === "x" && read && boltDef) return askStop(read, boltDef);
-        if (input === "r" && read && boltDef) {
+        if (input === "x" && read && pipelineDef) return askStop(read, pipelineDef);
+        if (input === "r" && read && pipelineDef) {
           const restart = true;
-          setMessage(`${restart ? "Restarting" : "Stopping"} ${boltDef.label}…`);
+          setMessage(`${restart ? "Restarting" : "Stopping"} ${pipelineDef.label}…`);
           void services
-            .down(read, boltDef)
+            .down(read, pipelineDef)
             .then(async (result) => {
               for (const stopped of result.stopped) expected.current.add(stopped.id);
               setRuns(await services.runs());
               if (restart) {
                 if (result.stopped.length > 0) await new Promise((done) => setTimeout(done, 500));
-                await runBolt(read, boltDef.label, false);
-              } else say(`${boltDef.label}: stopped ${result.stopped.length}`);
+                await runPipeline(read, pipelineDef.label, false);
+              } else say(`${pipelineDef.label}: stopped ${result.stopped.length}`);
             })
             .catch((error: unknown) => setMessage(describe(error)));
           return;
@@ -716,7 +716,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
       if (item?.type === "current") {
         const run = activeRef.current;
         if (key.return && run) {
-          selectBolt(run.read, run.bolt);
+          selectPipeline(run.read, run.bolt);
           setRunPinned(true);
           return setView({ kind: "browse" });
         }
@@ -821,12 +821,12 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
       if (up || down) {
         const next = clamp(wsIndex + (up ? -1 : 1), reads.length);
         setWsIndex(next);
-        setBoltIndex(0);
+        setPipelineIndex(0);
         return;
       }
       if (key.return) return setFocus("bolts");
     } else if (up || down) {
-      return setBoltIndex(clamp(boltIndex + (up ? -1 : 1), bolts.length));
+      return setPipelineIndex(clamp(pipelineIndex + (up ? -1 : 1), bolts.length));
     }
 
     if (!current) return;
@@ -853,9 +853,9 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
       const by = input === "K" ? -1 : 1;
       savedAt.current = Date.now();
       void services.editing
-        .moveBolt(current.workspace.file, bolt.label, by)
+        .movePipeline(current.workspace.file, bolt.label, by)
         .then(() => reload(current.workspace.file))
-        .then(() => setBoltIndex(Math.max(0, Math.min(bolts.length - 1, boltIndex + by))))
+        .then(() => setPipelineIndex(Math.max(0, Math.min(bolts.length - 1, pipelineIndex + by))))
         .catch((error: unknown) => setMessage(describe(error)));
       return;
     }
@@ -871,7 +871,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
           setRuns(await services.runs());
           if (restart) {
             if (result.stopped.length > 0) await new Promise((done) => setTimeout(done, 500));
-            await runBolt(current, bolt.label, false);
+            await runPipeline(current, bolt.label, false);
           }
         })
         .catch((error: unknown) => setMessage(describe(error)));
@@ -886,7 +886,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
         if (input === "c") return setMessage("no pipelines yet: a adds one");
         return setView({ kind: "new-bolt", file: current.workspace.file, workspace: current.workspace.name });
       }
-      void runBolt(current, bolt.label, input === "c");
+      void runPipeline(current, bolt.label, input === "c");
     }
   }, { isActive: !SELF_DRIVEN.has(view.kind) });
 
@@ -946,13 +946,13 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
       if (event.x < workspaceListWidth(columns)) {
         if (event.kind === "wheel") {
           setWsIndex(clamp(wsRef.current + event.by, reads.length));
-          setBoltIndex(0);
+          setPipelineIndex(0);
           setFocus("workspaces");
           return true;
         }
         const row = workspaceRows(reads, library.here, wsRef.current, bodyHeight)[y - 2];
         if (row && "at" in row) {
-          if (row.at !== wsRef.current) setBoltIndex(0);
+          if (row.at !== wsRef.current) setPipelineIndex(0);
           setWsIndex(row.at);
           setFocus("workspaces");
         }
@@ -961,20 +961,20 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
       // The selected workspace's bolts. A click selects one; ⏎ runs it, as ever.
       const list = reads[Math.min(wsRef.current, reads.length - 1)]?.workspace.bolts ?? [];
       if (list.length === 0) return event.kind === "wheel";
-      const { items, offset, split, topHeight } = boltWindow(list, boltRef.current, bodyHeight);
+      const { items, offset, split, topHeight } = pipelineWindow(list, pipelineRef.current, bodyHeight);
       if (event.kind === "wheel") {
         if (split && y >= topHeight) {
           setDetailScroll((top) => Math.max(0, Math.min(detailLimit.current, top + event.by * 3)));
           return true;
         }
         setFocus("bolts");
-        setBoltIndex(clamp(boltRef.current + event.by, list.length));
+        setPipelineIndex(clamp(pipelineRef.current + event.by, list.length));
         return true;
       }
-      const at = y - FIRST_BOLT_LINE;
+      const at = y - FIRST_PIPELINE_LINE;
       if (at >= 0 && at < items.length) {
         setFocus("bolts");
-        setBoltIndex(offset + at);
+        setPipelineIndex(offset + at);
       }
       return true;
     }
@@ -992,15 +992,15 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
       .catch((error: unknown) => setMessage(describe(error)));
   }
 
-  function deleteBolt(asked: Extract<View, { kind: "delete-bolt" }>, yes: boolean) {
+  function deletePipeline(asked: Extract<View, { kind: "delete-bolt" }>, yes: boolean) {
     setView({ kind: "browse" });
     if (!yes) return;
     savedAt.current = Date.now();
     void services.editing
-      .removeBolt(asked.file, asked.bolt)
+      .removePipeline(asked.file, asked.bolt)
       .then(() => reload(asked.file))
       .then(() => {
-        setBoltIndex(Math.max(0, boltIndex - 1));
+        setPipelineIndex(Math.max(0, pipelineIndex - 1));
         say(`Deleted "${asked.bolt}"`);
       })
       .catch((error: unknown) => setMessage(describe(error)));
@@ -1066,7 +1066,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
           }}
         />
       ) : view.kind === "editor" ? (
-        <BoltEditor
+        <PipelineEditor
           onSaving={() => (savedAt.current = Date.now())}
           file={view.file}
           bolt={view.bolt}
@@ -1089,7 +1089,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
             void reload(view.file).then((next) => {
               const read = next ? ordered(next).find((entry) => entry.workspace.file === view.file) : undefined;
               const at = read?.workspace.bolts.findIndex((entry) => entry.label === label) ?? -1;
-              if (at >= 0) setBoltIndex(at);
+              if (at >= 0) setPipelineIndex(at);
             });
             if (label !== view.bolt) setView({ ...view, bolt: label });
           }}
@@ -1109,13 +1109,13 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
             const label = values["label"]?.trim() ?? "";
             try {
               savedAt.current = Date.now();
-              await services.editing.addBolt(view.file, label);
+              await services.editing.addPipeline(view.file, label);
             } catch (error) {
               return { label: describe(error) };
             }
             const next = await reload(view.file);
             const read = next ? ordered(next).find((entry) => entry.workspace.file === view.file) : undefined;
-            setBoltIndex(Math.max(0, read?.workspace.bolts.findIndex((entry) => entry.label === label) ?? 0));
+            setPipelineIndex(Math.max(0, read?.workspace.bolts.findIndex((entry) => entry.label === label) ?? 0));
             setFocus("bolts");
             setView({ kind: "editor", file: view.file, bolt: label, adding: true });
             return undefined;
@@ -1138,7 +1138,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
               return { name: describe(error) };
             }
             await reload(file);
-            setBoltIndex(0);
+            setPipelineIndex(0);
             setFocus("bolts");
             // Straight to its first bolt: a workspace is only as useful as what it runs.
             setView({ kind: "new-bolt", file, workspace: values["name"]?.trim() ?? "" });
@@ -1203,7 +1203,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
               const read = reads.find((candidate) => candidate.workspace.file === view.file);
               const target = read?.workspace.bolts.find((entry) => entry.label === view.bolt);
               setView({ kind: "browse" });
-              if (read && target) stopBolt(read, target, deps);
+              if (read && target) stopPipeline(read, target, deps);
             }}
             onCancel={() => setView({ kind: "browse" })}
           />
@@ -1233,7 +1233,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
           onRerun={(entry) => {
             const read = reads.find((candidate) => candidate.workspace.file === entry.workspace);
             if (!read) return setMessage(`${entry.workspaceName} is not in the list any more`);
-            void runBolt(read, entry.bolt.replace(/ \((retry|down)\)$/, ""), false);
+            void runPipeline(read, entry.bolt.replace(/ \((retry|down)\)$/, ""), false);
           }}
         />
       ) : view.kind === "trust" ? (
@@ -1252,7 +1252,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
               .then(async (next) => {
                 say(`trusted ${read.workspace.name} — its commands will run`);
                 const fresh = next ? ordered(next).find((entry) => entry.workspace.file === read.workspace.file) : undefined;
-                if (then && fresh) await runBolt(fresh, then, false);
+                if (then && fresh) await runPipeline(fresh, then, false);
               })
               .catch((error: unknown) => setMessage(describe(error)));
           }}
@@ -1285,7 +1285,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
             <WorkspacePanel
               confirming={
                 view.kind === "delete-bolt"
-                  ? { question: `Delete "${view.bolt}"?`, yes: "Delete", onAnswer: (yes) => deleteBolt(view, yes) }
+                  ? { question: `Delete "${view.bolt}"?`, yes: "Delete", onAnswer: (yes) => deletePipeline(view, yes) }
                   : view.kind === "confirm-run"
                     ? {
                         question: view.question,
@@ -1351,7 +1351,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
               scrollLimit={detailLimit}
               here={current.workspace.file === library.here}
               width={columns - workspaceListWidth(columns) - 4}
-              boltIndex={boltIndex}
+              pipelineIndex={pipelineIndex}
               focused={focus === "bolts"}
               glyphs={glyphs}
               height={bodyHeight}

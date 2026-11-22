@@ -2,7 +2,7 @@ import { WispError } from "../../core/errors.js";
 import { tildify } from "../../core/paths.js";
 import { listRuns } from "../../core/processes.js";
 import type { WorkspaceRead } from "../../core/types.js";
-import { discoverWorkspaces, slugify } from "../../core/workspaces.js";
+import { discoverWorkspaces, slugify, pipelineSlug } from "../../core/workspaces.js";
 import { counts, dim } from "../format.js";
 import { maybeProject, workspaceFor } from "../lib/context.js";
 import type { CommandDef } from "../lib/define.js";
@@ -63,7 +63,7 @@ export const pick: CommandDef<PickOptions> = {
       workspace.bolts.map((bolt) => ({
         label: bolt.label,
         ...(upMark(workspace, bolt, runs) ? { mark: upMark(workspace, bolt, runs) } : {}),
-        slug: slugify(bolt.label),
+        slug: pipelineSlug(bolt),
         ...(bolt.notes ? { hint: bolt.notes } : {}),
       })),
     );
@@ -75,7 +75,7 @@ export const pick: CommandDef<PickOptions> = {
     await use.run([workspace.file, bolt.label], run);
 
     if (process.exitCode === 1) return;
-    const typed = here?.workspace.file === workspace.file ? slugify(bolt.label) : `${slugify(workspace.name)} ${slugify(bolt.label)}`;
+    const typed = here?.workspace.file === workspace.file ? pipelineSlug(bolt) : `${slugify(workspace.name)} ${pipelineSlug(bolt)}`;
     console.log(dim(`Next time: \`wisp ${typed}\``));
   },
 };

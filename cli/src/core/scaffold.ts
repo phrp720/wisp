@@ -97,7 +97,7 @@ export async function guessName(from: string = process.cwd()): Promise<string> {
  * Only the bolts chosen, by name. A kept bolt that needed one left out no longer asks for
  * it: "Work on api" without "Services" just starts the api.
  */
-export function chooseBolts(all: DraftBolt[], only?: string[]): DraftBolt[] {
+export function choosePipelines(all: DraftPipeline[], only?: string[]): DraftPipeline[] {
   if (!only) return all;
   const wanted = new Set(only.map((name) => name.trim().toLowerCase()));
   const kept = all.filter((bolt) => wanted.has(bolt.label.toLowerCase()));
@@ -545,7 +545,7 @@ function titleCase(value: string): string {
 }
 
 type Step = Record<string, unknown>;
-export interface DraftBolt {
+export interface DraftPipeline {
   label: string;
   color?: string;
   steps: Step[];
@@ -553,8 +553,8 @@ export interface DraftBolt {
 }
 
 /** The bolts a person would write after reading the same files. */
-export function bolts(detected: Detected, random: () => number = Math.random): DraftBolt[] {
-  const out: DraftBolt[] = [];
+export function bolts(detected: Detected, random: () => number = Math.random): DraftPipeline[] {
+  const out: DraftPipeline[] = [];
   const services = detected.compose?.services ?? [];
 
   if (services.length > 0) {
@@ -621,7 +621,7 @@ function format(detected: Detected, only?: string[]): string {
     // in any editor that reads JSON Schema.
     ["$schema", PROJECT_SCHEMA_URL],
     ["name", detected.name],
-    ["pipelines", chooseBolts(bolts(detected), only)],
+    ["pipelines", choosePipelines(bolts(detected), only)],
   ]);
 }
 
@@ -653,7 +653,7 @@ export function formatProjectFile(sections: [key: string, value: unknown][]): st
       }
       if (value.length === 0) continue;
       flush();
-      const body = key === "pipelines" ? (value as (DraftBolt & Record<string, unknown>)[]).map(boltBlock).join(",\n") : rows(value as Record<string, unknown>[]);
+      const body = key === "pipelines" ? (value as (DraftPipeline & Record<string, unknown>)[]).map(pipelineBlock).join(",\n") : rows(value as Record<string, unknown>[]);
       groups.push([`  ${JSON.stringify(key)}: [\n${body}\n  ]`]);
       continue;
     }
@@ -669,7 +669,7 @@ export function formatProjectFile(sections: [key: string, value: unknown][]): st
  * One bolt as a block: its name and settings first, then one step per line. Every field
  * is kept, in the order written — the file may hold what a person added by hand.
  */
-function boltBlock(bolt: DraftBolt & Record<string, unknown>): string {
+function pipelineBlock(bolt: DraftPipeline & Record<string, unknown>): string {
   const keys = ["label", ...Object.keys(bolt).filter((key) => key !== "label" && key !== "steps" && key !== "down"), "steps", ...("down" in bolt ? ["down"] : [])];
   const lines = keys.map((key) => {
     const value = bolt[key];

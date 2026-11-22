@@ -7,9 +7,9 @@ import type { Container } from "../core/docker.js";
 import { baseLabel, type HistoryEntry } from "../core/history.js";
 import { tildify } from "../core/paths.js";
 import type { RunStatus } from "../core/processes.js";
-import { boltStatus } from "../core/switch.js";
-import type { Bolt, Diagnostic, WorkspaceRead } from "../core/types.js";
-import { slugify } from "../core/workspaces.js";
+import { pipelineStatus } from "../core/switch.js";
+import type { Pipeline, Diagnostic, WorkspaceRead } from "../core/types.js";
+import { sharedNames, slugify } from "../core/workspaces.js";
 import { shortest } from "../cli/lib/render.js";
 import { AskHere } from "./forms.js";
 import type { Glyphs } from "./glyphs.js";
@@ -33,6 +33,7 @@ export interface Asking {
 export function WorkspaceList(props: { reads: WorkspaceRead[]; index: number; here?: string | undefined; focused: boolean; glyphs: Glyphs; height: number; width: number; confirming?: Asking | undefined }) {
   const { reads, index, here, focused, glyphs, height, width, confirming } = props;
   const items = workspaceRows(reads, here, index, height - (confirming ? 3 : 0));
+  const shared = sharedNames(reads.map((read) => read.workspace));
 
   return (
     <Box flexDirection="column" width={width} flexShrink={0} borderStyle={glyphs.border} borderColor={focused ? TONE.accent : "gray"} paddingX={1} overflow="hidden">
@@ -59,6 +60,7 @@ export function WorkspaceList(props: { reads: WorkspaceRead[]; index: number; he
               {read.workspace.icon && glyphs.border === "round" ? `${read.workspace.icon} ` : ""}
               <Text color={selected && confirming ? "red" : selected && focused ? undefined : read.workspace.color} inverse={selected && (focused || Boolean(confirming))}>{read.workspace.name}</Text>
               {warn ? <Text color={TONE.busy} bold>{" !"}</Text> : null}
+              {shared.has(slugify(read.workspace.name)) ? <Text dimColor>{` ${read.workspace.personal ? "personal" : tildify(read.workspace.file.replace(/[\\/]\.wisp\.json$/, ""))}`}</Text> : null}
             </Text>
             {selected && confirming ? <AskHere stacked question={confirming.question} yes={confirming.yes} onAnswer={confirming.onAnswer} /> : null}
           </Fragment>
@@ -90,21 +92,21 @@ export function workspaceRows(reads: WorkspaceRead[], here: string | undefined, 
 }
 
 /** The line of the bolts panel its first bolt is on, counted from the panel's top border. */
-export const FIRST_BOLT_LINE = 5;
+export const FIRST_PIPELINE_LINE = 5;
 
 const HEAD = 6;
 
-export function boltWindow<T>(bolts: T[], boltIndex: number, height: number, asking = false): { items: T[]; offset: number; split: boolean; topHeight: number; stepRoom: number } {
+export function pipelineWindow<T>(bolts: T[], pipelineIndex: number, height: number, asking = false): { items: T[]; offset: number; split: boolean; topHeight: number; stepRoom: number } {
   if (height >= 18 && bolts.length > 0) {
     const rows = Math.max(1, Math.min(bolts.length, Math.floor(height / 2) - HEAD));
-    return { ...windowed(bolts, boltIndex, rows), split: true, topHeight: HEAD + rows + (asking ? 1 : 0), stepRoom: 0 };
+    return { ...windowed(bolts, pipelineIndex, rows), split: true, topHeight: HEAD + rows + (asking ? 1 : 0), stepRoom: 0 };
   }
   const listRoom = Math.max(2, height - HEAD - 2);
   const rows = Math.max(1, Math.min(bolts.length, Math.ceil(listRoom / 2)));
-  return { ...windowed(bolts, boltIndex, rows), split: false, topHeight: height, stepRoom: Math.max(1, listRoom - rows - (asking ? 1 : 0)) };
+  return { ...windowed(bolts, pipelineIndex, rows), split: false, topHeight: height, stepRoom: Math.max(1, listRoom - rows - (asking ? 1 : 0)) };
 }
 
-interface BoltState {
+interface PipelineState {
   text: string;
   color: string;
   dim?: boolean;
@@ -113,7 +115,7 @@ interface BoltState {
 export function WorkspacePanel(props: {
   read: WorkspaceRead;
   reads: WorkspaceRead[];
-  boltIndex: number;
+  pipelineIndex: number;
   focused: boolean;
   glyphs: Glyphs;
   height: number;
@@ -128,18 +130,18 @@ export function WorkspacePanel(props: {
   instead?: ((room: number) => ReactNode) | undefined;
   diagnostics?: Diagnostic[];
 }) {
-  const { read, reads, boltIndex, focused, glyphs, height, width = 80, here = false, runs, containers, history, confirming, scroll = 0, scrollLimit, instead } = props;
+  const { read, reads, pipelineIndex, focused, glyphs, height, width = 80, here = false, runs, containers, history, confirming, scroll = 0, scrollLimit, instead } = props;
   const problems = (props.diagnostics ?? read.diagnostics).filter((entry) => entry.level !== "note" && entry.at !== "trust");
-  const problemsOf = (entry: Bolt) => problems.filter((problem) => problem.pipeline?.toLowerCase() === entry.label.toLowerCase());
+  const problemsOf = (entry: Pipeline) => problems.filter((problem) => problem.pipeline?.toLowerCase() === entry.label.toLowerCase());
   const fileProblems = problems.filter((problem) => !problem.pipeline || !read.workspace.bolts.some((entry) => entry.label.toLowerCase() === problem.pipeline?.toLowerCase()));
   const lastRun = (label: string) => history.find((entry) => baseLabel(entry.bolt) === label);
   const { workspace } = read;
   const bolts = workspace.bolts;
-  const selected = bolts[Math.min(boltIndex, Math.max(0, bolts.length - 1))];
-  const { items: shownBolts, offset, split, topHeight, stepRoom } = boltWindow(bolts, boltIndex, height, Boolean(confirming));
+  const selected = bolts[Math.min(pipelineIndex, Math.max(0, bolts.length - 1))];
+  const { items: shownPipelines, offset, split, topHeight, stepRoom } = pipelineWindow(bolts, pipelineIndex, height, Boolean(confirming));
 
-  const stateOf = (entry: Bolt): BoltState | undefined => {
-    const status = boltStatus(workspace, entry, runs, containers);
+  const stateOf = (entry: Pipeline): PipelineState | undefined => {
+    const status = pipelineStatus(workspace, entry, runs, containers);
     if (status.failing > 0) return { text: `${glyphs.dot} something stopped`, color: "red" };
     if (status.running > 0) {
       const all = status.running === status.commands;
@@ -154,7 +156,7 @@ export function WorkspacePanel(props: {
     return last.ok ? { text: `${glyphs.ok} ${since(last.startedAt)}`, color: "green", dim: true } : { text: `${glyphs.fail} failed ${since(last.startedAt)}`, color: "red" };
   };
 
-  const rows = shownBolts.map((entry) => ({ entry, state: stateOf(entry) }));
+  const rows = shownPipelines.map((entry) => ({ entry, state: stateOf(entry) }));
   const stateWidth = Math.max(0, ...rows.map(({ state }) => state?.text.length ?? 0));
   const stateColumn = stateWidth > 0 ? stateWidth + 3 : 0;
   const longest = Math.max(0, ...rows.map(({ entry }) => entry.label.length));
@@ -167,6 +169,9 @@ export function WorkspacePanel(props: {
         {workspace.icon && glyphs.border === "round" ? `${workspace.icon} ` : ""}
         <Text bold color={workspace.color}>{workspace.name}</Text>
         <Text dimColor>{`  ${counts(read)}`}</Text>
+        {reads.some((other) => other.workspace.file !== workspace.file && slugify(other.workspace.name) === slugify(workspace.name)) ? (
+          <Text color="yellow">{`  ! another workspace is called ${workspace.name} too: rename one with e on the left`}</Text>
+        ) : null}
       </Text>
       <Text dimColor wrap="truncate-start">{tildify(workspace.file) + (workspace.local ? "  + local" : "")}</Text>
       <Text wrap="truncate-end">
@@ -196,7 +201,7 @@ export function WorkspacePanel(props: {
       </>
     ) : (
       rows.map(({ entry, state }, position) => {
-        const isSelected = offset + position === boltIndex;
+        const isSelected = offset + position === pipelineIndex;
         const name = clip(entry.label, Math.max(4, labelWidth));
         const gap = " ".repeat(Math.max(0, labelWidth - name.length));
         const count = entry.steps.length;
@@ -218,7 +223,7 @@ export function WorkspacePanel(props: {
 
   const room = split ? Math.max(1, height - topHeight - 2) : stepRoom;
   const details = selected ? (
-    <BoltDetails
+    <PipelineDetails
       read={read}
       bolt={selected}
       state={stateOf(selected)}
@@ -265,10 +270,10 @@ export function WorkspacePanel(props: {
   );
 }
 
-function BoltDetails(props: {
+function PipelineDetails(props: {
   read: WorkspaceRead;
-  bolt: Bolt;
-  state: BoltState | undefined;
+  bolt: Pipeline;
+  state: PipelineState | undefined;
   last: HistoryEntry | undefined;
   here: boolean;
   glyphs: Glyphs;

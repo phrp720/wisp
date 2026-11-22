@@ -6,7 +6,7 @@ import { describeDuration } from "../core/duration.js";
 import { tildify } from "../core/paths.js";
 import type { RunStatus } from "../core/processes.js";
 import { composeTarget, stagesOfTargets, stepTargets } from "../core/switch.js";
-import type { Bolt, SwitchTarget, WorkspaceRead } from "../core/types.js";
+import type { Pipeline, SwitchTarget, WorkspaceRead } from "../core/types.js";
 import type { Glyphs } from "./glyphs.js";
 import { TONE } from "./tones.js";
 import { describeStep, shortUrl } from "./model.js";
@@ -19,16 +19,16 @@ export interface Line {
 
 type Status = { text: string; color: string } | undefined;
 
-export function usedBy(read: WorkspaceRead, bolt: Bolt): string[] {
+export function usedBy(read: WorkspaceRead, bolt: Pipeline): string[] {
   return read.workspace.bolts.filter((candidate) => candidate.steps.some((step) => step.kind === "pipeline" && step.bolt.toLowerCase() === bolt.label.toLowerCase())).map((candidate) => candidate.label);
 }
 
 /** The bolts in the order a run goes through them: the ones it runs, deepest first, then itself. */
-export function flow(read: WorkspaceRead, bolt: Bolt, seen = new Set<string>()): string[] {
+export function flow(read: WorkspaceRead, bolt: Pipeline, seen = new Set<string>()): string[] {
   const order: string[] = [];
   for (const step of bolt.steps) {
     if (step.kind !== "pipeline") continue;
-    const found = findBolt(read, step.bolt);
+    const found = findPipeline(read, step.bolt);
     if (!found || seen.has(found.label)) continue;
     seen.add(found.label);
     for (const name of flow(read, found, seen)) if (!order.includes(name)) order.push(name);
@@ -38,12 +38,12 @@ export function flow(read: WorkspaceRead, bolt: Bolt, seen = new Set<string>()):
 }
 
 /** Every step, numbered by when it can start, each bolt it runs opened up beneath it. */
-export function stepLines(context: { read: WorkspaceRead; bolt: Bolt; reads: WorkspaceRead[]; runs: RunStatus[]; containers: Container[]; glyphs: Glyphs }): Line[] {
+export function stepLines(context: { read: WorkspaceRead; bolt: Pipeline; reads: WorkspaceRead[]; runs: RunStatus[]; containers: Container[]; glyphs: Glyphs }): Line[] {
   const { glyphs } = context;
   const lines: Line[] = [];
   const done = new Set<string>();
 
-  const walk = (read: WorkspaceRead, bolt: Bolt, depth: number, tag: string) => {
+  const walk = (read: WorkspaceRead, bolt: Pipeline, depth: number, tag: string) => {
     const indent = "   ".repeat(depth);
     const aligned = stepTargets(read.workspace, bolt.steps);
     const withheld = new Set(read.withheld.map((item) => item.id));
@@ -64,7 +64,7 @@ export function stepLines(context: { read: WorkspaceRead; bolt: Bolt; reads: Wor
       const shown = `${indent}${`${tag}${stages[index]}.`.padStart(3)} `;
       const after = target.after ? <Text dimColor>{`  after ${target.after.join(", ")}`}</Text> : null;
       if (target.kind === "pipeline") {
-        const found = findBolt(read, target.label);
+        const found = findPipeline(read, target.label);
         const twice = found ? done.has(`${read.workspace.file}#${found.label}`) : false;
         lines.push({
           key,
@@ -174,7 +174,7 @@ function statusOf(target: SwitchTarget, read: WorkspaceRead, runs: RunStatus[], 
   return undefined;
 }
 
-function findBolt(read: WorkspaceRead, name: string): Bolt | undefined {
+function findPipeline(read: WorkspaceRead, name: string): Pipeline | undefined {
   return read.workspace.bolts.find((candidate) => candidate.label.toLowerCase() === name.toLowerCase() || candidate.id === name);
 }
 

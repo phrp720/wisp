@@ -68,6 +68,12 @@ describe("shortest", () => {
     expect(shortest(bolts[2]!, bolts)).toBe("work-on-api");
   });
 
+  it("suggests a pipeline's own slug first", () => {
+    const pipelines = [{ id: "a", label: "Start the whole stack", slug: "up", steps: [] }, { id: "b", label: "Check", slug: "check", steps: [] }];
+    expect(shortest(pipelines[0]!, pipelines)).toBe("up");
+    expect(shortest(pipelines[1]!, pipelines, true)).toBe("use check");
+  });
+
   it("never suggests a command's name to type on its own", () => {
     const bolts = ["Check", "Run the checks", "Work on api"].map((label) => ({ id: label, label, steps: [] }));
     expect(shortest(bolts[0]!, bolts, true)).toBe("use check");

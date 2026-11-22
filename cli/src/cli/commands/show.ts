@@ -1,11 +1,11 @@
 import { tildify } from "../../core/paths.js";
 import { listRuns } from "../../core/processes.js";
-import { collectBoltTargets, collectDownTargets } from "../../core/switch.js";
+import { collectPipelineTargets, collectDownTargets } from "../../core/switch.js";
 import { bold, counts, dim, title } from "../format.js";
 import { emitJson, maybeProject, workspaceFor } from "../lib/context.js";
 import type { CommandDef } from "../lib/define.js";
-import { diagnosticSummary, printBolts, shortest, trustLine } from "../lib/render.js";
-import { slugify } from "../../core/workspaces.js";
+import { diagnosticSummary, printPipelines, shortest, trustLine } from "../lib/render.js";
+import { slugify, pipelineSlug } from "../../core/workspaces.js";
 
 export const show: CommandDef<{ json?: boolean }> = {
   name: "show",
@@ -24,8 +24,8 @@ export const show: CommandDef<{ json?: boolean }> = {
         ...rest,
         pipelines: bolts.map(({ steps: _steps, down, ...bolt }) => ({
           ...bolt,
-          slug: slugify(bolt.label),
-          steps: collectBoltTargets(workspace, { ...bolt, steps: _steps }),
+          slug: pipelineSlug(bolt),
+          steps: collectPipelineTargets(workspace, { ...bolt, steps: _steps }),
           ...(down ? { down: collectDownTargets(workspace, { ...bolt, steps: _steps, down }) } : {}),
         })),
         trust: read.trust,
@@ -44,7 +44,7 @@ export const show: CommandDef<{ json?: boolean }> = {
       console.log(dim("No pipelines yet. `wisp` opens the dashboard, where `a` adds one."));
     } else {
       console.log(bold("Pipelines"));
-      printBolts(workspace, true, read.withheld, await listRuns());
+      printPipelines(workspace, true, read.withheld, await listRuns());
     }
 
     const trust = trustLine(read);

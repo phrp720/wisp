@@ -4,7 +4,7 @@ import { createPersonalWorkspace } from "../../core/edit.js";
 import { tildify } from "../../core/paths.js";
 import { WispError } from "../../core/errors.js";
 import { PROJECT_FILE, findProjectFile } from "../../core/project.js";
-import { bolts as draftBolts, draftProject, emptyProject, guessName, writeProjectDraft } from "../../core/scaffold.js";
+import { bolts as draftPipelines, draftProject, emptyProject, guessName, writeProjectDraft } from "../../core/scaffold.js";
 import { slugify } from "../../core/workspaces.js";
 
 import { cyan, dim, green, yellow } from "../format.js";
@@ -89,7 +89,7 @@ export const init: CommandDef<{ force?: boolean; yes?: boolean; print?: boolean;
     let draft = await draftProject(process.cwd(), { name, ...(only ? { only } : {}) });
 
     if (atTerminal) {
-      if (draftBolts(draft.detected).length === 0) {
+      if (draftPipelines(draft.detected).length === 0) {
         console.log(dim("Found nothing to suggest here, so it starts empty."));
         return writeEmpty();
       }

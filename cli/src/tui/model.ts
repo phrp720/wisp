@@ -1,10 +1,10 @@
 import type { Container, ContainerStats } from "../core/docker.js";
-import type { RawBolt, RawInput, RawStep } from "../core/edit.js";
+import type { RawPipeline, RawInput, RawStep } from "../core/edit.js";
 import type { Environment } from "../core/environment.js";
 import type { HistoryEntry } from "../core/history.js";
 import type { RunStatus, StartResult } from "../core/processes.js";
 import type { DownResult, PlannedStep } from "../core/switch.js";
-import type { Bolt, InputSpec, NotifySettings, NotifyWhen, SwitchResult, SwitchTarget, TargetResult, WorkspaceRead } from "../core/types.js";
+import type { Pipeline, InputSpec, NotifySettings, NotifyWhen, SwitchResult, SwitchTarget, TargetResult, WorkspaceRead } from "../core/types.js";
 
 export type NotifyChoice = NotifySettings & { when: NotifyWhen };
 import type { Unreadable } from "../core/workspaces.js";
@@ -42,7 +42,7 @@ export interface Services {
   /** Run part of a plan again — the steps that failed, and what they kept from running. */
   retry(read: WorkspaceRead, steps: PlannedStep[], label: string, callbacks: RunCallbacks): Promise<SwitchResult>;
   /** Stop what a bolt started and run its teardown; with `deps`, the bolts it needed too. */
-  down(read: WorkspaceRead, bolt: Bolt, options?: { deps?: boolean }): Promise<DownResult>;
+  down(read: WorkspaceRead, bolt: Pipeline, options?: { deps?: boolean }): Promise<DownResult>;
   history(): Promise<HistoryEntry[]>;
   forgetRuns(ids: string[]): Promise<void>;
   readLog(path: string): Promise<string>;
@@ -100,13 +100,14 @@ export interface SettingsService {
 
 /** The edits the TUI's forms make — the core's, passed in so a test can watch them. */
 export interface Editing {
-  bolt(file: string, bolt: string): Promise<RawBolt>;
-  addBolt(file: string, label: string): Promise<void>;
-  renameBolt(file: string, bolt: string, label: string): Promise<void>;
-  setBoltNotes(file: string, bolt: string, notes: string): Promise<void>;
+  bolt(file: string, bolt: string): Promise<RawPipeline>;
+  addPipeline(file: string, label: string): Promise<void>;
+  renamePipeline(file: string, bolt: string, label: string): Promise<void>;
+  setPipelineNotes(file: string, bolt: string, notes: string): Promise<void>;
+  setSlug(file: string, bolt: string, slug: string): Promise<void>;
   setWorkspaceDetails(file: string, details: { name: string; icon: string; notes: string }): Promise<void>;
-  removeBolt(file: string, bolt: string): Promise<void>;
-  moveBolt(file: string, bolt: string, by: -1 | 1): Promise<void>;
+  removePipeline(file: string, bolt: string): Promise<void>;
+  movePipeline(file: string, bolt: string, by: -1 | 1): Promise<void>;
   setKeepGoing(file: string, bolt: string, keepGoing: boolean): Promise<void>;
   setConfirm(file: string, bolt: string, confirm: string | boolean): Promise<void>;
   setInput(file: string, bolt: string, previous: string | undefined, name: string, input: RawInput): Promise<void>;

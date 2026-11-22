@@ -494,6 +494,15 @@
             "Work on api"
           ]
         },
+        "slug": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+          "description": "What scripts, cron lines and git hooks type to run it, like `wisp acme up`. Left out, it is made from the label and changes with it; one set here stays when the label changes.",
+          "examples": [
+            "up",
+            "deploy-prod"
+          ]
+        },
         "notes": {
           "type": "string",
           "description": "A line on what this pipeline does, shown beside it in `wisp show`, `wisp pick`, tab completion and the TUI.",

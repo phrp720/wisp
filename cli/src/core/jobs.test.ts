@@ -12,7 +12,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { listRuns, stopRun } from "./processes.js";
 import { windowInvocation } from "./shell.js";
 import { interpret } from "./project.js";
-import { boltStatus, downBolt, planBolt, resolveBolt, switchToWorkspace } from "./switch.js";
+import { pipelineStatus, downPipeline, planPipeline, resolvePipeline, switchToWorkspace } from "./switch.js";
 import type { Workspace } from "./types.js";
 
 let dir: string;
@@ -219,7 +219,7 @@ describe("what is up", () => {
     const ws = workspace({ pipelines: [{ label: "api", steps: [{ run: "pnpm dev", label: "dev" }, { run: "pnpm build", label: "build", finishes: true }] }] });
     const dev = ws.commands.find((command) => command.label === "dev")!;
     const runs = [{ id: "r1", kind: "background", label: "dev", command: "pnpm dev", workspace: ws.file, workspaceName: "Acme", asset: dev.id, pid: 1, startedAt: new Date().toISOString(), alive: true }];
-    expect(boltStatus(ws, resolveBolt(ws, "api"), runs as never)).toEqual({ commands: 1, running: 1, failing: 0 });
+    expect(pipelineStatus(ws, resolvePipeline(ws, "api"), runs as never)).toEqual({ commands: 1, running: 1, failing: 0 });
   });
 });
 
@@ -235,9 +235,9 @@ describe("down", () => {
     const deps = { platform: recorder(), environment: desktop, defaults: {} };
     await switchToWorkspace(ws, { bolt: "api" }, deps);
     expect((await listRuns()).filter((run) => run.alive).map((run) => run.label).sort()).toEqual(["db", "server"]);
-    expect(boltStatus(ws, resolveBolt(ws, "api"), await listRuns())).toEqual({ commands: 1, running: 1, failing: 0 });
+    expect(pipelineStatus(ws, resolvePipeline(ws, "api"), await listRuns())).toEqual({ commands: 1, running: 1, failing: 0 });
 
-    const down = await downBolt(ws, resolveBolt(ws, "api"), {}, deps);
+    const down = await downPipeline(ws, resolvePipeline(ws, "api"), {}, deps);
     expect(down.stopped.map((run) => run.label)).toEqual(["server"]);
     expect(down.teardown?.targets.map((step) => step.label)).toEqual(["cleanup"]);
     await new Promise((resolve) => setTimeout(resolve, 200));
@@ -254,13 +254,13 @@ describe("down", () => {
     });
     const deps = { platform: recorder(), environment: desktop, defaults: {} };
     await switchToWorkspace(ws, { bolt: "api" }, deps);
-    const down = await downBolt(ws, resolveBolt(ws, "api"), { deps: true }, deps);
+    const down = await downPipeline(ws, resolvePipeline(ws, "api"), { deps: true }, deps);
     expect(down.stopped.map((run) => run.label).sort()).toEqual(["db", "server"]);
     await expect(readFile(marker)).resolves.toBeDefined();
   });
 });
 
-describe("planBolt", () => {
+describe("planPipeline", () => {
   it("keeps a pipeline step's steps where the pipeline step is listed", async () => {
     const ws = workspace({
       pipelines: [
@@ -269,7 +269,7 @@ describe("planBolt", () => {
       ],
     });
     await writeFile(join(dir, "placeholder"), "");
-    const plan = await planBolt(ws, resolveBolt(ws, "api"));
+    const plan = await planPipeline(ws, resolvePipeline(ws, "api"));
     expect(plan.map((step) => step.target.label)).toEqual(["api", "postgres", "pnpm dev"]);
   });
 });
@@ -282,13 +282,13 @@ describe("compose steps", () => {
       { file: join(dir, ".wisp.json"), personal: false, trust: "untrusted", os: "darwin" },
     );
     expect(untrusted.withheld).toEqual([expect.objectContaining({ kind: "compose", reason: "starts containers" })]);
-    expect(await planBolt(untrusted.workspace, resolveBolt(untrusted.workspace, "services"))).toEqual([]);
+    expect(await planPipeline(untrusted.workspace, resolvePipeline(untrusted.workspace, "services"))).toEqual([]);
 
     const ws = workspace({ pipelines: [{ label: "Services", steps: [{ compose: "deploy/compose.yml", services: ["db"] }] }] });
-    const plan = await planBolt(ws, resolveBolt(ws, "services"));
+    const plan = await planPipeline(ws, resolvePipeline(ws, "services"));
     expect(plan[0]!.target).toMatchObject({ kind: "compose", label: "db", compose: { file: join(dir, "deploy/compose.yml"), services: ["db"], action: "up" } });
 
-    const dry = await downBolt(ws, resolveBolt(ws, "services"), { dryRun: true }, { platform: recorder(), environment: desktop, defaults: {} });
+    const dry = await downPipeline(ws, resolvePipeline(ws, "services"), { dryRun: true }, { platform: recorder(), environment: desktop, defaults: {} });
     expect(dry.teardown?.targets[0]).toMatchObject({ kind: "compose", note: "would stop them" });
 
     // What Compose reports, read the way the TUI shows it.
@@ -299,7 +299,7 @@ describe("compose steps", () => {
     expect(container).toMatchObject({ service: "db", state: "running", health: "healthy", ports: ["5432"] });
     expect(containerMood(container!)).toEqual({ word: "healthy", tone: "good" });
     expect(shortStatus(container!.status)).toBe("up 3m");
-    expect(boltStatus(ws, resolveBolt(ws, "services"), [], [{ ...container!, file: join(dir, "deploy/compose.yml") }])).toEqual({ commands: 1, running: 1, failing: 0 });
+    expect(pipelineStatus(ws, resolvePipeline(ws, "services"), [], [{ ...container!, file: join(dir, "deploy/compose.yml") }])).toEqual({ commands: 1, running: 1, failing: 0 });
   });
 });
 
@@ -350,7 +350,7 @@ describe("steps that wait for others", () => {
         { label: "Dev", steps: [{ pipeline: "Services", label: "services" }, { run: "a", label: "a", after: "services" }, { run: "b", label: "b", after: "services" }, { run: "c", after: ["a", "b"] }] },
       ],
     });
-    const plan = await planBolt(ws, resolveBolt(ws, "Dev"));
+    const plan = await planPipeline(ws, resolvePipeline(ws, "Dev"));
     const key = (label: string) => plan.find((step) => step.target.label === label)?.key as string;
     const services = [key("port 5432"), key("port 6379")];
     expect(plan.map((step) => [step.target.label, step.deps])).toEqual([
@@ -613,9 +613,9 @@ describe("history like a CI", () => {
     });
     for (const entry of [run("a1", "Check"), run("a2", "Check (retry)"), run("a3", "Build"), run("b1", "Check", "/b/.wisp.json"), run("a4", "Check", "/a/.wisp.json", true)]) await recordHistory(entry);
 
-    const byBolt = await forgetHistory({ workspace: "/a/.wisp.json", bolt: "check" });
-    expect(byBolt.removed.map((entry) => entry.id).sort()).toEqual(["a1", "a2"]);
-    expect(byBolt.running.map((entry) => entry.id)).toEqual(["a4"]);
+    const byPipeline = await forgetHistory({ workspace: "/a/.wisp.json", bolt: "check" });
+    expect(byPipeline.removed.map((entry) => entry.id).sort()).toEqual(["a1", "a2"]);
+    expect(byPipeline.running.map((entry) => entry.id)).toEqual(["a4"]);
     expect((await listHistory()).map((entry) => entry.id).sort()).toEqual(["a3", "a4", "b1"]);
 
     await forgetHistory({ ids: ["b1"] });

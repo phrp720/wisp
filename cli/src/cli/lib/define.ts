@@ -65,7 +65,7 @@ export function register<Options>(program: Command, def: CommandDef<Options>): C
 export function fail(error: unknown): never {
   const message = error instanceof Error ? error.message : String(error);
   const code = error instanceof WispError ? error.code : "ERROR";
-  const hint = error instanceof WispError ? HINTS[error.code] : undefined;
+  const hint = error instanceof WispError ? (error.hint ?? HINTS[error.code]) : undefined;
 
   // Asked for JSON, a failure is JSON too, on stdout where the answer would have been:
   // an agent reads one shape either way, and the exit code still says it failed.

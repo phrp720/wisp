@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { Environment } from "./environment.js";
 import { interpret } from "./project.js";
-import { inputsFor, matchBolt, planBolt, questionsFor, resolveBolt, routeFor, switchToWorkspace } from "./switch.js";
+import { inputsFor, matchPipeline, planPipeline, questionsFor, resolvePipeline, routeFor, switchToWorkspace } from "./switch.js";
 import type { Platform } from "../platform/types.js";
 import type { SwitchOptions, Workspace } from "./types.js";
 
@@ -45,33 +45,39 @@ function recorder(): Platform & { calls: string[] } {
 const desktop: Environment = { os: "darwin", gui: true, ssh: false };
 const server: Environment = { os: "linux", gui: false, ssh: true };
 
-describe("matchBolt", () => {
+describe("matchPipeline", () => {
   const ws = workspace({
     pipelines: [{ label: "Work on core" }, { label: "Work on the app" }, { label: "Work on the CLI" }],
   });
 
   it("matches any distinctive part of a label", () => {
-    expect(matchBolt(ws, "core").bolt?.label).toBe("Work on core");
-    expect(matchBolt(ws, "cli").bolt?.label).toBe("Work on the CLI");
+    expect(matchPipeline(ws, "core").bolt?.label).toBe("Work on core");
+    expect(matchPipeline(ws, "cli").bolt?.label).toBe("Work on the CLI");
+  });
+
+  it("answers to a pipeline's own slug, and still to the words of its label", () => {
+    const own = workspace({ pipelines: [{ label: "Start the whole stack", slug: "up" }, { label: "Verify" }] });
+    expect(matchPipeline(own, "up").bolt?.label).toBe("Start the whole stack");
+    expect(matchPipeline(own, "stack").bolt?.label).toBe("Start the whole stack");
   });
 
   it("says when a word is ambiguous", () => {
-    expect(() => resolveBolt(ws, "work")).toThrow(/several pipelines/);
+    expect(() => resolvePipeline(ws, "work")).toThrow(/several pipelines/);
   });
 
   it("takes only whole words, or a run of them, never part of one", () => {
     const docs = workspace({ pipelines: [{ label: "Documentation" }, { label: "Document" }, { label: "Work on the CLI" }] });
-    expect(matchBolt(docs, "doc").bolt).toBeUndefined();
-    expect(matchBolt(docs, "doc").candidates).toEqual([]);
-    expect(matchBolt(docs, "ation").bolt).toBeUndefined();
-    expect(matchBolt(docs, "document").bolt?.label).toBe("Document");
-    expect(matchBolt(docs, "the cli").bolt?.label).toBe("Work on the CLI");
-    expect(matchBolt(docs, "on-the").bolt?.label).toBe("Work on the CLI");
-    expect(matchBolt(docs, "work-on-the-cli").bolt?.label).toBe("Work on the CLI");
+    expect(matchPipeline(docs, "doc").bolt).toBeUndefined();
+    expect(matchPipeline(docs, "doc").candidates).toEqual([]);
+    expect(matchPipeline(docs, "ation").bolt).toBeUndefined();
+    expect(matchPipeline(docs, "document").bolt?.label).toBe("Document");
+    expect(matchPipeline(docs, "the cli").bolt?.label).toBe("Work on the CLI");
+    expect(matchPipeline(docs, "on-the").bolt?.label).toBe("Work on the CLI");
+    expect(matchPipeline(docs, "work-on-the-cli").bolt?.label).toBe("Work on the CLI");
   });
 });
 
-describe("planBolt", () => {
+describe("planPipeline", () => {
   it("plans a pipeline step's steps where it is, once each, and has each step wait for what it says", async () => {
     const ws = workspace({
       pipelines: [
@@ -80,7 +86,7 @@ describe("planBolt", () => {
         { label: "all", steps: [{ pipeline: "db", label: "db" }, { pipeline: "api", label: "api" }, { url: "localhost:3000", after: ["db", "api"] }] },
       ],
     });
-    const plan = await planBolt(ws, resolveBolt(ws, "all"));
+    const plan = await planPipeline(ws, resolvePipeline(ws, "all"));
     const key = (label: string) => plan.find((step) => step.target.label === label)?.key;
     expect(plan.map((step) => step.target.label)).toEqual(["postgres", "port 5432", "pnpm dev", "localhost:3000"]);
     expect(plan.map((step) => step.deps)).toEqual([[], [key("postgres")], [key("postgres"), key("port 5432")], [key("postgres"), key("port 5432"), key("pnpm dev")]]);
@@ -88,12 +94,12 @@ describe("planBolt", () => {
 
   it("refuses a cycle before anything runs", async () => {
     const ws = workspace({ pipelines: [{ label: "a", steps: [{ pipeline: "b" }] }, { label: "b", steps: [{ pipeline: "a" }] }] });
-    await expect(planBolt(ws, resolveBolt(ws, "a"))).rejects.toThrow("These pipelines need each other: a → b → a");
+    await expect(planPipeline(ws, resolvePipeline(ws, "a"))).rejects.toThrow("These pipelines need each other: a → b → a");
   });
 
   it("leaves out what is withheld", async () => {
     const ws = workspace({ pipelines: [{ label: "x", steps: [{ run: "make" }, { folder: "src" }] }] }, undefined, false);
-    const plan = await planBolt(ws, resolveBolt(ws, "x"));
+    const plan = await planPipeline(ws, resolvePipeline(ws, "x"));
     expect(plan.map((step) => step.target.kind)).toEqual(["folder"]);
   });
 });
@@ -108,13 +114,13 @@ describe("questionsFor", () => {
         { label: "Dev", steps: [{ run: "pnpm dev" }] },
       ],
     });
-    expect(await questionsFor(ws, resolveBolt(ws, "Deploy"))).toEqual(["Deploy to production?", "Touch the shared database?"]);
-    expect(await questionsFor(ws, resolveBolt(ws, "Dev"))).toEqual([]);
+    expect(await questionsFor(ws, resolvePipeline(ws, "Deploy"))).toEqual(["Deploy to production?", "Touch the shared database?"]);
+    expect(await questionsFor(ws, resolvePipeline(ws, "Dev"))).toEqual([]);
   });
 
   it("puts the run's values in the question", async () => {
     const ws = workspace({ pipelines: [{ label: "Deploy", inputs: { env: {} }, confirm: "Deploy to {{env}}?", steps: [{ run: "deploy {{env}}" }] }] });
-    expect(await questionsFor(ws, resolveBolt(ws, "Deploy"), { env: "production" })).toEqual(["Deploy to production?"]);
+    expect(await questionsFor(ws, resolvePipeline(ws, "Deploy"), { env: "production" })).toEqual(["Deploy to production?"]);
   });
 });
 
@@ -126,7 +132,7 @@ describe("inputsFor", () => {
         { label: "Release", inputs: { env: { ask: "Release where?", choices: ["staging", "production"] } }, steps: [{ pipeline: "Push" }] },
       ],
     });
-    expect(await inputsFor(ws, resolveBolt(ws, "Release"))).toEqual([
+    expect(await inputsFor(ws, resolvePipeline(ws, "Release"))).toEqual([
       { name: "env", ask: "Release where?", choices: ["staging", "production"] },
       { name: "tag", ask: "tag", default: "latest" },
     ]);

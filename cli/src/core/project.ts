@@ -1,3 +1,4 @@
+import { SLUG, pipelineSlug } from "./workspaces.js";
 import { realpath, stat } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
@@ -9,8 +10,8 @@ import { currentOS, expandHome, workspacesDir } from "./paths.js";
 import { hashContents, localFileFor, readTrustedBytes, trustStateOf } from "./trust.js";
 import type {
   AppRef,
-  Bolt,
-  BoltStep,
+  Pipeline,
+  PipelineStep,
   Command,
   Diagnostic,
   FileRef,
@@ -81,7 +82,7 @@ const KNOWN_KEYS = new Set([
   "pipelines",
 ]);
 
-const BOLT_KEYS = new Set(["label", "notes", "color", "keepGoing", "confirm", "inputs", "steps", "down"]);
+const PIPELINE_KEYS = new Set(["label", "slug", "notes", "color", "keepGoing", "confirm", "inputs", "steps", "down"]);
 const INPUT_KEYS = new Set(["ask", "choices", "default"]);
 
 const SHELLS: readonly ShellKind[] = ["sh", "pwsh", "cmd"];
@@ -150,7 +151,7 @@ export interface ReadOptions {
  * Wisp had to say about it.
  *
  * Paths are relative to the file, since a committed file cannot know where anyone cloned
- * it. Bolts name their assets by label — ids are derived here, because a hand-written,
+ * it. Pipelines name their assets by label — ids are derived here, because a hand-written,
  * code-reviewed file has no business carrying UUIDs. And nothing is dropped in silence.
  */
 export async function readProjectFile(file: string, options: ReadOptions = {}): Promise<WorkspaceRead> {
@@ -254,8 +255,8 @@ export function interpret(
   const scalar = (key: string) => optionalString(sources.local?.[key]) ?? optionalString(sources.main[key]);
   const section = (key: string) => sectionEntries(sources, key, ctx);
 
-  const boltEntries = section("pipelines");
-  const inline = inlineEntries(boltEntries);
+  const pipelineEntries = section("pipelines");
+  const inline = inlineEntries(pipelineEntries);
 
   const links = assets<Link>(inline.links, LINKS, ctx);
   const folders = assets<Folder>(inline.folders, FOLDERS, ctx);
@@ -299,7 +300,7 @@ export function interpret(
   const notes = scalar("notes");
   if (notes) workspace.notes = notes;
 
-  workspace.bolts = bolts(boltEntries, ctx);
+  workspace.bolts = bolts(pipelineEntries, ctx);
 
   if (!trusted && ctx.withheld.length > 0) {
     const commandCount = ctx.withheld.filter((item) => item.kind === "command").length;
@@ -323,11 +324,11 @@ export function interpret(
     });
   }
 
-  return { workspace, diagnostics: tagBolts(ctx.found, boltEntries), trust: input.trust, declaredCommands, withheld: ctx.withheld };
+  return { workspace, diagnostics: tagPipelines(ctx.found, pipelineEntries), trust: input.trust, declaredCommands, withheld: ctx.withheld };
 }
 
-function tagBolts(found: Diagnostic[], boltEntries: Entry[]): Diagnostic[] {
-  const places = boltEntries.flatMap(({ value, at }) => {
+function tagPipelines(found: Diagnostic[], pipelineEntries: Entry[]): Diagnostic[] {
+  const places = pipelineEntries.flatMap(({ value, at }) => {
     const label = isRecord(value) ? optionalString(value["label"]) : undefined;
     return label ? [{ at, label }] : [];
   });
@@ -388,9 +389,9 @@ function inlineKind(target: Record<string, unknown>): InlineSection | undefined 
 }
 
 /** Every inline asset in every bolt, sorted into the section it would have been written in. */
-function inlineEntries(boltEntries: Entry[]): Record<InlineSection, Entry[]> {
+function inlineEntries(pipelineEntries: Entry[]): Record<InlineSection, Entry[]> {
   const found: Record<InlineSection, Entry[]> = { links: [], folders: [], files: [], apps: [], commands: [] };
-  for (const { value: bolt, at } of boltEntries) {
+  for (const { value: bolt, at } of pipelineEntries) {
     if (!isRecord(bolt)) continue;
     for (const list of ["steps", "down"] as const) {
       if (!Array.isArray(bolt[list])) continue;
@@ -665,12 +666,12 @@ function environment(value: unknown, at: string, ctx: Context): Record<string, s
 }
 
 /**
- * Bolts, with their steps: something to open or run, a wait, or another bolt to run first.
+ * Pipelines, with their steps: something to open or run, a wait, or another bolt to run first.
  * A bolt in the override replaces the project's bolt of the same name, which is how you
  * make a shared bolt your own.
  */
-function bolts(entries: Entry[], ctx: Context): Bolt[] {
-  const result: Bolt[] = [];
+function bolts(entries: Entry[], ctx: Context): Pipeline[] {
+  const result: Pipeline[] = [];
   const index = new Map<string, number>();
   const skippedSteps = new Map<string, number>();
 
@@ -709,15 +710,18 @@ function bolts(entries: Entry[], ctx: Context): Bolt[] {
     }
     skippedSteps.set(id, skipped);
 
-    const bolt: Bolt = { id, label, steps, ...(broken ? { broken: `"${label}" can't run: ${broken}` } : {}) };
+    const bolt: Pipeline = { id, label, steps, ...(broken ? { broken: `"${label}" can't run: ${broken}` } : {}) };
     const notes = optionalString(entry["notes"]);
     if (notes) bolt.notes = notes;
+    const slug = optionalString(entry["slug"]);
+    if (slug && SLUG.test(slug)) bolt.slug = slug;
+    else if (slug) ctx.found.push({ level: "warning", at: `${at}.slug`, message: `"${slug}" is not a slug, so it is ignored`, hint: "Lowercase letters, digits and hyphens, like dev-stack" });
     const color = optionalString(entry["color"]);
     if (color) bolt.color = color;
 
     for (const key of Object.keys(entry)) {
-      if (BOLT_KEYS.has(key)) continue;
-      ctx.found.push({ level: "warning", at: `${at}.${key}`, message: `"${key}" is not something a pipeline can set — it is ignored`, hint: `Known keys: ${[...BOLT_KEYS].join(", ")}` });
+      if (PIPELINE_KEYS.has(key)) continue;
+      ctx.found.push({ level: "warning", at: `${at}.${key}`, message: `"${key}" is not something a pipeline can set — it is ignored`, hint: `Known keys: ${[...PIPELINE_KEYS].join(", ")}` });
     }
 
     if (entry["confirm"] !== undefined) {
@@ -775,6 +779,7 @@ function bolts(entries: Entry[], ctx: Context): Bolt[] {
   }
 
   checkDependencies(result, ctx);
+  checkSlugs(result, ctx);
   return result;
 }
 
@@ -820,8 +825,8 @@ function parseInputs(value: unknown, at: string, ctx: Context): InputSpec[] {
 }
 
 /** One list of steps: a bolt's `steps` or its `down`. */
-function parseSteps(listed: unknown[], at: string, ctx: Context): { steps: BoltStep[]; skipped: number; broken?: string } {
-  const steps: BoltStep[] = [];
+function parseSteps(listed: unknown[], at: string, ctx: Context): { steps: PipelineStep[]; skipped: number; broken?: string } {
+  const steps: PipelineStep[] = [];
   let skipped = 0;
   const declared: { name?: string; after: string[]; where: string }[] = [];
 
@@ -904,7 +909,7 @@ function checkAfter(steps: { name?: string; after: string[]; where: string }[], 
 }
 
 /** A step written as an object: `{ "wait": … }` or `{ "pipeline": … }`. */
-function specialStep(target: Record<string, unknown>, at: string, ctx: Context): BoltStep | undefined {
+function specialStep(target: Record<string, unknown>, at: string, ctx: Context): PipelineStep | undefined {
   if (target["wait"] !== undefined) {
     const wait = parseWait(target["wait"]);
     if (!wait) {
@@ -993,7 +998,17 @@ export function parseWait(value: unknown): WaitSpec | undefined {
  * Dependencies within this file: each must name a bolt that exists, and no bolt may end
  * up needing itself. Dependencies on other workspaces can only be checked when they run.
  */
-function checkDependencies(bolts: Bolt[], ctx: Context): void {
+function checkSlugs(bolts: Pipeline[], ctx: Context): void {
+  const seen = new Map<string, string>();
+  for (const bolt of bolts) {
+    const slug = pipelineSlug(bolt);
+    const other = seen.get(slug);
+    if (other) ctx.found.push({ level: "warning", at: "pipelines", pipeline: bolt.label, message: `"${other}" and "${bolt.label}" both answer to ${slug}`, hint: 'Give one a "slug" of its own' });
+    else seen.set(slug, bolt.label);
+  }
+}
+
+function checkDependencies(bolts: Pipeline[], ctx: Context): void {
   const byLabel = new Map(bolts.map((bolt) => [bolt.label.toLowerCase(), bolt]));
 
   for (const bolt of bolts) {
@@ -1015,7 +1030,7 @@ function checkDependencies(bolts: Bolt[], ctx: Context): void {
   const done = new Set<string>();
   const reported = new Set<string>();
 
-  const visit = (bolt: Bolt, path: string[]): void => {
+  const visit = (bolt: Pipeline, path: string[]): void => {
     if (done.has(bolt.id)) return;
     if (visiting.has(bolt.id)) {
       const cycle = [...path.slice(path.indexOf(bolt.label)), bolt.label];
@@ -1073,8 +1088,8 @@ export async function checkProject(file: string, options: ReadOptions = {}): Pro
     valueById: new Map(),
   };
 
-  const boltEntries = sectionEntries(sources, "pipelines", scratch);
-  const inline = inlineEntries(boltEntries);
+  const pipelineEntries = sectionEntries(sources, "pipelines", scratch);
+  const inline = inlineEntries(pipelineEntries);
   for (const [entries, kind] of [
     [inline.folders, "folder"],
     [inline.files, "file"],
@@ -1123,7 +1138,7 @@ export async function checkProject(file: string, options: ReadOptions = {}): Pro
     }
   }
 
-  return { ...read, diagnostics: tagBolts(found, boltEntries) };
+  return { ...read, diagnostics: tagPipelines(found, pipelineEntries) };
 }
 
 type Picked =

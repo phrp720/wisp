@@ -20,6 +20,9 @@ returns once everything is up.
   any whole word of it that only one pipeline has (`api`). Never part of a word: `doc`
   doesn't run *Documentation*.
 - **When several match,** Wisp lists them and runs nothing.
+- **When two workspaces share a name,** like two projects called *Acme*, `wisp acme dev` lists
+  both files and runs nothing. Run one by its file, `wisp use ~/work/acme/.wisp.json dev`, or
+  give one another name. `wisp list` and the dashboard point out shared names.
 - **A pipeline named like a command** (`list`, `check`) runs with `wisp use list`.
 
 `wisp show acme` lists a workspace's pipelines with their slugs, and tab completion fills

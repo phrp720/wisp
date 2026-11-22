@@ -7,6 +7,7 @@ import { list } from "../commands/list.js";
 import { logs, ps, stop } from "../commands/processes.js";
 import { scan } from "../commands/scan.js";
 import { pick } from "../commands/pick.js";
+import { rename } from "../commands/rename.js";
 import { notify, openWith } from "../commands/settings.js";
 import { show } from "../commands/show.js";
 import { spec } from "../commands/spec.js";
@@ -28,6 +29,7 @@ export const COMMANDS: CommandDef<never>[] = [
   restart,
   history,
   show,
+  rename,
   check,
   hook,
   ps,

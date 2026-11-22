@@ -1,7 +1,7 @@
 import { WispError } from "../../core/errors.js";
 import { checkValue, parseGiven, type InputValues } from "../../core/inputs.js";
 import { inputsFor, questionsFor } from "../../core/switch.js";
-import type { Bolt, InputSpec, Workspace } from "../../core/types.js";
+import type { Pipeline, InputSpec, Workspace } from "../../core/types.js";
 import { choose, Prompter } from "../prompt.js";
 
 export interface AskOptions {
@@ -11,7 +11,7 @@ export interface AskOptions {
   input?: string[];
 }
 
-export async function beforeRun(workspace: Workspace, bolt: Bolt, options: AskOptions, recorded?: InputValues): Promise<InputValues | undefined> {
+export async function beforeRun(workspace: Workspace, bolt: Pipeline, options: AskOptions, recorded?: InputValues): Promise<InputValues | undefined> {
   const interactive = !options.json && process.stdin.isTTY === true && process.stdout.isTTY === true;
   const values: InputValues = { ...recorded };
 

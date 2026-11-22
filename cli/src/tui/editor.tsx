@@ -1,8 +1,9 @@
 import { Box, type DOMElement, Text, useInput } from "ink";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { STEP_FIELDS, STEP_KINDS, afterOf, buildInput, buildStep, describeRawStep, inputValues, stepKindOf, stepValues, type RawBolt, type RawInput, type StepKindName } from "../core/edit.js";
+import { STEP_FIELDS, STEP_KINDS, afterOf, buildInput, buildStep, describeRawStep, inputValues, stepKindOf, stepValues, type RawPipeline, type RawInput, type StepKindName } from "../core/edit.js";
 import { tildify } from "../core/paths.js";
+import { slugify } from "../core/workspaces.js";
 import { ASK_KEYS, AskHere, Form, Picker } from "./forms.js";
 import type { Glyphs } from "./glyphs.js";
 import { useMouse, useRefs } from "./mouse.js";
@@ -11,6 +12,7 @@ import { windowed, type Editing } from "./model.js";
 
 type Row =
   | { kind: "name" }
+  | { kind: "slug" }
   | { kind: "notes" }
   | { kind: "failure" }
   | { kind: "confirm" }
@@ -21,13 +23,13 @@ type Row =
 
 const SIDE_BY_SIDE = 90;
 
-export interface BoltEditorProps {
+export interface PipelineEditorProps {
   file: string;
   bolt: string;
   workspace?: string | undefined;
   /** Other bolts of this workspace, for "run another bolt first". */
   others: string[];
-  /** Bolts of other workspaces, which can be run first too. */
+  /** Pipelines of other workspaces, which can be run first too. */
   /** Open on choosing the first step — the bolt was just made. */
   adding?: boolean;
   editing: Editing;
@@ -49,9 +51,9 @@ export interface BoltEditorProps {
  * A bolt, edited without its JSON: its steps in plain words, in order, and keys to add,
  * change, move and remove them. Every change is saved as it is made.
  */
-export function BoltEditor({ file, bolt, workspace, others, adding = false, editing, glyphs, height, columns = 100, onClose, onChanged, onMessage, onSaving, onHint, onJump, onBusy }: BoltEditorProps) {
+export function PipelineEditor({ file, bolt, workspace, others, adding = false, editing, glyphs, height, columns = 100, onClose, onChanged, onMessage, onSaving, onHint, onJump, onBusy }: PipelineEditorProps) {
   const [label, setLabel] = useState(bolt);
-  const [raw, setRaw] = useState<RawBolt>();
+  const [raw, setRaw] = useState<RawPipeline>();
   const [index, setIndexState] = useState(-1);
   const indexRef = useRef(-1);
   const setIndex = (next: number) => {
@@ -84,6 +86,7 @@ export function BoltEditor({ file, bolt, workspace, others, adding = false, edit
   const asking = raw?.confirm === true ? true : typeof raw?.confirm === "string" && raw.confirm.trim() ? raw.confirm.trim() : false;
   const rows: Row[] = [
     { kind: "name" },
+    { kind: "slug" },
     { kind: "notes" },
     { kind: "failure" },
     { kind: "confirm" },
@@ -92,7 +95,7 @@ export function BoltEditor({ file, bolt, workspace, others, adding = false, edit
     ...steps.map((_, at): Row => ({ kind: "step", at })),
     { kind: "add" },
   ];
-  const first = 5 + inputs.length;
+  const first = 6 + inputs.length;
   const place = (at: number) => (at < 0 ? first : Math.min(at, rows.length - 1));
   const selected = place(index);
   const row = rows[selected] as Row;
@@ -134,7 +137,7 @@ export function BoltEditor({ file, bolt, workspace, others, adding = false, edit
       setNewStep({ at: steps.length });
       return setOpen(true);
     }
-    if (target.kind === "step" && !stepKindOf(steps[target.at] as RawBolt["steps"][number])) {
+    if (target.kind === "step" && !stepKindOf(steps[target.at] as RawPipeline["steps"][number])) {
       return onMessage("Wisp can't edit this step here — change it in the file itself (E)");
     }
     setOpen(true);
@@ -221,7 +224,7 @@ export function BoltEditor({ file, bolt, workspace, others, adding = false, edit
     const entry = STEP_KINDS.find((candidate) => candidate.kind === kind);
     const otherSteps = steps.flatMap((other, position) => (replace && position === at ? [] : [{ value: String(position), label: `${position + 1} · ${describeRawStep(other)}` }]));
     const picking = kind === "pipeline" && others.length > 0;
-    const current = replace ? afterOf(steps[at] as RawBolt["steps"][number]) : [];
+    const current = replace ? afterOf(steps[at] as RawPipeline["steps"][number]) : [];
     const waitsOn = replace
       ? steps.flatMap((other, position) => (typeof other["label"] === "string" && current.includes(other["label"]) ? [String(position)] : []))
       : at > 0
@@ -286,7 +289,7 @@ export function BoltEditor({ file, bolt, workspace, others, adding = false, edit
         <Picker
           key={`pick:${session}`}
           title={steps.length === 0 ? "The first step" : `New step ${newStep.at + 1}`}
-          intro={steps.length === 0 ? "What should happen first when it runs?" : newStep.at === steps.length ? "What should happen next?" : `What should happen after "${describeRawStep(steps[newStep.at - 1] as RawBolt["steps"][number])}"?`}
+          intro={steps.length === 0 ? "What should happen first when it runs?" : newStep.at === steps.length ? "What should happen next?" : `What should happen after "${describeRawStep(steps[newStep.at - 1] as RawPipeline["steps"][number])}"?`}
           options={STEP_KINDS.map((entry) => ({ key: entry.kind, title: entry.title, detail: entry.example, group: entry.group, icon: entry.icon }))}
           glyphs={glyphs}
           height={room}
@@ -331,7 +334,7 @@ export function BoltEditor({ file, bolt, workspace, others, adding = false, edit
             if (name === label) return void back();
             try {
               onSaving?.();
-              await editing.renameBolt(file, label, name);
+              await editing.renamePipeline(file, label, name);
             } catch (failure) {
               return { label: failure instanceof Error ? failure.message : String(failure) };
             }
@@ -339,6 +342,36 @@ export function BoltEditor({ file, bolt, workspace, others, adding = false, edit
             await load(name);
             onChanged(name);
             onMessage(`Renamed to "${name}"`);
+            back();
+            return undefined;
+          }}
+        />
+      );
+    }
+    if (row.kind === "slug") {
+      return (
+        <Form
+          key={`slug:${session}`}
+          title="Slug"
+          intro="What scripts, cron lines and git hooks type to run it. Left empty, it's made from the name and changes with it; one of your own stays when the name changes."
+          fields={[{ key: "slug", label: "Slug", placeholder: slugify(label), hint: "lowercase letters, digits and hyphens" }]}
+          initial={{ slug: raw?.slug ?? "" }}
+          submitLabel="Save"
+          glyphs={glyphs}
+          height={room}
+          active={active}
+          keys={false}
+          onCancel={back}
+          onSubmit={async (values) => {
+            const slug = values["slug"]?.trim() ?? "";
+            try {
+              onSaving?.();
+              await editing.setSlug(file, label, slug);
+            } catch (failure) {
+              return { slug: failure instanceof Error ? failure.message : String(failure) };
+            }
+            await load(label);
+            onMessage(slug && slug !== slugify(label) ? `It answers to ${slug} now` : `It answers to ${slugify(label)}, from its name`);
             back();
             return undefined;
           }}
@@ -360,7 +393,7 @@ export function BoltEditor({ file, bolt, workspace, others, adding = false, edit
           keys={false}
           onCancel={back}
           onSubmit={async (values) => {
-            await change(() => editing.setBoltNotes(file, label, values["notes"] ?? ""), undefined, "Saved.");
+            await change(() => editing.setPipelineNotes(file, label, values["notes"] ?? ""), undefined, "Saved.");
             back();
             return undefined;
           }}
@@ -442,7 +475,7 @@ export function BoltEditor({ file, bolt, workspace, others, adding = false, edit
             const built = buildInput(values, inputs.map(([name]) => name).filter((name) => name !== previous));
             if ("errors" in built) return built.errors;
             const at = previous ? inputs.findIndex(([name]) => name === previous) : inputs.length;
-            await change(() => editing.setInput(file, label, previous, built.name, built.input), 4 + at, previous ? "Saved." : `Added the input ${built.name}`);
+            await change(() => editing.setInput(file, label, previous, built.name, built.input), 5 + at, previous ? "Saved." : `Added the input ${built.name}`);
             back();
             return undefined;
           }}
@@ -484,7 +517,7 @@ export function BoltEditor({ file, bolt, workspace, others, adding = false, edit
         />
       );
     }
-    const step = steps[row.at] as RawBolt["steps"][number];
+    const step = steps[row.at] as RawPipeline["steps"][number];
     const kind = stepKindOf(step);
     if (!kind) {
       return (
@@ -541,19 +574,20 @@ export function BoltEditor({ file, bolt, workspace, others, adding = false, edit
       </Box>
       {error ? <Text color={TONE.failed}>{error}</Text> : <Text> </Text>}
       {detail(0, "Name", label, "")}
-      {detail(1, "Notes", raw?.notes ?? "", "none yet")}
-      {detail(2, "On failure", raw?.keepGoing ? "keep going" : "stop", "")}
-      {detail(3, "Ask first", asking === true ? "yes" : asking || "", "no")}
+      {detail(1, "Slug", raw?.slug ?? "", slugify(label))}
+      {detail(2, "Notes", raw?.notes ?? "", "none yet")}
+      {detail(3, "On failure", raw?.keepGoing ? "keep going" : "stop", "")}
+      {detail(4, "Ask first", asking === true ? "yes" : asking || "", "no")}
       {inputs.map(([name, input], at) => (
         <Box key={`input:${name}`} flexDirection="column">
-          {detail(4 + at, at === 0 ? "Inputs" : "", `${name}${input.ask ? ` · ${input.ask}` : ""}${input.choices ? ` · ${input.choices.join(", ")}` : ""}`, "")}
+          {detail(5 + at, at === 0 ? "Inputs" : "", `${name}${input.ask ? ` · ${input.ask}` : ""}${input.choices ? ` · ${input.choices.join(", ")}` : ""}`, "")}
           {name === dropping ? (
             <AskHere
               question="Remove this input?"
               yes="Remove"
               onAnswer={(yes) => {
                 setDropping(undefined);
-                if (yes) void change(() => editing.removeInput(file, label, name), 4 + Math.max(0, Math.min(at, inputs.length - 2)), `Removed the input ${name}`);
+                if (yes) void change(() => editing.removeInput(file, label, name), 5 + Math.max(0, Math.min(at, inputs.length - 2)), `Removed the input ${name}`);
               }}
             />
           ) : null}
@@ -575,7 +609,7 @@ export function BoltEditor({ file, bolt, workspace, others, adding = false, edit
           );
         }
         if (entry.kind !== "step") return null;
-        const step = steps[entry.at] as RawBolt["steps"][number];
+        const step = steps[entry.at] as RawPipeline["steps"][number];
         return (
           <Box key={`s${entry.at}`} flexDirection="column">
             <Box ref={rowNodes.set(at)}>

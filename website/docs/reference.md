@@ -19,6 +19,7 @@ Your editor autocompletes all of this once the file has its `$schema` line.
 | Field | |
 |---|---|
 | `label` | its name, and what you type: its slug or any whole word of it runs it. Keep it short: "Dev", "Verify", "Deploy" |
+| `slug` | a short name of your own, like `"up"`: lowercase letters, digits and hyphens. Left out, it's made from the label and changes with it. [More](./pipelines#a-slug-of-its-own) |
 | `notes` | a line on what it does, shown in `wisp show`, `wisp pick`, tab completion and the dashboard |
 | `steps` | its [steps](#steps), in order |
 | `keepGoing` | `true` reports a failed step and runs the rest anyway; without it, a failed step [stops the run](./commands#when-it-fails) |

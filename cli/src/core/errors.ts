@@ -1,11 +1,13 @@
 /** An error that carries a code, so a caller can say what to try next. */
 export class WispError extends Error {
   code: string;
+  hint: string | undefined;
 
-  constructor(message: string, code = "WISP_ERROR") {
+  constructor(message: string, code = "WISP_ERROR", hint?: string) {
     super(message);
     this.name = "WispError";
     this.code = code;
+    this.hint = hint;
   }
 }
 

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { LOCAL_FILE, PROJECT_FILE, checkProject, findProjectFile, interpret, parseWait, readProjectFile, runsCode } from "./project.js";
-import { collectBoltTargets } from "./switch.js";
+import { collectPipelineTargets } from "./switch.js";
 import { trustProject } from "./trust.js";
 import type { OS, TrustState } from "./types.js";
 
@@ -60,7 +60,7 @@ describe("the simplest file", () => {
 
     expect(diagnostics.filter((entry) => entry.level !== "note")).toEqual([]);
     expect(workspace.name).toBe("acme");
-    const steps = collectBoltTargets(workspace, workspace.bolts[0]!);
+    const steps = collectPipelineTargets(workspace, workspace.bolts[0]!);
     expect(steps.map((step) => [step.kind, step.value])).toEqual([
       ["folder", "/work/acme/apps/api"],
       ["link", "http://localhost:3000"],
@@ -177,7 +177,22 @@ describe("runsCode", () => {
   });
 });
 
-describe("bolts", () => {
+describe("slugs", () => {
+  it("keeps a pipeline's own slug, ignores one that isn't a slug, and warns when two answer to the same", () => {
+    const { workspace, diagnostics } = read({
+      pipelines: [
+        { label: "Start the whole stack", slug: "up", steps: [] },
+        { label: "Deploy", slug: "Ship It!", steps: [] },
+        { label: "Up", steps: [] },
+      ],
+    });
+    expect(workspace.bolts.map((pipeline) => pipeline.slug)).toEqual(["up", undefined, undefined]);
+    expect(diagnostics).toContainEqual(expect.objectContaining({ level: "warning", message: '"Ship It!" is not a slug, so it is ignored' }));
+    expect(diagnostics).toContainEqual(expect.objectContaining({ level: "warning", message: '"Start the whole stack" and "Up" both answer to up' }));
+  });
+});
+
+describe("pipelines", () => {
   it("parses waits in every form", () => {
     expect(parseWait(5)).toEqual({ seconds: 5 });
     expect(parseWait("2s")).toEqual({ seconds: 2 });

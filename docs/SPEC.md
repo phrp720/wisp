@@ -29,8 +29,11 @@ started and keeps every run.
 
 A pipeline's `label` is what people type, so keep it short (`Deploy`, `Work on api`).
 Its slug (`work-on-api`) or any whole word of it (`api`) runs it, never part of a
-word. An optional `"notes"` says what it does in a line, and Wisp shows it beside the
-pipeline in `wisp show`, `wisp pick`, tab completion and the TUI.
+word. An optional `"slug"` (lowercase letters, digits and hyphens, like `"up"`) replaces the
+slug made from the label: use one when cron lines, git hooks or scripts call the pipeline,
+so a renamed label doesn't break them. An optional `"notes"` says what it does in a line,
+and Wisp shows it beside the pipeline in `wisp show`, `wisp pick`, tab completion and
+the TUI.
 
 ## Pipeline steps
 
@@ -206,6 +209,7 @@ under "Runs code" and ask them to approve it.**
 | `wisp init --personal --name <name> [--json]` | create an empty personal workspace, for what belongs to no repository; prints its file |
 | `wisp check [path] [--json]` | validate a file, or the one in a folder: errors, warnings, what would run |
 | `wisp show [workspace] [--json]` | a workspace's pipelines: label, slug, notes, what is up, and each one's steps |
+| `wisp rename [workspace] <pipeline> <new name> [--json]` | rename a pipeline and every step that runs it; the file then needs `wisp trust` again |
 | `wisp list [--json]` | every known workspace |
 | `wisp trust` | approve a file's commands (for the user, not an agent) |
 | `wisp down <pipeline> [--deps]` · `wisp restart <pipeline>` | stop what a pipeline started · stop it and run it again |
@@ -315,7 +319,7 @@ id (`null` for a dry run); `log` is a step's output file; a failed step has `err
 | `NO_TARGET` | not in a project, and the command needs one | name a workspace (the message lists them) |
 | `NO_PIPELINE` | this project has no pipeline by that name | `wisp show` |
 | `NOT_FOUND` | no workspace, or no pipeline in it, by that name | `wisp list`, `wisp show <workspace>` |
-| `AMBIGUOUS` | the name matches several | use the slug or the full label |
+| `AMBIGUOUS` | the name matches several pipelines, or several workspaces share it (the message lists their files) | for a pipeline, use its slug or full label; for two workspaces, run one by its file: `wisp use <file> <pipeline>`, or ask the user to rename one (`wisp list` warns about shared names) |
 | `NOT_TRUSTED` | the file's commands are not approved yet | ask the user to run `wisp trust` |
 | `CONFIRM_NEEDED` | the pipeline asks first | ask the user, then pass `--yes` |
 | `INPUT_NEEDED` | an input has no value and no default | `--input name=value` |

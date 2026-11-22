@@ -46,6 +46,28 @@ Any whole word of the label works, and so does its slug: `wisp api` runs *Work o
 so does `wisp work-on-api`. Never part of a word, so `wisp doc` won't run *Documentation*
 by surprise. [How Wisp reads a name](./running-pipelines#how-wisp-reads-a-name)
 
+### A slug of its own
+
+The slug is made from the label, so it changes when the label does. Give a pipeline a
+`slug` when you want a short name of your own, or one that cron lines, git hooks and
+scripts can count on through renames:
+
+```json
+{ "label": "Start the whole stack", "slug": "up", "steps": [] }
+```
+
+`wisp acme up` runs it, and the words of its label still work too. In the dashboard's
+editor it's the **Slug** row, with the default shown until you type your own.
+
+To rename one, press `e` on it in the dashboard, or:
+
+```bash
+wisp rename dev "Dev stack"
+```
+
+Steps that run it follow the new name. From the command line, the file then needs
+[`wisp trust`](./trust) again: a name decides what `wisp dev` runs.
+
 `notes` is a line on what it does. It shows in `wisp show`, `wisp pick`, tab completion and
 the dashboard.
 

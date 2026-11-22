@@ -6,7 +6,7 @@ import { PROJECT_FILE, checkProject, findProjectFile } from "../../core/project.
 import { bold, counts, cyan, dim, green, kindLabel, plural, title, yellow } from "../format.js";
 import { emitJson } from "../lib/context.js";
 import type { CommandDef } from "../lib/define.js";
-import { countDiagnostics, named, printBolts, printDiagnostics, trustLine, whereLine } from "../lib/render.js";
+import { countDiagnostics, named, printPipelines, printDiagnostics, trustLine, whereLine } from "../lib/render.js";
 
 export const check: CommandDef<{ json?: boolean }> = {
   name: "check",
@@ -69,7 +69,7 @@ export const check: CommandDef<{ json?: boolean }> = {
     if (read.workspace.bolts.length > 0) {
       console.log();
       console.log(bold("Pipelines"));
-      printBolts(read.workspace, true, read.withheld);
+      printPipelines(read.workspace, true, read.withheld);
     }
 
     console.log();
