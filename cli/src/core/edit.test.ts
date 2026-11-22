@@ -29,7 +29,7 @@ import {
   setKeepGoing,
   setWorkspaceDetails,
   stepValues,
-} from "./edit.js";
+ deleteProjectFile } from "./edit.js";
 import { LOCAL_FILE, PROJECT_FILE, readProjectFile } from "./project.js";
 import { trustProject } from "./trust.js";
 
@@ -301,6 +301,12 @@ describe("editing a workspace without writing JSON", () => {
     expect(read.workspace.bolts).toEqual([]);
     expect(read.diagnostics.filter((diagnostic) => diagnostic.level === "error")).toEqual([]);
     await expect(createPersonalWorkspace("Morning")).rejects.toThrow(/already/);
+  });
+
+  it("deletes a project's .wisp.json for good when asked, and nothing that isn't one", async () => {
+    await deleteProjectFile(file);
+    await expect(readFile(file, "utf8")).rejects.toThrow();
+    await expect(deleteProjectFile(join(dir, "package.json"))).rejects.toThrow(/Only a project's \.wisp\.json/);
   });
 
   it("deletes your own workspaces, and never a project's file", async () => {

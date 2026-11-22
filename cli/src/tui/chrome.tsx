@@ -1,5 +1,6 @@
 /** The line along the top and the keys along the bottom, on every screen. */
 
+import { tildify } from "../core/paths.js";
 import { Box, Text } from "ink";
 
 import { VERSION } from "../cli/version.js";
@@ -95,7 +96,7 @@ export function Footer({ view, message, notice, hint, columns = 0 }: { view: Vie
     "run-inputs": "",
     "delete-workspace": view.kind === "delete-workspace" && view.personal
       ? `Its file and pipelines go; what it started keeps running · ${ASK_KEYS}`
-      : `Only from this list; its .wisp.json stays in the repository · ${ASK_KEYS}`,
+      : `Deletes ${view.kind === "delete-workspace" ? tildify(view.file) : ".wisp.json"} for good; what it started keeps running · ${ASK_KEYS}`,
     "stop-bolt": "",
     settings: "",
     setup: "",

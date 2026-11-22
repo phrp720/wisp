@@ -986,9 +986,9 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
     setView({ kind: "browse" });
     if (!yes) return;
     const { file, name, personal } = asked;
-    void (personal ? services.editing.removePersonalWorkspace(file) : services.editing.forgetProject(file))
+    void (personal ? services.editing.removePersonalWorkspace(file) : services.editing.deleteProjectFile(file))
       .then(() => reload())
-      .then(() => say(personal ? `Deleted "${name}"` : `Removed "${name}" from your list`))
+      .then(() => say(personal ? `Deleted "${name}"` : `Deleted ${tildify(file)}`))
       .catch((error: unknown) => setMessage(describe(error)));
   }
 
@@ -1277,7 +1277,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
             width={workspaceListWidth(columns)}
             confirming={
               view.kind === "delete-workspace"
-                ? { question: view.personal ? `Delete "${view.name}"?` : `Remove "${view.name}"?`, yes: view.personal ? "Delete" : "Remove", onAnswer: (yes) => deleteWorkspace(view, yes) }
+                ? { question: view.personal ? `Delete "${view.name}"?` : "Delete its .wisp.json?", yes: "Delete", onAnswer: (yes) => deleteWorkspace(view, yes) }
                 : undefined
             }
           />

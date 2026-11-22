@@ -119,8 +119,8 @@ export interface Editing {
   createPersonalWorkspace(name: string): Promise<string>;
   /** Delete one of your own workspaces' files. */
   removePersonalWorkspace(file: string): Promise<void>;
-  /** Stop listing a project; its .wisp.json is left as it is. */
-  forgetProject(file: string): Promise<void>;
+  /** Delete a project's .wisp.json for good, and stop listing it. */
+  deleteProjectFile(file: string): Promise<void>;
 }
 
 /** A `.wisp.json` Wisp could write for the folder it was opened in. */

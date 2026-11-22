@@ -61,6 +61,17 @@ wisp init --personal --name Homelab    # or just -p: it asks for the name
 It's kept in Wisp's `workspaces` folder (`wisp doctor` shows where), and its commands run
 without asking for [trust](./trust): they're yours.
 
+## Deleting one
+
+Select it on the left in the dashboard and press `D`. It says which file goes, and asks
+first:
+
+- **A personal workspace:** its file is deleted.
+- **A project:** its `.wisp.json` is deleted for good, and it leaves your list. If the file
+  was committed, git still has it until you commit the deletion.
+
+What its pipelines started keeps running; `wisp stop --all` stops it.
+
 ::: tip Your own editor
 A folder or file step in a personal workspace can say `"openWith": "WebStorm"`. A project's
 file can't: everyone chooses their own editor in [Settings](./settings).

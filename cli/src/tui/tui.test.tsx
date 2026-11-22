@@ -79,7 +79,7 @@ function services(overrides: Partial<Services> = {}, library: Library = { reads:
       setAfter: async () => undefined,
       createPersonalWorkspace: async () => "",
       removePersonalWorkspace: async () => undefined,
-      forgetProject: async () => undefined,
+      deleteProjectFile: async () => undefined,
     },
     down: async () => ({ stopped: [] }),
     restart: async (run) => ({ ok: true, run }),
@@ -662,9 +662,9 @@ describe("the TUI", () => {
 
   it("cancelling the delete-workspace dialog leaves the dashboard as it was: no run, focus unmoved", async () => {
     const run = vi.fn(services().run);
-    const forgetProject = vi.fn(async () => undefined);
+    const deleteProjectFile = vi.fn(async () => undefined);
     const base = services({ run });
-    const app = await open(services({ run, editing: { ...base.editing, forgetProject } }));
+    const app = await open(services({ run, editing: { ...base.editing, deleteProjectFile } }));
     app.stdin.write(ARROW_LEFT);
     await tick();
     for (const key of ["D", ARROW_RIGHT, "\r", "D", ARROW_RIGHT, ARROW_LEFT, ARROW_RIGHT, "\r"]) {
@@ -673,24 +673,24 @@ describe("the TUI", () => {
     }
     await tick();
     await eventually(() => expect(run).not.toHaveBeenCalled());
-    await eventually(() => expect(forgetProject).not.toHaveBeenCalled());
+    await eventually(() => expect(deleteProjectFile).not.toHaveBeenCalled());
     // Still on the workspaces: D asks about the workspace again, not about a bolt.
     app.stdin.write("D");
     await tick();
-    await eventually(() => expect(app.lastFrame()).toContain('Remove "Acme"?'));
+    await eventually(() => expect(app.lastFrame()).toContain("Delete its .wisp.json?"));
   });
 
-  it("D on a project in the list removes it from the list, and never deletes its file", async () => {
-    const forgetProject = vi.fn(async () => undefined);
+  it("D on a project deletes its .wisp.json for good, after saying which file", async () => {
+    const deleteProjectFile = vi.fn(async () => undefined);
     const removePersonalWorkspace = vi.fn(async () => undefined);
     const base = services();
-    const app = await open(services({ editing: { ...base.editing, forgetProject, removePersonalWorkspace } }));
+    const app = await open(services({ editing: { ...base.editing, deleteProjectFile, removePersonalWorkspace } }));
     app.stdin.write(ARROW_LEFT);
     await tick();
     app.stdin.write("D");
     await tick();
-    await eventually(() => expect(app.lastFrame()).toContain('Remove "Acme"?'));
-    await eventually(() => expect(app.lastFrame()).toContain("stays in the repository"));
+    await eventually(() => expect(app.lastFrame()).toContain("Delete its .wisp.json?"));
+    await eventually(() => expect(app.lastFrame()).toContain(`Deletes ${acme.workspace.file} for good`));
     await eventually(() => expect(app.lastFrame()).toContain("infra"));
     await eventually(() => expect(app.lastFrame()).toContain("Work on api"));
     await tick();
@@ -699,7 +699,7 @@ describe("the TUI", () => {
     app.stdin.write("\r");
     await tick();
     await tick();
-    await eventually(() => expect(forgetProject).toHaveBeenCalledWith(acme.workspace.file));
+    await eventually(() => expect(deleteProjectFile).toHaveBeenCalledWith(acme.workspace.file));
     await eventually(() => expect(removePersonalWorkspace).not.toHaveBeenCalled());
   });
 

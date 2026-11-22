@@ -63,7 +63,7 @@ Lowercase keys are everyday and safe. A capital is the heavier form of the same 
 | `⏎` · `c` | run the selected pipeline · check it without running anything |
 | `x` · `R` | stop the run, or what the pipeline started · restart it |
 | `r` · `⏎` | after a run: retry from the failed step · close it |
-| `a` · `e` · `D` | add · edit · delete a pipeline (on a workspace: `e` renames it, `D` removes it) |
+| `a` · `e` · `D` | add · edit · delete a pipeline (on a workspace: `e` renames it, `D` deletes its file) |
 | `K` · `J` | move a pipeline up · down |
 | `N` · `E` | a personal workspace · open the file in your editor |
 | `/` | search every workspace and pipeline; in a log or an open run, filter its lines |

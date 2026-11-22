@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, resolve } from "node:path";
 
-import { declineSetup, forgetProject, getMouse, getNotify, getOpenWithDefaults, recordProject, setMouse, setNotify, setOpenWithDefaults, setupDeclined } from "../core/config.js";
+import { declineSetup, getMouse, getNotify, getOpenWithDefaults, recordProject, setMouse, setNotify, setOpenWithDefaults, setupDeclined } from "../core/config.js";
 import { installedEditors } from "../core/editors.js";
 import { detectEnvironment } from "../core/environment.js";
 import { listRuns, restartRun, stopRun, tail } from "../core/processes.js";
@@ -192,9 +192,7 @@ export function realServices(hooks: { suspend: () => void; resume: () => void })
       setAfter: edit.setAfter,
       createPersonalWorkspace: edit.createPersonalWorkspace,
       removePersonalWorkspace: edit.removePersonalWorkspace,
-      forgetProject: async (file) => {
-        await forgetProject(file);
-      },
+      deleteProjectFile: edit.deleteProjectFile,
     },
 
     runs: listRuns,

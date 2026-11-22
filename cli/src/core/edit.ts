@@ -1,11 +1,11 @@
 import { readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 
 import { parseDuration } from "./duration.js";
 import { WispError, describe } from "./errors.js";
 import { INPUT_NAME } from "./inputs.js";
 import { workspacesDir } from "./paths.js";
-import { PROJECT_SCHEMA_URL, parseWait, readProjectFile } from "./project.js";
+import { PROJECT_FILE, PROJECT_SCHEMA_URL, parseWait, readProjectFile } from "./project.js";
 import { pickColor } from "./colors.js";
 import { formatProjectFile } from "./scaffold.js";
 import { localFileFor, trustProject } from "./trust.js";
@@ -592,6 +592,14 @@ export async function setAfter(file: string, bolt: string, index: number, on: nu
  * Delete one of your own workspaces. Only those: a project's .wisp.json belongs to its
  * repository, and is never Wisp's to delete (it can only stop listing it).
  */
+export async function deleteProjectFile(file: string): Promise<void> {
+  const path = resolve(file);
+  if (basename(path) !== PROJECT_FILE) throw new WispError(`Only a project's ${PROJECT_FILE} can be deleted this way`, "INVALID_INPUT");
+  await rm(path);
+  const { forgetProject } = await import("./config.js");
+  await forgetProject(path);
+}
+
 export async function removePersonalWorkspace(file: string): Promise<void> {
   const path = resolve(file);
   if (dirname(path) !== resolve(workspacesDir())) {
