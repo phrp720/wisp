@@ -19,7 +19,7 @@ export const pick: CommandDef<PickOptions> = {
   summary: "Choose a pipeline from a list and run it",
   args: [["[workspace]", "workspace name; omitted uses this directory's project, or asks which"]],
   options: [
-    ["-n, --dry-run", "show what would happen, and where each command would run"],
+    ["--dry-run", "show what would happen, and where each command would run"],
     ["-i, --inline", "run commands here, in this terminal"],
     ["-w, --window", "run commands in terminal windows (or tmux windows, inside tmux)"],
     ["-d, --detach", "run commands in the background, even if you chose a terminal"],

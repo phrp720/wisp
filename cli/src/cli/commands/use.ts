@@ -35,7 +35,7 @@ export const use: CommandDef<UseOptions> = {
     ["[pipeline]", "which pipeline — any distinctive part of its name will do"],
   ],
   options: [
-    ["-n, --dry-run", "show what would happen, and where each command would run"],
+    ["--dry-run", "show what would happen, and where each command would run"],
     ["-i, --inline", "run commands here, in this terminal"],
     ["-w, --window", "run commands in terminal windows (or tmux windows, inside tmux)"],
     ["-d, --detach", "run commands in the background, even if you chose a terminal"],

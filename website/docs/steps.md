@@ -46,7 +46,7 @@ Starts them and waits until they're healthy. [Docker](./docker)
 { "pipeline": "Database", "label": "db" }
 ```
 
-Runs another pipeline of the same file as one step. [Pipelines in pipelines](./pipelines-in-pipelines)
+Runs another pipeline of the same file as one step. [Pipelines as steps](./pipelines-as-steps)
 
 ## Wait
 

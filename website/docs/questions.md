@@ -47,7 +47,7 @@ already has and suggests pipelines. After that, `a` adds a pipeline and `e` edit
 :::
 
 ::: details Something without a repository, like a tunnel or my backups?
-Press `N` in the dashboard for a personal workspace. Same format, kept in Wisp's own
+Press `N` in the dashboard for a personal workspace, or run `wisp init -p`. Same format, kept in Wisp's own
 folder, and its commands run without asking: they're yours.
 
 → [Personal workspaces](./workspaces#personal-workspaces)

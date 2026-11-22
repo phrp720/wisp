@@ -62,7 +62,12 @@ down (a `backend/`, a `frontend/`), and suggests pipelines:
 | Others | Go, Rust, Ruby on Rails, PHP and Laravel, .NET, Elixir and Phoenix |
 | Anything | `docker compose` services, a `Makefile`, `justfile`, `mise`, `Taskfile`, a `Procfile` |
 
-From a script: `wisp init --only "Dev,Verify" --yes`.
+| | |
+|---|---|
+| `wisp init` | asks for the name, then whether to look through the project |
+| `wisp init --empty` | a file with no pipelines, without looking |
+| `wisp init --name Acme` | the workspace's name, without asking |
+| `wisp init --only "Dev,Verify" --yes` | from a script: just these of the suggestions |
 
 ## Change it without JSON
 
@@ -80,7 +85,7 @@ a pipeline that runs one this file doesn't have.
 ## More on pipelines
 
 - [Order](./order): which steps run together, and which wait
-- [Pipelines in pipelines](./pipelines-in-pipelines): run one as a step of another
+- [Pipelines as steps](./pipelines-as-steps): run one as a step of another
 - [Inputs](./inputs): values it asks for each time it runs
 - [Asking first](./asking-first): a question before a deploy goes out
 - [Workspaces](./workspaces): where pipelines live, besides a project's file

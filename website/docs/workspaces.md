@@ -52,8 +52,14 @@ backups of your photos, the day's tabs.
 wisp homelab tunnel
 ```
 
-Make one with `N` in the dashboard. It's kept in Wisp's `workspaces` folder (`wisp doctor`
-shows where), and its commands run without asking for [trust](./trust): they're yours.
+Make one with `N` in the dashboard, or from the command line:
+
+```bash
+wisp init --personal --name Homelab    # or just -p: it asks for the name
+```
+
+It's kept in Wisp's `workspaces` folder (`wisp doctor` shows where), and its commands run
+without asking for [trust](./trust): they're yours.
 
 ::: tip Your own editor
 A folder or file step in a personal workspace can say `"openWith": "WebStorm"`. A project's

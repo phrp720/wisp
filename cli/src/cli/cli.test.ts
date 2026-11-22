@@ -19,7 +19,7 @@ describe("withImplicitUse", () => {
 
   it("reads an unknown first word as a pipeline", () => {
     expect(withImplicitUse(argv("api"), commands)).toEqual(argv("use", "api"));
-    expect(withImplicitUse(argv("api", "-n"), commands)).toEqual(argv("use", "api", "-n"));
+    expect(withImplicitUse(argv("api", "--dry-run"), commands)).toEqual(argv("use", "api", "--dry-run"));
   });
 
   it("reads `wisp help agents` as the reference for agents, not help about a command", () => {

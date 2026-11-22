@@ -29,7 +29,7 @@ export const down: CommandDef<{ deps?: boolean; dryRun?: boolean; json?: boolean
   ],
   options: [
     ["--deps", "take the pipelines it depends on down too"],
-    ["-n, --dry-run", "show what would stop, and stop nothing"],
+    ["--dry-run", "show what would stop, and stop nothing"],
     ["--json", "print the result as JSON"],
   ],
   examples: ["wisp down api", "wisp down api --deps   # the database too"],

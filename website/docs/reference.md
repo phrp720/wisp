@@ -67,7 +67,7 @@ Starts the services and waits until they're healthy. Leave out `services` for al
 ```
 
 Runs a pipeline of the same file as one step: done when all its steps are. It runs once per
-run, however many steps run it. See [Pipelines in pipelines](./pipelines-in-pipelines).
+run, however many steps run it. See [Pipelines as steps](./pipelines-as-steps).
 
 ### Wait
 

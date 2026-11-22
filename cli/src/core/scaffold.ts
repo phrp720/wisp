@@ -82,10 +82,15 @@ function count(many: number, one: string, more = `${one}s`): string {
   return `${many} ${many === 1 ? one : more}`;
 }
 
-export async function draftProject(from: string = process.cwd(), options: { only?: string[] } = {}): Promise<ProjectDraft> {
+export async function draftProject(from: string = process.cwd(), options: { only?: string[]; name?: string } = {}): Promise<ProjectDraft> {
   const root = resolve(expandHome(from));
   const detected = await detect(root);
-  return { file: join(root, PROJECT_FILE), contents: format(detected, options.only), detected };
+  return { file: join(root, PROJECT_FILE), contents: format(options.name ? { ...detected, name: options.name } : detected, options.only), detected };
+}
+
+export async function guessName(from: string = process.cwd()): Promise<string> {
+  const root = resolve(expandHome(from));
+  return projectName(await readJsonFile(join(root, "package.json")), root);
 }
 
 /**
@@ -117,7 +122,12 @@ function withoutAfter(step: Step, gone: Set<string>): Step {
  * Write a drafted project file. Refuses to overwrite unless asked: clobbering someone's
  * carefully arranged bolts because they typed `init` twice is not a recoverable mistake.
  */
-export async function writeProjectDraft(draft: ProjectDraft, overwrite = false): Promise<string> {
+export function emptyProject(from: string = process.cwd(), name?: string): Pick<ProjectDraft, "file" | "contents"> {
+  const root = resolve(expandHome(from));
+  return { file: join(root, PROJECT_FILE), contents: formatProjectFile([["$schema", PROJECT_SCHEMA_URL], ["name", name || basename(root)], ["pipelines", []]]) };
+}
+
+export async function writeProjectDraft(draft: Pick<ProjectDraft, "file" | "contents">, overwrite = false): Promise<string> {
   if (!overwrite) {
     const exists = await stat(draft.file).catch(() => undefined);
     if (exists) throw new WispError(`${draft.file} already exists — pass --force to replace it`, "PROJECT_EXISTS");
@@ -636,6 +646,11 @@ export function formatProjectFile(sections: [key: string, value: unknown][]): st
     if (value === undefined || value === "") continue;
 
     if (Array.isArray(value)) {
+      if (value.length === 0 && key === "pipelines") {
+        flush();
+        groups.push([`  "pipelines": []`]);
+        continue;
+      }
       if (value.length === 0) continue;
       flush();
       const body = key === "pipelines" ? (value as (DraftBolt & Record<string, unknown>)[]).map(boltBlock).join(",\n") : rows(value as Record<string, unknown>[]);

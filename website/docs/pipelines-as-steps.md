@@ -1,4 +1,4 @@
-# Pipelines in pipelines
+# Pipelines as steps
 
 A pipeline can run another as one of its steps. Put shared steps, like starting the database,
 in a pipeline of their own, and run it from the others:

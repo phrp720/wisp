@@ -28,7 +28,7 @@ The complete reference for agents, the file format, every command, JSON output a
 - [Order](${site}/docs/order): steps side by side or in order, with after
 - [Commands](${site}/docs/commands): keeps running or finishes, failures, timeouts, restart on crash
 - [Docker](${site}/docs/docker): compose services, waiting until healthy
-- [Pipelines in pipelines](${site}/docs/pipelines-in-pipelines): one pipeline as a step of another
+- [Pipelines as steps](${site}/docs/pipelines-as-steps): one pipeline as a step of another
 - [Inputs](${site}/docs/inputs): values a pipeline asks for each run
 - [Asking first](${site}/docs/asking-first): a question before a pipeline runs
 - [Workspaces](${site}/docs/workspaces): projects, .wisp.local.json and personal workspaces
@@ -98,7 +98,7 @@ export default defineConfig({
             { text: "Order", link: "/docs/order" },
             { text: "Commands", link: "/docs/commands" },
             { text: "Docker", link: "/docs/docker" },
-            { text: "Pipelines in pipelines", link: "/docs/pipelines-in-pipelines" },
+            { text: "Pipelines as steps", link: "/docs/pipelines-as-steps" },
             { text: "Inputs", link: "/docs/inputs" },
             { text: "Asking first", link: "/docs/asking-first" },
             { text: "Workspaces", link: "/docs/workspaces" },

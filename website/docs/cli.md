@@ -20,7 +20,7 @@ Options when running a pipeline:
 
 | Option | |
 |---|---|
-| `-n`, `--dry-run` | show what it would do, and where; change nothing |
+| `--dry-run` | show what it would do, and where; change nothing |
 | `-r`, `--retry` | run again from the step that failed last time |
 | `-w`, `--window` | run its commands in terminal windows (tmux windows, inside tmux) |
 | `-i`, `--inline` | run them here, with their output in this terminal |
@@ -47,7 +47,8 @@ How names are matched: [Running pipelines](./running-pipelines#how-wisp-reads-a-
 
 | Command | |
 |---|---|
-| `wisp init` | write a `.wisp.json` from what the project has; `--only "Dev,Verify"`, `--print`, `--yes`, `--force` |
+| `wisp init` | write a `.wisp.json` from what the project has; `--empty`, `--name Acme`, `--only "Dev,Verify"`, `--print`, `--yes`, `--force` |
+| `wisp init -p --name Homelab` | create a [personal workspace](./workspaces#personal-workspaces) |
 | `wisp check` | what's wrong with the file, and what it would run |
 | `wisp trust` | allow this file's commands, after showing them; `--list`, `--revoke` |
 | `wisp scan ~/dev` | find the projects you already have; `--remember`, `--depth 4` |

@@ -29,7 +29,7 @@ It depends on the step:
 | A command that keeps running | it has started and didn't fail at once |
 | [Docker services](./docker) | they're healthy |
 | A [wait](./steps#wait-until-something-is-ready) | what it waits for answers |
-| [Another pipeline](./pipelines-in-pipelines) | all of its steps are |
+| [Another pipeline](./pipelines-as-steps) | all of its steps are |
 
 That's why a server is usually followed by a wait: the API has *started*, and the wait
 makes the next step hold on until it *answers*.

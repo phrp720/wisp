@@ -25,9 +25,11 @@ cd ~/dev/acme
 wisp init
 ```
 
-Wisp looks at what the project already has (package.json scripts, compose files, Django,
-Gradle, a Makefile and [more](./pipelines#let-wisp-write-it)) and suggests pipelines, each
-with what it would do. Untick the ones you don't want with space, and `⏎` writes the file.
+It asks for the workspace's name, offering the one it found, then whether to look through
+the project. Say yes, and it reads what the project already has (package.json scripts,
+compose files, Django, Gradle, a Makefile and [more](./pipelines#let-wisp-write-it)) and
+suggests pipelines, each with what it would do. Untick the ones you don't want with space,
+and `⏎` writes the file. Say no, and you get a file with no pipelines yet.
 Opening `wisp` in a project with no file offers the same.
 
 <Recording name="init" alt="wisp init: it suggests three pipelines, keeps two, writes the file, then wisp trust allows it and wisp blog runs it" />

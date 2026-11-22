@@ -202,7 +202,8 @@ under "Runs code" and ask them to approve it.**
 | `wisp <workspace> <pipeline>` | run a pipeline of any known workspace, from any folder |
 | `wisp use <file> <pipeline>` | run a pipeline of a workspace file by path, for cron and scripts. `use` is implied above; say it for a pipeline named like a command (`wisp use list`) |
 | `wisp pick [workspace]` | at a terminal, choose a pipeline from a list and run it; without one (or with `--json`) it asks nothing and prints what `wisp show` would |
-| `wisp init [--print] [--yes] [--only <pipelines>]` | write a `.wisp.json` from what the project has, at its root and one folder down: package.json and Deno; Python (Django, FastAPI, Flask, pytest, ruff, uv, poetry); Gradle and Maven (Spring Boot); Go; Rust; Rails; PHP and Laravel; .NET; Elixir and Phoenix; docker compose, Makefile, justfile, mise, Taskfile, Procfile. `--only "Check,Work on api"` keeps just those of the suggested pipelines |
+| `wisp init [--print] [--yes] [--only <pipelines>] [--empty] [--name <name>]` | write a `.wisp.json` from what the project has, at its root and one folder down: package.json and Deno; Python (Django, FastAPI, Flask, pytest, ruff, uv, poetry); Gradle and Maven (Spring Boot); Go; Rust; Rails; PHP and Laravel; .NET; Elixir and Phoenix; docker compose, Makefile, justfile, mise, Taskfile, Procfile. `--only "Check,Work on api"` keeps just those of the suggested pipelines |
+| `wisp init --personal --name <name> [--json]` | create an empty personal workspace, for what belongs to no repository; prints its file |
 | `wisp check [path] [--json]` | validate a file, or the one in a folder: errors, warnings, what would run |
 | `wisp show [workspace] [--json]` | a workspace's pipelines: label, slug, notes, what is up, and each one's steps |
 | `wisp list [--json]` | every known workspace |
@@ -226,7 +227,9 @@ take input defaults), `--json`.
 ## Working with Wisp as an agent
 
 1. `wisp spec` (this), then `wisp show --json` to see what exists. In a project
-   without a file, `wisp init --yes` writes one from its scripts.
+   without a file, `wisp init --yes` writes one from its scripts (`--empty` for one with no
+   pipelines, `--name` to name it). For a task that belongs to no repository,
+   `wisp init --personal --name <name> --json` creates a personal workspace and prints its file.
 2. Edit `.wisp.json`. Give each pipeline a short label and a `notes` line. Keep paths
    relative.
 3. `wisp check --json`: exit code 1 means errors. Fix them until `errors` is 0.
