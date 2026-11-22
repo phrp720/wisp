@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { Platform } from "../platform/types.js";
-import { DOCKER_DOWN, dockerState, usesDocker } from "./docker.js";
+import { containerAction, DOCKER_DOWN, dockerState, usesDocker } from "./docker.js";
 import { interpret } from "./project.js";
 import { switchToWorkspace } from "./switch.js";
 
@@ -87,5 +87,53 @@ describe("a step that needs Docker while Docker is down", () => {
     expect(result.ok).toBe(true);
     expect(result.targets.map((target) => target.ok)).toEqual([true, true]);
     expect((await readFile(calls, "utf8")).trim().split("\n")).toEqual(["version --format {{.Server.Version}}"]);
+  });
+});
+
+describe("stopping a container while a run still needs it", () => {
+  const platform = { os: "darwin" } as unknown as Platform;
+  const environment = { os: "darwin" as const, gui: false, ssh: false };
+  const compose = `case "$*" in
+  version*) exit 0 ;;
+  *" ps "*) echo '{"Name":"db-1","Service":"postgres","State":"exited","Health":"","Status":"Exited (0)","Publishers":[],"ExitCode":0,"Project":"shop","Image":"postgres"}' ;;
+  *" up "*) sleep 1; echo "container db-1 exited" >&2; exit 1 ;;
+  *) exit 0 ;;
+esac`;
+  const workspace = () =>
+    interpret(
+      { main: { pipelines: [{ label: "Database", steps: [{ compose: "compose.yaml", label: "db" }, { run: "echo after", label: "after", finishes: true, after: "db" }] }] } },
+      { file: join(dir, ".wisp.json"), personal: false, trust: "trusted", os: "darwin" },
+    ).workspace;
+
+  it("cancels the run when you stop one of its containers on the Running tab, naming the service", async () => {
+    await fakeDocker(compose);
+    setTimeout(() => void containerAction("db-1", "stop"), 300);
+    const result = await switchToWorkspace(workspace(), { bolt: "Database" }, { platform, environment, defaults: {} });
+    expect(result).toMatchObject({ ok: false, cancelled: true });
+    expect(result.targets[0]).toMatchObject({ ok: false, cancelled: true, error: "you stopped postgres" });
+    expect(result.targets[1]).toMatchObject({ skipped: true, note: "not reached — the run was cancelled" });
+  });
+
+  it("cancels a wait for its port when you stop the container after compose brought it up", async () => {
+    await fakeDocker(compose.replace('*" up "*) sleep 1; echo "container db-1 exited" >&2; exit 1 ;;', '*" up "*) exit 0 ;;'));
+    const ws = interpret(
+      { main: { pipelines: [{ label: "Database", steps: [{ compose: "compose.yaml", label: "db" }, { wait: { port: 1, timeout: 1.5 }, label: "ready", after: "db" }] }] } },
+      { file: join(dir, ".wisp.json"), personal: false, trust: "trusted", os: "darwin" },
+    ).workspace;
+    setTimeout(() => void containerAction("db-1", "stop"), 400);
+    const result = await switchToWorkspace(ws, { bolt: "Database" }, { platform, environment, defaults: {} });
+    expect(result).toMatchObject({ ok: false, cancelled: true });
+    expect(result.targets[0]).toMatchObject({ ok: true });
+    expect(result.targets[1]).toMatchObject({ ok: false, cancelled: true, error: "you stopped postgres" });
+  });
+
+  it("still fails the run when a container dies by itself, or was stopped before the run began", async () => {
+    await fakeDocker(compose);
+    await containerAction("db-1", "stop");
+    await new Promise((done) => setTimeout(done, 20));
+    const result = await switchToWorkspace(workspace(), { bolt: "Database" }, { platform, environment, defaults: {} });
+    expect(result.ok).toBe(false);
+    expect(result.cancelled).toBeUndefined();
+    expect(result.targets[0]?.cancelled).toBeUndefined();
   });
 });

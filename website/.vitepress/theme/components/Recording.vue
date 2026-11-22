@@ -3,7 +3,7 @@ const props = defineProps<{ name: string; alt: string }>();
 
 const SIZES: Record<string, [number, number]> = {
   cli: [1200, 560],
-  dashboard: [1400, 760],
+  dashboard: [1400, 860],
   editor: [1400, 760],
   init: [1400, 720],
   jobs: [1400, 760],

@@ -36,8 +36,9 @@ broke. Each step says how many lines matched.
 | `!` **Interrupted** | Wisp itself stopped before the run did, so how it ended is unknown |
 
 A run is cancelled when you press `x` on it, and also when you stop something it started
-while it's still going: `x` on the Running tab, `wisp stop` or `wisp down`, say on the dev
-server a later step was waiting for. As on GitHub, the step that was cut off says why
+while it's still going: a command or a Docker container, with `x` or `r` on the Running tab,
+`wisp stop` or `wisp down`. Say the dev server a later step was waiting for, or the database
+container behind a wait for its port. As on GitHub, the step that was cut off says why
 (`you stopped the run`, `you stopped server`) and the steps after it say they weren't reached.
 A command that crashed by itself is still a failure.
 

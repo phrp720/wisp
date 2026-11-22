@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
-import { randomBytes } from "node:crypto";
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, statSync, writeFileSync } from "node:fs";
+import { createHash, randomBytes } from "node:crypto";
+import { closeSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { open, readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -410,17 +410,34 @@ function stoppedMarker(id: string): string {
   return join(stateDir(), "stopped", id);
 }
 
-function markStopped(id: string): void {
+export function markStopped(id: string): void {
+  const dir = join(stateDir(), "stopped");
   try {
-    mkdirSync(join(stateDir(), "stopped"), { recursive: true, mode: 0o700 });
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
     writeFileSync(stoppedMarker(id), new Date().toISOString(), { mode: 0o600 });
+    const old = Date.now() - 7 * 24 * 3600 * 1000;
+    for (const entry of readdirSync(dir)) {
+      if (statSync(join(dir, entry)).mtimeMs < old) rmSync(join(dir, entry), { force: true });
+    }
   } catch {
     return;
   }
 }
 
-export function stoppedOnPurpose(id: string): boolean {
-  return existsSync(stoppedMarker(id));
+export function stoppedOnPurpose(id: string, since = 0): boolean {
+  try {
+    return statSync(stoppedMarker(id)).mtimeMs >= since;
+  } catch {
+    return false;
+  }
+}
+
+export function containerMarker(name: string): string {
+  return `container-${name.replace(/[^\w.-]/g, "_")}`;
+}
+
+export function composeMarker(file: string): string {
+  return `compose-${createHash("sha256").update(file).digest("hex").slice(0, 16)}`;
 }
 
 /**

@@ -2,6 +2,8 @@ import { execFile } from "node:child_process";
 import { dirname } from "node:path";
 import { promisify } from "node:util";
 
+import { containerMarker, markStopped } from "./processes.js";
+
 const exec = promisify(execFile);
 
 /** A container of a compose project, as the TUI and `wisp ps` show it. */
@@ -120,6 +122,7 @@ export async function containerLogs(name: string, lines = 300): Promise<string> 
 }
 
 export async function containerAction(name: string, action: "start" | "stop" | "restart"): Promise<void> {
+  if (action !== "start") markStopped(containerMarker(name));
   await docker([action, name]);
 }
 

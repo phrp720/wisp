@@ -9,14 +9,14 @@ import { runInTmux, runInZellij } from "../platform/multiplexer.js";
 import { MULTIPLEXERS } from "../platform/terminals.js";
 import { describeDuration } from "./duration.js";
 import { getOpenWithDefaults } from "./config.js";
-import { composeStopArgs, composeUpArgs, DOCKER_DOWN, dockerState, usesDocker, type Container, type DockerState } from "./docker.js";
+import { composeContainers, composeStopArgs, composeUpArgs, DOCKER_DOWN, dockerState, usesDocker, type Container, type DockerState } from "./docker.js";
 import { detectEnvironment, type Environment } from "./environment.js";
 import { WispError, describe } from "./errors.js";
 import { envNames, fillEnv, fillTarget, fillText, type InputValues } from "./inputs.js";
 import { notifyRunEnd } from "./notify.js";
 import { baseLabel, gitState, listHistory, newHistoryId, noteNotified, recordHistory, stepLogFile, stepLogPath, type HistoryEntry, type HistoryStep } from "./history.js";
 import { currentOS, expandHome, stateDir, withLock } from "./paths.js";
-import { listRuns, newRunId, pidFileFor, recordWindowRun, runningFor, startRun, stopHung, stopRun, stoppedOnPurpose, tidyState, trimLog, type RunStatus } from "./processes.js";
+import { listRuns, newRunId, pidFileFor, recordWindowRun, runningFor, startRun, composeMarker, containerMarker, markStopped, stopHung, stopRun, stoppedOnPurpose, tidyState, trimLog, type RunStatus } from "./processes.js";
 import { restartLoop, shellInvocation, windowInvocation } from "./shell.js";
 import { normalizeUrl, sameUrl } from "./url.js";
 import { describeWait, waitFor } from "./wait.js";
@@ -140,6 +140,8 @@ export async function runPlan(
     tabs: undefined,
     historyId,
     started: [],
+    since: Date.now(),
+    composeFiles: new Set(),
   };
 
   const results: (TargetResult | undefined)[] = steps.map(() => undefined);
@@ -364,6 +366,10 @@ interface Context {
   docker?: Promise<DockerState>;
   /** A command this run started that someone stopped on purpose while it went on. */
   cancelledBy?: string;
+  /** When the run began: a stop before then was not of this run. */
+  since: number;
+  /** The compose files this run started, whose containers a wait may depend on. */
+  composeFiles: Set<string>;
 }
 
 /**
@@ -517,6 +523,16 @@ async function preview(step: PlannedStep, context: Context): Promise<TargetResul
   return { ...target, ok: true };
 }
 
+async function stoppedContainer(context: Context, files: string[]): Promise<string | undefined> {
+  for (const file of files) {
+    if (stoppedOnPurpose(composeMarker(file), context.since)) return "its Docker services";
+    const containers = await composeContainers(file).catch((): Container[] => []);
+    const stopped = containers.find((container) => stoppedOnPurpose(containerMarker(container.name), context.since));
+    if (stopped) return stopped.service;
+  }
+  return undefined;
+}
+
 function dockerOf(context: Context): Promise<DockerState> {
   context.docker ??= dockerState();
   return context.docker;
@@ -532,7 +548,8 @@ async function execute(step: PlannedStep, index: number, context: Context): Prom
           try {
             await waitFor(target.wait, context.options.signal, () => deadBefore(context));
           } catch (error) {
-            if (context.cancelledBy) return { ...target, ok: false, cancelled: true, error: `you stopped ${context.cancelledBy}` };
+            const by = context.cancelledBy ?? (await stoppedContainer(context, [...context.composeFiles]));
+            if (by) return { ...target, ok: false, cancelled: true, error: `you stopped ${by}` };
             throw error;
           }
         }
@@ -801,6 +818,8 @@ async function runCompose(step: PlannedStep, index: number, context: Context): P
   const compose = target.compose;
   if (!compose) return { ...target, ok: false, error: "nothing to do" };
 
+  if (compose.action === "up") context.composeFiles.add(compose.file);
+  else markStopped(composeMarker(compose.file));
   const args = compose.action === "up" ? composeUpArgs(compose.file, compose.services) : composeStopArgs(compose.file, compose.services);
   const log = context.historyId ? await stepLogPath(context.historyId, index) : undefined;
   const launch = { ...target, cwd: dirname(compose.file) };
@@ -816,6 +835,10 @@ async function runCompose(step: PlannedStep, index: number, context: Context): P
   const kept = log ? { log } : {};
   if (code === 0) {
     return { ...target, ok: true, note: compose.action === "up" ? "up and healthy" : "stopped", ...kept };
+  }
+  if (compose.action === "up") {
+    const by = await stoppedContainer(context, [compose.file]);
+    if (by) return { ...target, ok: false, cancelled: true, error: `you stopped ${by}`, ...kept };
   }
   // Compose's own words say why; the commonest reason gets a plainer one.
   const said = log ? await readTail(log) : "";

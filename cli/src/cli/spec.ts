@@ -107,8 +107,8 @@ build, a backup, a deploy. One pipeline can mix both:
   it starts. Until it ends it has \`"running": true\`, and \`pending\` lists the steps not
   done yet; the ones in progress have \`"running": true\` and a \`log\` that fills as it goes.
   \`"interrupted": true\` means Wisp stopped before the run did. \`"cancelled": true\` (with
-  \`"ok": false\`) means someone stopped it: \`x\` in the dashboard, or stopping a command it started
-  while it ran (\`wisp stop\`, \`wisp down\`); the cut-off step has \`"cancelled": true\` too. It is not
+  \`"ok": false\`) means someone stopped it: \`x\` in the dashboard, or stopping a command or container it
+  started while it ran (the Running tab, \`wisp stop\`, \`wisp down\`); the cut-off step has \`"cancelled": true\` too. It is not
   a failure: it doesn't count for \`wisp notify changes\`, and its notification says "cancelled".
 - \`wisp hook pre-push Check\` runs it before every push and blocks the push if it fails.
   Its commands should finish: one that keeps running cannot block a push.

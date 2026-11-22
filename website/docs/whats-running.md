@@ -31,8 +31,9 @@ memory.
 
 <Recording name="dashboard" alt="Wisp's dashboard: running a pipeline in its box, its server's live output on the Running tab, then the History tab" />
 
-Stopping a command here while the pipeline that started it is still going, say the server a
-later step waits for, [cancels](./history#how-a-run-ends) that run rather than failing it.
+Stopping a command or a container here while the pipeline that started it is still going, say
+the server or the database a later step waits for, [cancels](./history#how-a-run-ends) that run
+rather than failing it.
 
 ## When something crashes
 
