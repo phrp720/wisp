@@ -11,6 +11,7 @@
 export function withImplicitUse(argv: string[], commands: Set<string>): string[] {
   // `wisp help agents` is the reference itself, not help about a command called agents.
   if (argv[2] === "help" && argv[3] === "agents") return [...argv.slice(0, 2), "spec", ...argv.slice(4)];
+  if (argv[2] === "--json" && argv.length === 3) return [...argv.slice(0, 2), "status", "--json"];
   const first = argv[2];
   if (!first || first.startsWith("-") || commands.has(first)) return argv;
   return [...argv.slice(0, 2), "use", ...argv.slice(2)];

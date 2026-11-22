@@ -214,7 +214,7 @@ under "Runs code" and ask them to approve it.**
 | Command | Does |
 |---|---|
 | \`wisp\` | at a terminal, the TUI; without one (pipes, scripts, agents), what this project can run |
-| \`wisp status\` | what this project can run, as text, even at a terminal |
+| \`wisp status [--json]\` · \`wisp --json\` | what this project can run, as text even at a terminal; \`--json\` prints \`{ project, workspaces }\`: \`project\` as \`wisp show --json\` prints it (\`null\` outside a project), \`workspaces\` as \`wisp list --json\` does |
 | \`wisp <pipeline>\` | run a pipeline of this project, and only this project, by its label, slug or a whole word of it. Not a pipeline here: exit 1, \`NO_PIPELINE\`, and the message names what to type. Ambiguous: exit 1, \`AMBIGUOUS\` |
 | \`wisp <workspace> <pipeline>\` | run a pipeline of any known workspace, from any folder |
 | \`wisp use <file> <pipeline>\` | run a pipeline of a workspace file by path, for cron and scripts. \`use\` is implied above; say it for a pipeline named like a command (\`wisp use list\`) |
@@ -225,7 +225,7 @@ under "Runs code" and ask them to approve it.**
 | \`wisp show [workspace] [--json]\` | a workspace's pipelines: label, slug, notes, what is up, and each one's steps |
 | \`wisp rename [workspace] <pipeline> <new name> [--json]\` | rename a pipeline and every step that runs it; the file then needs \`wisp trust\` again |
 | \`wisp list [--json]\` | every known workspace |
-| \`wisp trust\` | approve a file's commands (for the user, not an agent) |
+| \`wisp trust\` | approve a file's commands (for the user, not an agent: without a terminal it refuses with \`NEEDS_CONFIRMATION\`, even with \`--yes\`) |
 | \`wisp down <pipeline> [--deps]\` · \`wisp restart <pipeline>\` | stop what a pipeline started · stop it and run it again |
 | \`wisp history [pipeline \\| id] [--log <n>] [--json]\` | past runs, each step's result, duration and output; \`notified: [{ url, ok, problem? }]\` says which webhooks the run's notification reached |
 | \`wisp history [pipeline \\| id] --clear [--all]\` | delete a run, a pipeline's runs, or this project's (every project's with \`--all\`); runs still going are kept |
@@ -317,13 +317,15 @@ command the file declares, with where it runs.
 
 \`wisp <pipeline> --json\` (and with \`--dry-run\`): how each step went. \`history\` is the run's
 id (\`null\` for a dry run); \`log\` is a step's output file; a failed step has \`error\`.
+A command without \`"finishes": true\` keeps running in the background: its \`ok\` means it
+started, not that it succeeded. \`running\` lists those, with the id for \`wisp logs <run>\`.
 
 \`\`\`json
 { "workspace": "Shop", "pipeline": "Check", "ok": false, "dryRun": false, "history": "54b4b6af2c92",
   "steps": [
     { "kind": "command", "name": "lint", "value": "pnpm lint", "ok": true, "durationMs": 720, "log": "/…/1.log" },
     { "kind": "command", "name": "test", "value": "pnpm test", "ok": false, "error": "exited with code 3", "durationMs": 526, "log": "/…/2.log" }],
-  "waitingForTrust": [] }
+  "running": [], "waitingForTrust": [] }
 \`\`\`
 
 \`wisp history <id> --json\`: the same steps with \`stage\` (when each could start), plus
@@ -341,8 +343,9 @@ id (\`null\` for a dry run); \`log\` is a step's output file; a failed step has 
 | \`AMBIGUOUS\` | the name matches several pipelines, or several workspaces share it (the message lists their files) | for a pipeline, use its slug or full label; for two workspaces, run one by its file: \`wisp use <file> <pipeline>\`, or ask the user to rename one (\`wisp list\` warns about shared names) |
 | \`NOT_TRUSTED\` | the file's commands are not approved yet | ask the user to run \`wisp trust\` |
 | \`CONFIRM_NEEDED\` | the pipeline asks first | ask the user, then pass \`--yes\` |
+| \`NEEDS_CONFIRMATION\` | \`wisp trust\` was run without a person at a terminal | show the user what \`wisp check\` lists, and ask them to run \`wisp trust\` |
 | \`INPUT_NEEDED\` | an input has no value and no default | \`--input name=value\` |
-| \`INVALID_INPUT\` | a value or argument Wisp can't take | the message says which |
+| \`INVALID_INPUT\` | a value, argument or option Wisp can't take (with \`--json\`, a mistyped option is reported this way too) | the message says which |
 | \`PROJECT_INVALID\`, \`INVALID_JSON\` | the file is not valid JSON, or not an object | \`wisp check\` |
 | \`BROKEN_PIPELINE\`, \`CYCLE\` | \`after\` names a missing step, or steps or pipelines wait for each other | \`wisp check\` |
 | \`PROJECT_EXISTS\` | \`wisp init\` found a file already | edit it, or \`--force\` if the user wants it replaced |

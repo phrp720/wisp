@@ -2,8 +2,10 @@ import { tildify } from "../../core/paths.js";
 import { listRuns } from "../../core/processes.js";
 import { discoverWorkspaces } from "../../core/workspaces.js";
 import { counts, dim, plural, red, title } from "../format.js";
-import { maybeProject } from "../lib/context.js";
-import { diagnosticSummary, printPipelines, shortest, trustLine } from "../lib/render.js";
+import { emitJson, maybeProject } from "../lib/context.js";
+import { workspaceSummaries } from "./list.js";
+import { workspaceJson } from "./show.js";
+import { diagnosticSummary, noPipelinesLine, printPipelines, shortest, trustLine } from "../lib/render.js";
 
 /**
  * What bare `wisp` shows when it is not opening the TUI.
@@ -11,8 +13,14 @@ import { diagnosticSummary, printPipelines, shortest, trustLine } from "../lib/r
  * Standing in a project: what that project can run. Anywhere else: every workspace you
  * have, since "what can I run" has an answer wherever you are.
  */
-export async function status(): Promise<void> {
+export async function status(options: { json?: boolean } = {}): Promise<void> {
   const here = await maybeProject();
+
+  if (options.json) {
+    const { reads } = await discoverWorkspaces();
+    if (here && !reads.some((read) => read.workspace.file === here.workspace.file)) reads.unshift(here);
+    return emitJson({ project: here ? workspaceJson(here) : null, workspaces: workspaceSummaries(reads) });
+  }
 
   if (here) {
     const { workspace } = here;
@@ -26,7 +34,7 @@ export async function status(): Promise<void> {
       console.log(dim(`Run one with \`wisp ${shortest(workspace.bolts[0]!, workspace.bolts, true)}\`, or \`wisp pick\` to choose.`));
     } else {
       console.log();
-      console.log(dim("No pipelines in this file yet. Add some, then `wisp <pipeline>`."));
+      console.log(noPipelinesLine(here, "No pipelines in this file yet. Add some, then `wisp <pipeline>`."));
     }
 
     const trust = trustLine(here);

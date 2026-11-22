@@ -51,9 +51,10 @@ export function printPipelines(workspace: Workspace, expand = false, withheld: W
       const id = step.kind === "asset" ? step.id : step.kind === "compose" ? `compose:${step.file}` : undefined;
       return id && held.has(id) ? [held.get(id) as Withheld] : [];
     });
-    const note = waiting.length > 0 ? yellow(` · ${waiting.length} waiting for trust`) : "";
+    const size = steps.length === 0 && waiting.length > 0 ? yellow(`${plural(waiting.length, "step")} waiting for trust`) : dim(plural(steps.length, "step"));
+    const note = steps.length > 0 && waiting.length > 0 ? yellow(` · ${waiting.length} waiting for trust`) : "";
     const asks = bolt.confirm ? dim(" · asks first") : "";
-    console.log(`  ${upMark(workspace, bolt, runs)}${bold(bolt.label)} ${cyan(pipelineSlug(bolt))} ${dim(plural(steps.length, "step"))}${asks}${note}`);
+    console.log(`  ${upMark(workspace, bolt, runs)}${bold(bolt.label)} ${cyan(pipelineSlug(bolt))} ${size}${asks}${note}`);
     if (bolt.notes) console.log(`    ${dim(bolt.notes)}`);
     if (!expand) continue;
     const stages = stagesOfTargets(steps);
@@ -125,6 +126,11 @@ export function countDiagnostics(diagnostics: Diagnostic[]): { errors: number; w
 }
 
 /** The one-line health of a file, shown wherever its workspace is. Notes are not health. */
+export function noPipelinesLine(read: WorkspaceRead, fallback: string): string {
+  const { errors, warnings } = countDiagnostics(read.diagnostics.filter((entry) => entry.at !== "trust"));
+  return errors + warnings > 0 ? yellow("! No pipelines read from this file: `wisp check` says why") : dim(fallback);
+}
+
 export function diagnosticSummary(read: WorkspaceRead): string | undefined {
   const { errors, warnings } = countDiagnostics(read.diagnostics.filter((entry) => entry.at !== "trust"));
   if (errors === 0 && warnings === 0) return undefined;
@@ -176,18 +182,18 @@ export function resultLine(result: {
  * Everything a file would be allowed to run, as `wisp trust` and a run that needs trust both
  * show it. Trust is granted to what you have read, so it is printed every time.
  */
-export function printWithheld(read: WorkspaceRead): void {
+export function printWithheld(read: WorkspaceRead, print: (line?: string) => void = console.log): void {
   const path = read.workspace.file;
-  console.log(dim(tildify(path)));
-  if (read.workspace.local) console.log(dim(`+ ${tildify(read.workspace.local)}`));
-  if (read.trust === "stale") console.log(yellow("! this file has changed since you last trusted it"));
-  console.log();
-  console.log(bold(`Would allow ${plural(read.withheld.length, "item")} to run:`));
+  print(dim(tildify(path)));
+  if (read.workspace.local) print(dim(`+ ${tildify(read.workspace.local)}`));
+  if (read.trust === "stale") print(yellow("! this file has changed since you last trusted it"));
+  print();
+  print(bold(`Would allow ${plural(read.withheld.length, "item")} to run:`));
   for (const item of read.withheld) {
     const where = whereLine(item.cwd, dirname(path));
     const why = item.reason ? dim(` (${item.reason})`) : "";
-    console.log(`  ${dim(kindLabel(item.kind))} ${named(item.label, tildify(item.value))}${where}${why}`);
+    print(`  ${dim(kindLabel(item.kind))} ${named(item.label, tildify(item.value))}${where}${why}`);
   }
-  console.log();
-  console.log(dim("These run on your machine, with your shell, as you."));
+  print();
+  print(dim("These run on your machine, with your shell, as you."));
 }

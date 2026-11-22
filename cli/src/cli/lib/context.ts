@@ -121,7 +121,7 @@ async function noPipelineHere(word: string, here: WorkspaceRead | undefined): Pr
       : "",
     !workspace && elsewhere.length === 0 && !here ? "`wisp list` shows your workspaces." : "",
   ].filter(Boolean);
-  return new WispError([said, ...next].join(" "), "NO_PIPELINE");
+  return new WispError([said, ...next].join(" "), "NO_PIPELINE", next.length > 0 ? "" : undefined);
 }
 
 export function emitJson(value: unknown): void {

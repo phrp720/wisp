@@ -3,6 +3,7 @@ import { discoverWorkspaces, slugify, sharedNames } from "../../core/workspaces.
 import { counts, cyan, dim, green, red, title, yellow } from "../format.js";
 import { emitJson, maybeProject } from "../lib/context.js";
 import type { CommandDef } from "../lib/define.js";
+import type { WorkspaceRead } from "../../core/types.js";
 
 export const list: CommandDef<{ json?: boolean }> = {
   name: "list",
@@ -17,15 +18,7 @@ export const list: CommandDef<{ json?: boolean }> = {
     if (here && !reads.some((read) => read.workspace.file === here.workspace.file)) reads.unshift(here);
 
     if (options.json) {
-      return emitJson(
-        reads.map((read) => ({
-          name: read.workspace.name,
-          file: read.workspace.file,
-          personal: read.workspace.personal,
-          trust: read.workspace.personal ? "personal" : read.trust,
-          pipelines: read.workspace.bolts.map((bolt) => bolt.label),
-        })),
-      );
+      return emitJson(workspaceSummaries(reads));
     }
 
     if (reads.length === 0 && unreadable.length === 0) {
@@ -56,3 +49,13 @@ export const list: CommandDef<{ json?: boolean }> = {
     console.log(dim("\n`wisp show <name>` lists a workspace's pipelines · `wisp <name> <pipeline>` runs one, from any folder · `wisp pick <name>` chooses"));
   },
 };
+
+export function workspaceSummaries(reads: WorkspaceRead[]) {
+  return reads.map((read) => ({
+    name: read.workspace.name,
+    file: read.workspace.file,
+    personal: read.workspace.personal,
+    trust: read.workspace.personal ? "personal" : read.trust,
+    pipelines: read.workspace.bolts.map((bolt) => bolt.label),
+  }));
+}

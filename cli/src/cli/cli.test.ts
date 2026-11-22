@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { withImplicitUse } from "./lib/argv.js";
 import { COMMANDS, verbs } from "./lib/commands.js";
-import { fail } from "./lib/define.js";
+import { fail, usageErrorJson } from "./lib/define.js";
 import { WispError } from "../core/errors.js";
 import { COMMAND_WORDS, shortest } from "./lib/render.js";
 import { SPEC } from "./spec.js";
@@ -26,6 +26,11 @@ describe("withImplicitUse", () => {
     expect(withImplicitUse(argv("help", "agents"), commands)).toEqual(argv("spec"));
     expect(withImplicitUse(argv("agents"), commands)).toEqual(argv("agents"));
     expect(withImplicitUse(argv("help", "use"), commands)).toEqual(argv("help", "use"));
+  });
+
+  it("reads bare `wisp --json` as `wisp status --json`", () => {
+    expect(withImplicitUse(argv("--json"), commands)).toEqual(argv("status", "--json"));
+    expect(withImplicitUse(argv("list", "--json"), commands)).toEqual(argv("list", "--json"));
   });
 
     it("leaves commands, flags and bare wisp alone", () => {
@@ -120,12 +125,21 @@ describe("failing", () => {
       expect(() => fail(new WispError("No pipeline called nope", "NO_PIPELINE"))).toThrow("exit 1");
       expect(JSON.parse(printed.join("\n"))).toEqual({
         ok: false,
-        error: { code: "NO_PIPELINE", message: "No pipeline called nope", hint: "`wisp show [workspace]` lists the pipelines, `wisp pick [workspace]` chooses one." },
+        error: { code: "NO_PIPELINE", message: "No pipeline called nope", hint: "`wisp show` lists the pipelines, `wisp pick` chooses one." },
       });
     } finally {
       process.argv = before;
       log.mockRestore();
       exit.mockRestore();
     }
+  });
+});
+
+describe("usage errors under --json", () => {
+  it("become a JSON failure with the parser's message on one line", () => {
+    expect(JSON.parse(usageErrorJson("error: unknown option '--inptu'\n(Did you mean --input?)\n"))).toEqual({
+      ok: false,
+      error: { code: "INVALID_INPUT", message: "unknown option '--inptu' (Did you mean --input?)", hint: "`wisp <command> --help` lists what it takes." },
+    });
   });
 });

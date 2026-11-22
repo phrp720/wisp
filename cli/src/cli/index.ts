@@ -6,7 +6,7 @@ import { status } from "./commands/status.js";
 import { dim } from "./format.js";
 import { withImplicitUse } from "./lib/argv.js";
 import { COMMANDS, verbs } from "./lib/commands.js";
-import { fail, register } from "./lib/define.js";
+import { fail, register, reportUsageErrorsAsJson } from "./lib/define.js";
 import { quietOnClosedPipe } from "./lib/pipes.js";
 import { VERSION } from "./version.js";
 
@@ -47,9 +47,10 @@ program
   .command("status")
   .helpGroup("More:")
   .description("Print what this project can run, without opening the dashboard")
-  .action(async () => {
+  .option("--json", "print this project and every known workspace as JSON")
+  .action(async (options: { json?: boolean }) => {
     try {
-      await status();
+      await status(options);
     } catch (error) {
       fail(error);
     }
@@ -82,6 +83,7 @@ if (process.argv[2] === "__complete") {
     // no suggestions
   }
 } else {
+  if (process.argv.includes("--json")) reportUsageErrorsAsJson(program);
   await securePrivateFolders().catch(() => undefined);
   program.parseAsync(withImplicitUse(process.argv, verbs())).catch(fail);
 }

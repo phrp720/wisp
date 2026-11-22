@@ -46,6 +46,11 @@ describe("a dry run of a pipeline whose every step waits for trust", () => {
     expect(result.waitingForTrust.map((step) => `${step.label}: ${step.value}`)).toEqual(["test: pnpm test", "build: pnpm build"]);
   });
 
+  it("lists nothing as running", async () => {
+    await use.run([file, "Check"], { dryRun: true, json: true });
+    expect((JSON.parse(printed.join("\n")) as { running: unknown[] }).running).toEqual([]);
+  });
+
   it("still refuses to really run it", async () => {
     await expect(use.run([file, "Check"], { json: true })).rejects.toMatchObject({ code: "NOT_TRUSTED" });
   });

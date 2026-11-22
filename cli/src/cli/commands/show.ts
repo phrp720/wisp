@@ -4,7 +4,8 @@ import { collectPipelineTargets, collectDownTargets } from "../../core/switch.js
 import { bold, counts, dim, title } from "../format.js";
 import { emitJson, maybeProject, workspaceFor } from "../lib/context.js";
 import type { CommandDef } from "../lib/define.js";
-import { diagnosticSummary, printPipelines, shortest, trustLine } from "../lib/render.js";
+import type { WorkspaceRead } from "../../core/types.js";
+import { diagnosticSummary, noPipelinesLine, printPipelines, shortest, trustLine } from "../lib/render.js";
 import { slugify, pipelineSlug } from "../../core/workspaces.js";
 
 export const show: CommandDef<{ json?: boolean }> = {
@@ -18,21 +19,7 @@ export const show: CommandDef<{ json?: boolean }> = {
     const read = await workspaceFor(query);
     const { workspace } = read;
 
-    if (options.json) {
-      const { links: _links, folders: _folders, files: _files, apps: _apps, commands: _commands, bolts, ...rest } = workspace;
-      return emitJson({
-        ...rest,
-        pipelines: bolts.map(({ steps: _steps, down, ...bolt }) => ({
-          ...bolt,
-          slug: pipelineSlug(bolt),
-          steps: collectPipelineTargets(workspace, { ...bolt, steps: _steps }),
-          ...(down ? { down: collectDownTargets(workspace, { ...bolt, steps: _steps, down }) } : {}),
-        })),
-        trust: read.trust,
-        diagnostics: read.diagnostics,
-        withheld: read.withheld,
-      });
-    }
+    if (options.json) return emitJson(workspaceJson(read));
 
     console.log(`${title(workspace)}  ${counts(workspace)}`);
     console.log(dim(tildify(workspace.file)));
@@ -41,7 +28,7 @@ export const show: CommandDef<{ json?: boolean }> = {
 
     console.log();
     if (workspace.bolts.length === 0) {
-      console.log(dim("No pipelines yet. `wisp` opens the dashboard, where `a` adds one."));
+      console.log(noPipelinesLine(read, "No pipelines yet. `wisp` opens the dashboard, where `a` adds one."));
     } else {
       console.log(bold("Pipelines"));
       printPipelines(workspace, true, read.withheld, await listRuns());
@@ -62,3 +49,20 @@ export const show: CommandDef<{ json?: boolean }> = {
     }
   },
 };
+
+export function workspaceJson(read: WorkspaceRead) {
+  const { workspace } = read;
+  const { links: _links, folders: _folders, files: _files, apps: _apps, commands: _commands, bolts, ...rest } = workspace;
+  return {
+    ...rest,
+    pipelines: bolts.map(({ steps: _steps, down, ...bolt }) => ({
+      ...bolt,
+      slug: pipelineSlug(bolt),
+      steps: collectPipelineTargets(workspace, { ...bolt, steps: _steps }),
+      ...(down ? { down: collectDownTargets(workspace, { ...bolt, steps: _steps, down }) } : {}),
+    })),
+    trust: read.trust,
+    diagnostics: read.diagnostics,
+    withheld: read.withheld,
+  };
+}

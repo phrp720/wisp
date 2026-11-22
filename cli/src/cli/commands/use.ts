@@ -168,6 +168,7 @@ export const use: CommandDef<UseOptions> = {
         history: result.historyId ?? null,
         ...(result.inputs ? { inputs: result.inputs } : {}),
         steps: result.targets,
+        running: result.targets.flatMap((target) => (target.run ? [{ label: target.label, run: target.run }] : [])),
         waitingForTrust: untrusted.map(({ kind, label: name, value, cwd }) => ({ kind, label: name, value, ...(cwd ? { cwd } : {}) })),
       });
     }

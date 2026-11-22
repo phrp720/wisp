@@ -16,7 +16,7 @@ export const trust: CommandDef<{ revoke?: boolean; list?: boolean; yes?: boolean
   options: [
     ["--revoke", "withdraw trust from this project file"],
     ["--list", "list every project file you have trusted"],
-    ["-y, --yes", "skip the confirmation"],
+    ["-y, --yes", "skip the question (still needs a person at a terminal)"],
     ["--json", "print the result as JSON"],
   ],
   examples: ["wisp trust", "wisp trust --list", "wisp trust --revoke"],
@@ -39,14 +39,17 @@ export const trust: CommandDef<{ revoke?: boolean; list?: boolean; yes?: boolean
     const path = read.workspace.file;
 
     if (read.workspace.personal) {
+      if (options.json) return emitJson({ path, trusted: true, changed: false, personal: true });
       console.log(dim(`${tildify(path)} is one of your own workspaces — it is trusted already.`));
       return;
     }
     if (read.workspace.trusted) {
+      if (options.json) return emitJson({ path, trusted: true, changed: false });
       console.log(`${green("✓")} already trusted ${dim(tildify(path))}`);
       return;
     }
     if (read.withheld.length === 0) {
+      if (options.json) return emitJson({ path, trusted: false, changed: false, runsCode: false });
       console.log(dim(`${tildify(path)} declares nothing that runs code, so there is nothing to trust.`));
       return;
     }
@@ -54,11 +57,14 @@ export const trust: CommandDef<{ revoke?: boolean; list?: boolean; yes?: boolean
     // Trust is granted to what you have read, so what you are granting it to is printed
     // first — every time, including the re-grant after a change. A prompt that asks
     // "trust this file?" without saying what is in it is a rubber stamp, not a decision.
-    printWithheld(read);
+    printWithheld(read, options.json ? console.error : console.log);
 
+    if (!process.stdin.isTTY) {
+      throw new WispError("Trusting a project file is for a person at a terminal, not a script or an agent", "NEEDS_CONFIRMATION");
+    }
     if (!options.yes) {
-      if (!process.stdin.isTTY) {
-        throw new WispError("Trusting a project file needs a terminal, or --yes if you have read it", "NEEDS_CONFIRMATION");
+      if (options.json) {
+        throw new WispError("With --json, nothing is asked: pass --yes once you have read the list above", "NEEDS_CONFIRMATION", "Or run `wisp trust` without --json to be asked.");
       }
       const prompt = new Prompter();
       try {
@@ -73,7 +79,7 @@ export const trust: CommandDef<{ revoke?: boolean; list?: boolean; yes?: boolean
 
     // The hash of what was shown: if the file changed while you read, this refuses.
     const grant = await trustProject(path, read.hash);
-    if (options.json) return emitJson(grant);
+    if (options.json) return emitJson({ ...grant, trusted: true, changed: true });
 
     console.log(`${green("✓")} trusted ${dim(tildify(path))}`);
     console.log(dim("Trust is tied to this exact file — any edit, a `git pull` included, asks again."));

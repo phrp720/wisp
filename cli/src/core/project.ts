@@ -246,7 +246,10 @@ export function interpret(
         level: "warning",
         at: `${prefix}${key}`,
         message: `"${key}" is not something a workspace file can set — it is ignored`,
-        hint: `Known keys: ${[...KNOWN_KEYS].join(", ")}`,
+        hint:
+          Array.isArray(source[key]) && !("pipelines" in sources.main) && !("pipelines" in (sources.local ?? {}))
+            ? `Did you mean "pipelines"? Known keys: ${[...KNOWN_KEYS].join(", ")}`
+            : `Known keys: ${[...KNOWN_KEYS].join(", ")}`,
       });
     }
   }

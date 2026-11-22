@@ -515,3 +515,15 @@ describe("checkProject", () => {
     expect(workspace.trusted).toBe(false);
   });
 });
+
+describe("an unknown key holding a list, in a file with no pipelines", () => {
+  it("suggests pipelines", () => {
+    const { diagnostics } = read({ name: "Shop", bolts: [{ label: "Check", steps: [] }] });
+    expect(diagnostics.find((entry) => entry.at === "bolts")?.hint).toMatch(/^Did you mean "pipelines"\?/);
+  });
+
+  it("does not, once the file has pipelines", () => {
+    const { diagnostics } = read({ name: "Shop", pipelines: [], extras: [] });
+    expect(diagnostics.find((entry) => entry.at === "extras")?.hint).toMatch(/^Known keys/);
+  });
+});
