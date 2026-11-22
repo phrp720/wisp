@@ -76,7 +76,8 @@ export async function runPlan(
 
   const owned = (result: TargetResult, at: number): HistoryStep => {
     const owner = steps[at]?.bolt;
-    return { ...toHistoryStep(result), stage: stageAt[at] ?? 1, ...(owner && owner !== options.label.replace(/ \((retry|down)\)$/, "") ? { bolt: owner } : {}) };
+    const waits = waitsOn[at] ?? [];
+    return { ...toHistoryStep(result), stage: stageAt[at] ?? 1, at, ...(waits.length > 0 ? { waits } : {}), ...(owner && owner !== options.label.replace(/ \((retry|down)\)$/, "") ? { bolt: owner } : {}) };
   };
   const entry = (done: { ok: boolean; running: boolean }): HistoryEntry => ({
     id: historyId as string,

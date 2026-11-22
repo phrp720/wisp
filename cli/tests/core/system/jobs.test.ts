@@ -375,7 +375,7 @@ describe("steps that wait for others", () => {
 });
 
 describe("a run's pipeline", () => {
-  it("puts each step in a column by when it could start, stacking what ran at the same time", async () => {
+  it("connects each step to the steps it waited for", async () => {
     const ws = workspace({
       pipelines: [
         {
@@ -392,7 +392,23 @@ describe("a run's pipeline", () => {
     const result = await switchToWorkspace(ws, { bolt: "check" }, { platform: recorder(), environment: desktop, defaults: {} });
     const { pipeline } = await import("../../../src/tui/screens/history.js");
     const entry = await getHistory(result.historyId as string);
-    expect(pipeline(entry!).map((column) => column.map((node) => node.label))).toEqual([["install"], ["lint", "test"], ["build"]]);
+    const graph = pipeline(entry!);
+    expect(graph.map((node) => [node.label, node.after.map((at) => graph[at]?.label)])).toEqual([
+      ["install", []],
+      ["lint", ["install"]],
+      ["test", ["install"]],
+      ["build", ["lint", "test"]],
+    ]);
+  });
+});
+
+describe("a run's pipeline, from before runs kept their edges", () => {
+  it("connects steps by the names they waited for, else to the stage before", async () => {
+    const { pipeline } = await import("../../../src/tui/screens/history.js");
+    const step = (label: string, stage: number, after?: string[]) => ({ kind: "command", label, value: label, ok: true, durationMs: 1, stage, ...(after ? { after } : {}) }) as never;
+    const entry = { id: "old", workspace: "/w", workspaceName: "W", bolt: "Grace1", startedAt: "2026-01-01T00:00:00.000Z", finishedAt: "2026-01-01T00:00:01.000Z", ok: true, steps: [step("up", 1), step("session", 2, ["up"]), step("ready", 2, ["up"]), step("open", 3)] } as never;
+    const graph = pipeline(entry);
+    expect(graph.map((node) => node.after.map((at) => graph[at]?.label))).toEqual([[], ["up"], ["up"], ["session", "ready"]]);
   });
 });
 
@@ -658,9 +674,10 @@ describe("history like a CI", () => {
     ]);
 
     const { pipeline } = await import("../../../src/tui/screens/history.js");
-    expect(pipeline(latest!).map((column) => column.map((node) => [node.label, node.detail?.split(" ").slice(0, 2).join(" ")]))).toEqual([
-      [["Database", "1 step"]],
-      [["Check", "1 step"]],
+    const graph = pipeline(latest!);
+    expect(graph.map((node) => [node.label, node.detail?.split(" ").slice(0, 2).join(" "), node.after.map((at) => graph[at]?.label)])).toEqual([
+      ["Database", "1 step", []],
+      ["Check", "1 step", ["Database"]],
     ]);
   });
 

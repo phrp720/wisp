@@ -15,7 +15,7 @@ import { AskHere } from "../components/forms.js";
 import type { Glyphs } from "../terminal/glyphs.js";
 import { type SearchHit, windowed } from "../model.js";
 import { flow, planGraph, stepLines, usedBy } from "../components/steps.js";
-import { fitGraph, graphBudget, StepGraph } from "../components/graph.js";
+import { fitGraph, graphBudget, hasEdges, StepGraph } from "../components/graph.js";
 import { counts, needsTrust, since } from "../state.js";
 import { TONE } from "../terminal/tones.js";
 
@@ -297,8 +297,8 @@ function PipelineDetails(props: {
   const inputNames = (bolt.inputs ?? []).map((input) => input.name);
   const { workspace } = read;
   const plan = full && props.graph ? planGraph(read, bolt, glyphs) : [];
-  const stages = planGraph(read, bolt, glyphs);
-  const together = stages.length === 1 && bolt.steps.every((step) => step.kind !== "pipeline") ? (stages[0]?.length ?? 0) : 0;
+  const nodes = planGraph(read, bolt, glyphs);
+  const together = !hasEdges(nodes) && bolt.steps.every((step) => step.kind !== "pipeline") ? nodes.length : 0;
   const needs = flow(read, bolt);
   const neededBy = usedBy(read, bolt);
   const typed = here ? shortest(bolt, workspace.bolts, true) : `${slugify(workspace.name)} ${shortest(bolt, workspace.bolts)}`;
@@ -306,7 +306,7 @@ function PipelineDetails(props: {
   const problemLines = problems.length > 0 ? problems.reduce((sum, problem) => sum + 1 + (problem.hint ? 1 : 0), 0) + 1 : 0;
   const above = (full ? 1 + notes.length + (needs.length > 1 ? 1 : 0) + 2 : notes.length + 1) + problemLines;
   const bottom = full ? 3 + (inputNames.length > 0 ? 1 : 0) : 0;
-  const drawn = fitGraph(plan, width, graphBudget(room - above - bottom));
+  const drawn = fitGraph(plan, width, graphBudget(room - above - bottom), glyphs);
   const lines = stepLines({ read, bolt, reads, runs, containers, glyphs, after: !drawn });
   const space = Math.max(1, room - above - bottom - (drawn ? drawn.height + 1 : 0));
   const overflow = lines.length > space;
@@ -366,7 +366,7 @@ function PipelineDetails(props: {
           <Text dimColor>{together > 1 ? `When you run it, these ${together} run at the same time${bolt.keepGoing ? ", and it keeps going if one fails" : ""}:` : bolt.keepGoing ? "When you run it, it will (and keep going if a step fails):" : "When you run it, it will:"}</Text>
           {drawn ? (
             <Box marginBottom={1}>
-              <StepGraph graph={drawn.graph} compact={drawn.compact} glyphs={glyphs} />
+              <StepGraph graph={drawn} glyphs={glyphs} />
             </Box>
           ) : null}
           {lines.slice(top, top + fit).map((line) => (

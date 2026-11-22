@@ -21,6 +21,8 @@ export interface HistoryStep {
   finishes?: boolean;
   after?: string[];
   stage?: number;
+  at?: number;
+  waits?: number[];
   running?: boolean;
   /** What an attached command printed. Commands in windows keep their output there. */
   log?: string;

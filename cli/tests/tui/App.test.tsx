@@ -738,14 +738,14 @@ describe("the TUI", () => {
     await eventually(() => expect(app.lastFrame()).not.toContain("v view"));
   });
 
-  it("draws a pipeline's steps as a graph above them, side by side where they run together, and v hides it", async () => {
+  it("draws a pipeline's steps as a graph above them, each connected to what it waits for, and v hides it", async () => {
     const shop = read("/dev/shop/.wisp.json", {
       name: "Shop",
       pipelines: [{ label: "Check", steps: [{ run: "pnpm install", label: "install", finishes: true }, { run: "pnpm lint", label: "lint", finishes: true, after: "install" }, { run: "pnpm test", label: "test", finishes: true, after: "install" }, { run: "pnpm build", label: "build", finishes: true, after: ["lint", "test"] }] }],
     });
     const app = render(<App services={services({}, { reads: [shop], here: shop.workspace.file, unreadable: [] })} glyphs={unicode} size={{ columns: 120, rows: 40 }} />);
-    await eventually(() => expect(app.lastFrame()).toMatch(/│ · install │ ──▶ │ · lint │ ──▶ │ · build │/));
-    expect(app.lastFrame()).toMatch(/╭────────╮[^\n]*\n[^\n]*│ · test │/);
+    await eventually(() => expect(app.lastFrame()).toMatch(/│ · install │ ─┬─▶ │ · lint │ ─┬─▶ │ · build │/));
+    expect(app.lastFrame()).toMatch(/╰─▶ │ · test │ ─╯/);
     expect(app.lastFrame()).not.toContain("after install");
     await tick();
     app.stdin.write("v");
@@ -759,7 +759,7 @@ describe("the TUI", () => {
       pipelines: [{ label: "Dev", steps: [{ run: "node db.mjs", label: "db" }, { run: "node web.mjs", label: "web" }, { run: "node api.mjs", label: "api", after: "db" }, { wait: "localhost:4000", label: "up", after: "api" }, { url: "http://localhost:5173", after: "up" }] }],
     });
     const app = render(<App services={services({}, { reads: [shop], here: shop.workspace.file, unreadable: [] })} glyphs={unicode} size={{ columns: 110, rows: 32 }} />);
-    await eventually(() => expect(app.lastFrame()).toMatch(/│ · db +│ ──▶ │ · api │ ──▶ │ · up │/));
+    await eventually(() => expect(app.lastFrame()).toMatch(/│ · db │ ─+▶ │ · api │ ─+▶ │ · up │/));
     expect(app.lastFrame()).toContain("│ · web │");
     expect(app.lastFrame()).toContain("1. start db");
   });
@@ -775,17 +775,18 @@ describe("the TUI", () => {
     expect(app.lastFrame()).toMatch(/1\. run docker[\s\S]*1\. run variants[\s\S]*1\. run tools/);
   });
 
-  it("keeps a big pipeline's graph to part of the box: one line a step, then +N more, and its commands still show", async () => {
+  it("keeps a big pipeline's graph to part of the box: one line a step, then +N more with their edges, and its commands still show", async () => {
     const many = Array.from({ length: 12 }, (_, at) => ({ run: `./check-${at + 1}.sh`, label: `check ${at + 1}`, finishes: true, after: "setup" }));
     const shop = read("/dev/shop/.wisp.json", {
       name: "Shop",
       pipelines: [{ label: "Audit", steps: [{ run: "./setup.sh", label: "setup", finishes: true }, ...many, { run: "./report.sh", label: "report", finishes: true, after: many.map((step) => step.label) }] }],
     });
     const app = render(<App services={services({}, { reads: [shop], here: shop.workspace.file, unreadable: [] })} glyphs={unicode} size={{ columns: 120, rows: 40 }} />);
-    await eventually(() => expect(app.lastFrame()).toMatch(/· setup ──▶ · check 1 +──▶ · report/));
+    await eventually(() => expect(app.lastFrame()).toMatch(/· setup ─┬─▶ · check 1 ─╮/));
     const frame = app.lastFrame() ?? "";
     expect(frame).not.toContain("╭─────────╮");
-    expect(frame).toMatch(/│ +\+4 more +│/);
+    expect(frame).toMatch(/╰─▶ +\+\d+ more ─╯/);
+    expect(frame).toMatch(/─▶ · report/);
     expect(frame).not.toContain("check 12");
     expect(frame).toMatch(/1\. run setup/);
     expect(frame).toContain("./setup.sh");

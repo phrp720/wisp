@@ -55,17 +55,14 @@ export function shownTargets(read: WorkspaceRead, bolt: Pipeline): Shown[] {
   });
 }
 
-export function planGraph(read: WorkspaceRead, bolt: Pipeline, glyphs: Glyphs): GraphNode[][] {
+export function planGraph(read: WorkspaceRead, bolt: Pipeline, glyphs: Glyphs): GraphNode[] {
   const all = shownTargets(read, bolt);
-  const stages = stagesOfTargets(all);
-  const columns = new Map<number, GraphNode[]>();
-  all.forEach((target, at) => {
-    const stage = stages[at] ?? at + 1;
+  const byName = new Map(all.flatMap((target, at) => (target.name ? [[target.name, at] as const] : [])));
+  return all.map((target) => {
     const label = target.kind === "pipeline" ? `${glyphs.bolt}${target.label}` : (target.name ?? target.label);
-    const node: GraphNode = { label, ok: true, state: "waiting", ...(target.held ? { detail: "not trusted yet" } : {}) };
-    columns.set(stage, [...(columns.get(stage) ?? []), node]);
+    const after = (target.after ?? []).flatMap((name) => (byName.has(name) ? [byName.get(name) as number] : []));
+    return { label, ok: true, state: "waiting" as const, after, ...(target.held ? { detail: "not trusted yet" } : {}) };
   });
-  return [...columns.entries()].sort(([left], [right]) => left - right).map(([, nodes]) => nodes);
 }
 
 export function stepLines(context: { read: WorkspaceRead; bolt: Pipeline; reads: WorkspaceRead[]; runs: RunStatus[]; containers: Container[]; glyphs: Glyphs; after?: boolean }): Line[] {

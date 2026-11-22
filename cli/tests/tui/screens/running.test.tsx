@@ -217,7 +217,7 @@ describe("commands that finish, down and history in the TUI", () => {
     await eventually(() => expect(app.lastFrame()).toContain("Check #2"));
     await tick();
     app.stdin.write("\r");
-    await eventually(() => expect(app.lastFrame()).toMatch(/│ ✓ install 500ms │ ──▶ │ ✓ lint 500ms │/));
+    await eventually(() => expect(app.lastFrame()).toMatch(/│ ✓ install 500ms │ ─┬─▶ │ ✓ lint 500ms │ ─┬─▶ │ ✓ build 500ms │/));
     await eventually(() => expect(app.lastFrame()).toContain("v hide graph"));
     await tick();
     app.stdin.write("v");
