@@ -239,6 +239,10 @@ take input defaults), `--json`.
 
 ## Working with Wisp as an agent
 
+Pipelines to copy for common jobs (a dev stack, checks before a push, a deploy that asks
+first, an app on a server, a nightly backup, a check that a site is up) are at
+https://willowisp.dev/docs/use-cases.md; every docs page is Markdown at `/docs/<page>.md`.
+
 1. `wisp spec` (this), then `wisp show --json` to see what exists. In a project
    without a file, `wisp init --yes` writes one from its scripts (`--empty` for one with no
    pipelines, `--name` to name it). For a task that belongs to no repository,
