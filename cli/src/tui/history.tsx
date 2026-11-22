@@ -706,6 +706,15 @@ function RunDetail(props: {
   );
 }
 
+function notifiedCell(notified: NonNullable<HistoryEntry["notified"]>): [string, string, string] {
+  const failed = notified.filter((sent) => !sent.ok);
+  const hooks = notified.length === 1 ? "1 webhook" : `${notified.length} webhooks`;
+  if (failed.length === 0) return ["Notified", hooks, "green"];
+  const first = failed[0] as (typeof failed)[number];
+  const which = notified.length === 1 ? "Failed" : `${failed.length} of ${notified.length} failed`;
+  return ["Notified", `${which}: ${first.url} ${first.problem ?? ""}`.trim(), "red"];
+}
+
 /** The line under a run's title: how it started, against what, how it ended, how long. */
 function Summary({ entry }: { entry: HistoryEntry }) {
   const cells: [string, string, string?][] = [
@@ -718,11 +727,12 @@ function Summary({ entry }: { entry: HistoryEntry }) {
         ? ["Status", "Interrupted", "yellow"]
         : ["Status", entry.ok ? "Success" : "Failed", entry.ok ? "green" : "red"],
     ["Total duration", entry.interrupted ? "unknown" : formatDuration(totalMs(entry)) || "0ms"],
+    ...(entry.notified && entry.notified.length > 0 ? [notifiedCell(entry.notified)] : []),
   ];
   return (
     <Box marginTop={1}>
       {cells.map(([title, value, color]) => (
-        <Box key={title} flexDirection="column" marginRight={4} flexShrink={title === "Commit" ? 1 : 0}>
+        <Box key={title} flexDirection="column" marginRight={4} flexShrink={title === "Commit" || title === "Notified" ? 1 : 0}>
           <Text dimColor>{title}</Text>
           <Text bold color={color} wrap="truncate-end">
             {value}

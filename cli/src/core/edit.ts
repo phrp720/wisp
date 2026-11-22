@@ -135,7 +135,12 @@ export const STEP_FIELDS: Record<StepKindName, StepField[]> = {
     { key: "compose", label: "Compose file", hint: "relative to the project", placeholder: "compose.yaml", required: true },
     { key: "services", label: "Services", hint: "comma separated", placeholder: "all of them", required: false },
   ],
-  wait: [{ key: "wait", label: "Wait for", hint: "a website (http://…), a port (5432), or seconds (5s)", placeholder: "http://localhost:3000", required: true }],
+  wait: [
+    { key: "wait", label: "Wait for", hint: "a website (http://…), a port (5432), or seconds (5s)", placeholder: "http://localhost:3000", required: true },
+    { key: "timeout", label: "Give up after", hint: "seconds, or like 30s or 2m", placeholder: "60s", required: false, when: (values) => !waitsSeconds(values["wait"] ?? "") },
+    { key: "status", label: "Status", hint: "the answer it must give, like 200; left out, anything below 500 counts", placeholder: "below 500", required: false, when: (values) => /^https?:\/\//i.test(values["wait"]?.trim() ?? "") },
+    { key: "label", label: "Name", hint: "how it is shown in Wisp, and what other steps wait for", placeholder: "what it waits for", required: false },
+  ],
   url: [
     { key: "url", label: "Address", hint: "a bare host works too", placeholder: "http://localhost:3000", required: true },
     { key: "label", label: "Name", hint: "how it is shown in Wisp", placeholder: "the address", required: false },
@@ -174,6 +179,8 @@ export function stepValues(step: RawStep): Record<string, string> {
     else if (key === "wait" && typeof value === "object" && value) {
       const wait = value as Record<string, unknown>;
       values[key] = String(wait["url"] ?? (wait["port"] ? `${wait["host"] ?? "localhost"}:${wait["port"]}` : `${wait["seconds"]}s`));
+      if (typeof wait["timeout"] === "number") values["timeout"] = String(wait["timeout"]);
+      if (typeof wait["status"] === "number") values["status"] = String(wait["status"]);
     }
   }
   return values;
@@ -195,8 +202,20 @@ export function buildStep(kind: StepKindName, values: Record<string, string>): {
   if (kind === "wait") {
     const raw = value("wait");
     const wait = /^\d+(\.\d+)?$/.test(raw) && Number(raw) < 1000 ? Number(raw) : raw;
-    if (raw && !parseWait(wait)) errors["wait"] = "Not something Wisp can wait for — try http://localhost:3000, 5432 or 5s";
-    step["wait"] = wait;
+    const parsed = raw ? parseWait(wait) : undefined;
+    if (raw && !parsed) errors["wait"] = "Not something Wisp can wait for — try http://localhost:3000, 5432 or 5s";
+    const timeout = value("timeout") ? parseDuration(value("timeout")) : undefined;
+    if (value("timeout") && timeout === undefined) errors["timeout"] = "Seconds, or like 30s or 2m";
+    const status = value("status") ? Number(value("status")) : undefined;
+    if (status !== undefined && !(Number.isInteger(status) && status >= 100 && status <= 599)) errors["status"] = "An HTTP status, like 200";
+    const checked = parsed && "url" in parsed && status ? status : undefined;
+    if (parsed && !("seconds" in parsed) && (timeout || checked)) {
+      step["wait"] = {
+        ...("url" in parsed ? { url: parsed.url } : { port: parsed.port, ...(parsed.host !== "localhost" ? { host: parsed.host } : {}) }),
+        ...(timeout ? { timeout } : {}),
+        ...(checked ? { status: checked } : {}),
+      };
+    } else step["wait"] = wait;
   } else if (kind === "compose") {
     step["compose"] = value("compose");
     const services = value("services").split(",").map((service) => service.trim()).filter(Boolean);
@@ -232,6 +251,11 @@ export function buildStep(kind: StepKindName, values: Record<string, string>): {
   const label = value("label");
   if (label && STEP_FIELDS[kind].some((field) => field.key === "label")) step["label"] = label;
   return Object.keys(errors).length > 0 ? { errors } : { step, errors };
+}
+
+function waitsSeconds(raw: string): boolean {
+  const text = raw.trim();
+  return /^\d+(\.\d+)?s$/.test(text) || (/^\d+(\.\d+)?$/.test(text) && Number(text) < 1000);
 }
 
 /** A written step as a sentence, for the editor's list. */

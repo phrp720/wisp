@@ -10,7 +10,7 @@ in the dashboard, or use the command line.
 | Opening | **Folders open in** | the system default, or an editor Wisp found: VS Code, Cursor, Zed, WebStorm, IntelliJ, PyCharm, Sublime Text… or any app by name |
 | | **Files open in** | the same, for file steps |
 | Running | **Commands run** | in the background (the default), in a terminal window each (Terminal, iTerm, Ghostty, WezTerm, kitty, Alacritty), or in a tmux or zellij session |
-| Notifications | **Tell me** · **Webhook** | when Wisp tells you about a run, and where. [Notifications](./notifications) |
+| Notifications | **Tell me** · each webhook (keep or remove) · **Add a webhook** · **For** | when Wisp tells you about a run, and where: a new webhook for every workspace, or only the ones ticked. [Notifications](./notifications) |
 | Dashboard | **Mouse** | on (the default) or off, to select text without holding Shift |
 
 In the dashboard, the categories are on the left and their settings on the right. `⏎` (or a

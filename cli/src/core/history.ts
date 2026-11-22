@@ -27,6 +27,13 @@ export interface HistoryStep {
   bolt?: string;
 }
 
+/** Where a run's notification went, the address without its secret, and whether it arrived. */
+export interface Notified {
+  url: string;
+  ok: boolean;
+  problem?: string;
+}
+
 /**
  * A run of a bolt, kept so "did last night's build pass, and what did the tests print?"
  * has an answer. Every real run is kept — jobs most of all, since that is their point.
@@ -52,10 +59,12 @@ export interface HistoryEntry {
   pid?: number;
   total?: number;
   pending?: HistoryStep[];
+  notified?: Notified[];
 }
 
 /** Enough to see a pattern of failures, not so many that the logs pile up. */
-const KEEP = 200;
+const KEEP = 500;
+export const KEEP_PER_PIPELINE = 50;
 
 function historyFile(): string {
   return join(stateDir(), "history.json");
@@ -76,6 +85,14 @@ export function stepLogFile(id: string, index: number): string {
   return join(stateDir(), "history", id, `${index + 1}.log`);
 }
 
+export async function noteNotified(id: string, notified: Notified[]): Promise<void> {
+  await withLock(historyFile(), async () => {
+    const entries = await loadHistory();
+    if (!entries.some((entry) => entry.id === id)) return;
+    await writeJson(historyFile(), { version: 1, runs: entries.map((entry) => (entry.id === id ? { ...entry, notified } : entry)) });
+  });
+}
+
 export async function recordHistory(entry: HistoryEntry): Promise<void> {
   await withLock(historyFile(), async () => {
     const entries = await loadHistory();
@@ -85,10 +102,23 @@ export async function recordHistory(entry: HistoryEntry): Promise<void> {
     const same = entries.find((other) => other.id === entry.id);
     const previous = entries.filter((other) => other.workspace === entry.workspace && baseLabel(other.bolt) === label && other.id !== entry.id);
     const number = entry.number ?? same?.number ?? Math.max(previous.length, ...previous.map((other) => other.number ?? 0)) + 1;
-    const kept = [{ ...entry, number }, ...entries.filter((other) => other.id !== entry.id)];
-    await Promise.all(kept.slice(KEEP).map((old) => rm(join(stateDir(), "history", old.id), { recursive: true, force: true })));
-    await writeJson(historyFile(), { version: 1, runs: kept.slice(0, KEEP) });
+    const { kept, dropped } = retained([{ ...entry, number }, ...entries.filter((other) => other.id !== entry.id)]);
+    await Promise.all(dropped.map((old) => rm(join(stateDir(), "history", old.id), { recursive: true, force: true })));
+    await writeJson(historyFile(), { version: 1, runs: kept });
   });
+}
+
+export function retained(entries: HistoryEntry[]): { kept: HistoryEntry[]; dropped: HistoryEntry[] } {
+  const counts = new Map<string, number>();
+  const kept: HistoryEntry[] = [];
+  const dropped: HistoryEntry[] = [];
+  for (const entry of entries) {
+    const key = `${entry.workspace}#${baseLabel(entry.bolt)}`;
+    const count = (counts.get(key) ?? 0) + 1;
+    counts.set(key, count);
+    (count <= KEEP_PER_PIPELINE && kept.length < KEEP ? kept : dropped).push(entry);
+  }
+  return { kept, dropped };
 }
 
 /** Past runs, newest first — of one workspace, or one bolt, when asked. */

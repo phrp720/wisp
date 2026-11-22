@@ -238,6 +238,7 @@ export function WorkspacePanel(props: {
       scroll={scroll}
       scrollLimit={scrollLimit}
       problems={[...problemsOf(selected), ...fileProblems]}
+      width={Math.max(10, width - 4)}
     />
   ) : null;
 
@@ -285,8 +286,11 @@ function PipelineDetails(props: {
   scroll: number;
   scrollLimit?: { current: number } | undefined;
   problems: Diagnostic[];
+  width: number;
 }) {
-  const { read, bolt, state, last, here, glyphs, full, room, reads, runs, containers, scroll, scrollLimit, problems } = props;
+  const { read, bolt, state, last, here, glyphs, full, room, reads, runs, containers, scroll, scrollLimit, problems, width } = props;
+  const notes = bolt.notes ? twoLines(bolt.notes, full ? width : width - 2) : [];
+  const inputNames = (bolt.inputs ?? []).map((input) => input.name);
   const { workspace } = read;
   const lines = stepLines({ read, bolt, reads, runs, containers, glyphs });
   const needs = flow(read, bolt);
@@ -294,8 +298,8 @@ function PipelineDetails(props: {
   const typed = here ? shortest(bolt, workspace.bolts, true) : `${slugify(workspace.name)} ${shortest(bolt, workspace.bolts)}`;
 
   const problemLines = problems.length > 0 ? problems.reduce((sum, problem) => sum + 1 + (problem.hint ? 1 : 0), 0) + 1 : 0;
-  const above = (full ? 1 + (bolt.notes ? 1 : 0) + (needs.length > 1 ? 1 : 0) + 2 : (bolt.notes ? 1 : 0) + 1) + problemLines;
-  const space = Math.max(1, room - above - (full ? 2 : 0));
+  const above = (full ? 1 + notes.length + (needs.length > 1 ? 1 : 0) + 2 : notes.length + 1) + problemLines;
+  const space = Math.max(1, room - above - (full ? 2 + (inputNames.length > 0 ? 1 : 0) : 0));
   const overflow = lines.length > space;
   const fit = overflow ? Math.max(1, space - 1) : lines.length;
   const most = Math.max(0, lines.length - fit);
@@ -320,7 +324,9 @@ function PipelineDetails(props: {
           {state ? <Text color={state.color} dimColor={state.dim ?? false}>{`   ${state.text}`}</Text> : null}
         </Text>
       ) : null}
-      {bolt.notes ? <Text wrap="truncate-end">{full ? bolt.notes : `  ${bolt.notes}`}</Text> : null}
+      {notes.map((line, at) => (
+        <Text key={`note${at}`} wrap="truncate-end">{full ? line : `  ${line}`}</Text>
+      ))}
       {full && needs.length > 1 ? (
         <Text wrap="truncate-end">
           <Text dimColor>order  </Text>
@@ -358,6 +364,12 @@ function PipelineDetails(props: {
       {full ? (
         <>
           <Box flexGrow={1} />
+          {inputNames.length > 0 ? (
+            <Text wrap="truncate-end">
+              <Text dimColor>inputs: </Text>
+              <Text>{inputNames.join(", ")}</Text>
+            </Text>
+          ) : null}
           <Text dimColor wrap="truncate-end">{facts}</Text>
           <Text wrap="truncate-end">
             <Text dimColor>from a terminal: </Text>
@@ -367,6 +379,23 @@ function PipelineDetails(props: {
       ) : null}
     </>
   );
+}
+
+function twoLines(text: string, width: number): string[] {
+  const words = text.trim().split(/\s+/);
+  const lines: string[] = [];
+  let line = "";
+  for (const [at, word] of words.entries()) {
+    const next = line ? `${line} ${word}` : word;
+    if (next.length <= width || !line) {
+      line = next;
+      continue;
+    }
+    if (lines.length === 1) return [...lines, clip(`${line} ${words.slice(at).join(" ")}`, width)];
+    lines.push(line);
+    line = word;
+  }
+  return [...lines, clip(line, width)];
 }
 
 function clip(text: string, width: number): string {

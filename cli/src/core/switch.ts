@@ -12,9 +12,9 @@ import { getOpenWithDefaults } from "./config.js";
 import { composeStopArgs, composeUpArgs, type Container } from "./docker.js";
 import { detectEnvironment, type Environment } from "./environment.js";
 import { WispError, describe } from "./errors.js";
-import { fillTarget, fillText, type InputValues } from "./inputs.js";
+import { envNames, fillEnv, fillTarget, fillText, type InputValues } from "./inputs.js";
 import { notifyRunEnd } from "./notify.js";
-import { gitState, newHistoryId, recordHistory, stepLogFile, stepLogPath, type HistoryEntry, type HistoryStep } from "./history.js";
+import { baseLabel, gitState, listHistory, newHistoryId, noteNotified, recordHistory, stepLogFile, stepLogPath, type HistoryEntry, type HistoryStep } from "./history.js";
 import { currentOS, expandHome, stateDir, withLock } from "./paths.js";
 import { listRuns, newRunId, pidFileFor, recordWindowRun, runningFor, startRun, stopHung, stopRun, tidyState, trimLog, type RunStatus } from "./processes.js";
 import { restartLoop, shellInvocation, windowInvocation } from "./shell.js";
@@ -256,18 +256,24 @@ export async function runPlan(
 
   if (!dryRun && steps.length > 0) {
     const failed = finished.find((result) => !result.ok && !result.skipped);
-    await notifyRunEnd(
+    const previous = (await listHistory({ workspace: workspace.file }).catch(() => [])).find(
+      (other) => other.id !== historyId && !other.running && baseLabel(other.bolt) === baseLabel(options.label),
+    );
+    const notified = await notifyRunEnd(
       {
         ok,
         bolt: options.label,
         workspace: workspace.name,
-        ...(failed ? { failedStep: failed.label } : {}),
+        workspaceFile: workspace.file,
+        ...(failed ? { failedStep: failed.label, ...(failed.error ? { error: failed.error } : {}) } : {}),
         ...(historyId ? { historyId } : {}),
         durationMs: Date.now() - startedAt.getTime(),
         watched: options.watched ?? true,
+        ...(previous ? { previousOk: previous.ok } : {}),
       },
       { platform: platformOf(context), environment: context.environment },
-    ).catch(() => undefined);
+    ).catch(() => []);
+    if (record && historyId && notified.length > 0) await noteNotified(historyId, notified).catch(() => undefined);
   }
 
   return { workspace, targets: finished, dryRun, ok, plan: steps, ...(historyId ? { historyId } : {}), ...(inputs ? { inputs } : {}) };
@@ -420,7 +426,9 @@ export async function planPipeline(workspace: Workspace, bolt: Pipeline): Promis
 
       const target =
         step.kind === "wait"
-          ? ({ kind: "wait", id: `wait:${stepKey}`, label: describeWait(step.wait), value: describeWait(step.wait), wait: step.wait } satisfies SwitchTarget)
+          ? step.held
+            ? undefined
+            : ({ kind: "wait", id: `wait:${stepKey}`, label: describeWait(step.wait), value: describeWait(step.wait), wait: step.wait } satisfies SwitchTarget)
           : step.kind === "compose"
             ? owner.trusted
               ? composeTarget(step, "up")
@@ -523,10 +531,14 @@ async function execute(step: PlannedStep, index: number, context: Context): Prom
 }
 
 async function openLink(target: SwitchTarget, context: Context): Promise<TargetResult> {
-  const url = normalizeUrl(target.value);
+  const url = normalizeUrl(fillEnv(target.value));
   // Headless, there is no browser to send it to — but the url is still what you wanted,
   // and printing it is how a terminal hands you one.
-  if (!context.environment.gui) return { ...target, value: url, ok: true, note: "no display — open it yourself" };
+  if (!context.environment.gui) {
+    const names = envNames(target.value);
+    if (names.length > 0) return { ...target, ok: true, note: `no display: open it yourself, from ${names.map((name) => `$${name}`).join(", ")}` };
+    return { ...target, value: url, ok: true, note: "no display — open it yourself" };
+  }
 
   const platform = platformOf(context);
   if ((context.options.reuseTabs ?? true) && platform.tabs) {
@@ -1133,6 +1145,7 @@ export function stepTargets(workspace: Workspace, steps: PipelineStep[]): (Switc
 function listStep(step: PipelineStep, byId: Map<string, SwitchTarget>, workspace: Workspace): SwitchTarget[] {
   return [step].flatMap((step): SwitchTarget[] => {
     if (step.kind === "wait") {
+      if (step.held) return [];
       return [{ kind: "wait", id: "wait", label: describeWait(step.wait), value: describeWait(step.wait), wait: step.wait }];
     }
     if (step.kind === "pipeline") {

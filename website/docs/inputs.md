@@ -35,6 +35,13 @@ An input with no default stops a script's run when it isn't passed.
 In a command, its `cwd` and `env`, a website, a folder or file, a wait for a website, and an
 [Asking first](./asking-first) question.
 
+Anywhere in a website's address, the port too: `https://localhost:{{port}}`. A `{{name}}` that
+isn't one of the pipeline's inputs is never filled: `wisp check` calls it an error in a website,
+which can't be opened with it, and a warning in a command, which runs with it as written.
+
+`{{env.NAME}}` is not an input: it's an [environment variable](./steps#open-a-website), for a
+website's address.
+
 ## What a value can be
 
 Plain words, like `staging`, `v1.2.3` or `fix the login`: letters, digits, spaces and

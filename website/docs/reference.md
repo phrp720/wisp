@@ -81,7 +81,10 @@ run, however many steps run it. See [Pipelines as steps](./pipelines-as-steps).
 ```
 
 Ports and websites give up after 60 seconds, unless `timeout` says otherwise. The object
-form takes `port`, `host`, `url`, `seconds` and `timeout`.
+form takes `port`, `host`, `url`, `seconds`, `timeout` and `status`.
+
+A website counts as up when it answers below 500 (a 404 is up, a 502 is not). With
+`status`, only that answer counts: `{ "wait": { "url": "https://example.com/health", "status": 200 } }`.
 
 ### Link
 

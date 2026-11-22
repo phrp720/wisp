@@ -46,7 +46,7 @@ the TUI.
 | link | `{ "url": "http://localhost:3000" }` | opens in the browser (a bare host means https) |
 | app | `{ "app": "Slack" }` | launches or focuses an app |
 | command | `{ "run": "pnpm dev", "cwd": "apps/api", "env": { "PORT": 3000 } }` | runs a shell command |
-| wait | `{ "wait": 3 }`, `{ "wait": "localhost:5432" }`, `{ "wait": "http://localhost:3000" }` | pauses until seconds pass, a port accepts, or a url answers (60s timeout; object form `{ "wait": { "port": 5432, "timeout": 120 } }`) |
+| wait | `{ "wait": 3 }`, `{ "wait": "localhost:5432" }`, `{ "wait": "http://localhost:3000" }` | pauses until seconds pass, a port accepts, or a url answers below 500 (60s timeout; object form `{ "wait": { "port": 5432, "timeout": 120 } }`; `"status": 200` with a url asks for that exact answer) |
 | docker | `{ "compose": "compose.yaml", "services": ["postgres"] }` | `docker compose up --wait`: done when the services are healthy; `wisp down` stops them; shown with state, health and logs |
 | pipeline | `{ "pipeline": "Database" }` | runs another pipeline of this file as one step; done when all its steps are |
 
@@ -131,7 +131,13 @@ A pipeline can ask for values each time it runs; its steps use one as `{{name}}`
   write `"{{note}}"` to keep one with spaces as a single argument.
 - `{{name}}` works in a command, its `cwd` and `env`, a link, a folder or file, a wait for a
   website, and `confirm`. A pipeline uses only the inputs it declares; one it runs that declares
-  the same name gets the same value.
+  the same name gets the same value. In a link's address, a `{{name}}` that isn't declared is an
+  error (`wisp check`), not a warning.
+- `{{env.NAME}}` in a link (`{ "url": "{{env.PRODUCTION_URL}}/admin" }`) or a wait's url is read
+  from the environment when the step runs; unset, the step fails. Such a step waits for
+  `wisp trust` like a command. History keeps the step as written, not the address. A wait's url
+  may be a whole input too (`{ "wait": { "url": "{{website}}" } }`); a value that isn't an
+  http(s) address fails the wait at once.
 - `--input env=production` gives a value (once per input). Without a terminal, or with
   `--json`, a value not given takes its default; one with no default exits 1 with
   `INPUT_NEEDED`, naming the flag. `--yes` takes the defaults at a terminal too.
@@ -213,12 +219,12 @@ under "Runs code" and ask them to approve it.**
 | `wisp list [--json]` | every known workspace |
 | `wisp trust` | approve a file's commands (for the user, not an agent) |
 | `wisp down <pipeline> [--deps]` · `wisp restart <pipeline>` | stop what a pipeline started · stop it and run it again |
-| `wisp history [pipeline \| id] [--log <n>] [--json]` | past runs, each step's result, duration and output |
+| `wisp history [pipeline \| id] [--log <n>] [--json]` | past runs, each step's result, duration and output; `notified: [{ url, ok, problem? }]` says which webhooks the run's notification reached |
 | `wisp history [pipeline \| id] --clear [--all]` | delete a run, a pipeline's runs, or this project's (every project's with `--all`); runs still going are kept |
 | `wisp hook <git-hook> <pipeline>` · `--list` · `--remove` | run a pipeline from a git hook |
 | `wisp ps [--all] [--json]` · `wisp logs <run> [-f]` · `wisp stop <run> \| --all` | what Wisp has running |
 | `wisp scan <dir>` | find project files under a directory |
-| `wisp notify [failures\|all\|off] [--webhook <url>] [--test] [--json]` | when Wisp tells the user about a run they might have missed (nobody watched it, or it took over 30s): a desktop notification, and a webhook if set (https only, or http to localhost). The user's own setting: don't change it for them. `WISP_NOTIFY=off` silences one command |
+| `wisp notify [failures\|changes\|all\|off] [--test] [--reveal] [--json]` · `wisp notify add <url> [workspace...]` · `wisp notify remove <url \| n> [workspace...]` | when Wisp tells the user about a run they might have missed (nobody watched it, or it took over 30s): a desktop notification, and every webhook for all workspaces or for the run's own (https only, or http to localhost). With no workspace, `add` is for every workspace and `remove` removes the webhook; `--json` lists `webhooks: [{ number, url, workspaces, lastDelivery }]`, `workspaces: null` meaning every one, `lastDelivery` `{ at, ok, problem? }` or null. The url is shown without its secret part; remove a webhook by its number. `--reveal` shows whole addresses: don't use it unless the user asks. `changes` tells once when a pipeline starts failing and once when it works again, for checks run from cron. The user's own setting: don't change it for them. `WISP_NOTIFY=off` silences one command |
 | `wisp doctor [--json]` | what works here, and where files live |
 | `wisp completion [zsh\|bash\|fish] [--install]` | tab completion for workspaces, pipelines and commands (for the user to set up) |
 | `wisp help agents` · `wisp spec` | this reference |

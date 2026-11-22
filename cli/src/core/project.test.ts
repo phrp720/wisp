@@ -154,6 +154,30 @@ describe("commands and trust", () => {
     expect(withheld.map((item) => item.label).sort()).toEqual(["./tools/thing.app", "deploy.command", "setup.exe"]);
   });
 
+  it("holds back a website that reads the environment until the file is trusted", () => {
+    const main = { pipelines: [{ label: "x", steps: [{ url: "{{env.PRODUCTION_URL}}/admin" }, { url: "acme.com" }] }] };
+    const untrusted = read(main);
+    expect(untrusted.workspace.links.map((link) => link.url)).toEqual(["acme.com"]);
+    expect(untrusted.withheld).toEqual([expect.objectContaining({ kind: "link", value: "{{env.PRODUCTION_URL}}/admin", reason: "reads $PRODUCTION_URL from your environment" })]);
+    expect(untrusted.diagnostics).toContainEqual(expect.objectContaining({ at: "trust", message: "1 website that reads your environment declared but will not run" }));
+    const trusted = read(main, { trust: "trusted" });
+    expect(trusted.workspace.links.map((link) => link.url)).toEqual(["{{env.PRODUCTION_URL}}/admin", "acme.com"]);
+    expect(trusted.withheld).toEqual([]);
+    expect(trusted.diagnostics.filter((entry) => entry.level !== "note")).toEqual([]);
+  });
+
+  it("holds back a wait for a website that reads the environment, and not one that takes an input", () => {
+    const main = {
+      pipelines: [
+        { label: "Check", inputs: { website: {} }, steps: [{ wait: { url: "{{website}}" } }, { wait: { url: "{{env.PRODUCTION_URL}}/health" } }, { wait: 5 }, { wait: "localhost:5432" }] },
+      ],
+    };
+    const untrusted = read(main);
+    expect(untrusted.withheld).toEqual([expect.objectContaining({ kind: "wait", value: "{{env.PRODUCTION_URL}}/health", reason: "reads $PRODUCTION_URL from your environment" })]);
+    expect(untrusted.diagnostics).toContainEqual(expect.objectContaining({ at: "trust", message: "1 website that reads your environment declared but will not run" }));
+    expect(read(main, { trust: "trusted" }).withheld).toEqual([]);
+  });
+
   it("counts what runs code in one warning", () => {
     const { diagnostics } = read({ pipelines: [{ label: "x", steps: [{ file: "x.sh" }, { run: "make" }] }] });
     expect(diagnostics).toContainEqual(
@@ -200,6 +224,11 @@ describe("pipelines", () => {
     expect(parseWait("db:5432")).toEqual({ port: 5432, host: "db", timeout: 60 });
     expect(parseWait("http://localhost:3000")).toEqual({ url: "http://localhost:3000", timeout: 60 });
     expect(parseWait({ port: 80, timeout: 5 })).toEqual({ port: 80, host: "localhost", timeout: 5 });
+    expect(parseWait({ url: "https://example.com/health", status: 200 })).toEqual({ url: "https://example.com/health", timeout: 60, status: 200 });
+    expect(parseWait({ url: "https://example.com/health", status: 999 })).toEqual({ url: "https://example.com/health", timeout: 60 });
+    expect(parseWait("{{website}}")).toEqual({ url: "{{website}}", timeout: 60 });
+    expect(parseWait({ url: "{{env.PRODUCTION_URL}}/health", status: 200 })).toEqual({ url: "{{env.PRODUCTION_URL}}/health", timeout: 60, status: 200 });
+    expect(parseWait("{{ nope")).toBeUndefined();
     expect(parseWait("soon")).toBeUndefined();
     expect(parseWait(0)).toBeUndefined();
   });
@@ -429,6 +458,45 @@ describe("checkProject", () => {
     expect(diagnostics).toContainEqual(expect.objectContaining({ level: "error", at: "pipelines[0].steps[0].folder" }));
     expect(diagnostics).toContainEqual(expect.objectContaining({ level: "warning", at: "pipelines[0].steps[1].folder" }));
     expect(diagnostics.some((entry) => entry.at.startsWith("pipelines[0].steps[2]"))).toBe(false);
+  });
+
+  it("takes an input anywhere in a url, the port included, and still refuses one that isn't a url", async () => {
+    const file = await project({
+      pipelines: [
+        {
+          label: "Deploy",
+          inputs: { port: { default: "443" }, host: { default: "localhost" } },
+          steps: [{ url: "https://localhost:{{port}}" }, { url: "https://{{host}}:{{port}}/admin" }],
+        },
+        { label: "Broken", steps: [{ url: "https://exa mple.com" }] },
+      ],
+    });
+    const errors = (await checkProject(file)).diagnostics.filter((entry) => entry.level === "error");
+    expect(errors.map((entry) => entry.message)).toEqual(['"https://exa mple.com" is not a url Wisp can open']);
+  });
+
+  it("takes a url made from the environment as a url", async () => {
+    const file = await project({ pipelines: [{ label: "Open", steps: [{ url: "{{env.PRODUCTION_URL}}" }, { url: "https://{{env.HOST}}:{{env.PORT}}/admin" }] }] });
+    await trustProject(file);
+    const errors = (await checkProject(file)).diagnostics.filter((entry) => entry.level === "error");
+    expect(errors).toEqual([]);
+  });
+
+  it("calls a url with a placeholder that isn't an input an error, and a command with one a warning", () => {
+    const { diagnostics } = read({
+      pipelines: [
+        {
+          label: "Deploy",
+          inputs: { port: { default: "443" } },
+          steps: [{ url: "https://localhost:{{prot}}" }, { wait: { url: "https://localhost:{{port}}/{{path}}" } }, { run: "echo {{tag}}" }, { url: "https://localhost:{{port}}" }],
+        },
+      ],
+    });
+    const about = (name: string) => diagnostics.find((entry) => entry.message.startsWith(`{{${name}}}`));
+    expect(about("prot")).toMatchObject({ level: "error", message: `{{prot}} is not one of "Deploy"'s inputs, so "https://localhost:{{prot}}" can't be opened` });
+    expect(about("path")).toMatchObject({ level: "error" });
+    expect(about("tag")).toMatchObject({ level: "warning", message: expect.stringContaining("left as written") });
+    expect(about("port")).toBeUndefined();
   });
 
   it("does not report a folder declared only for another OS as missing", async () => {

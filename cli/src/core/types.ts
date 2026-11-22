@@ -98,7 +98,7 @@ export interface Command extends AssetBase {
  */
 export type WaitSpec =
   | { port: number; host: string; timeout: number }
-  | { url: string; timeout: number }
+  | { url: string; timeout: number; status?: number }
   | { seconds: number };
 
 /**
@@ -109,7 +109,7 @@ export type WaitSpec =
  */
 export type PipelineStep = (
   | { kind: "asset"; id: string }
-  | { kind: "wait"; wait: WaitSpec }
+  | { kind: "wait"; wait: WaitSpec; held?: string }
   | { kind: "pipeline"; bolt: string }
   /**
    * Services of a compose file: started with `up --wait`, so the step is done when they are
@@ -205,11 +205,16 @@ export interface Config {
   notify?: NotifySettings;
 }
 
-export type NotifyWhen = "failures" | "all" | "off";
+export type NotifyWhen = "failures" | "changes" | "all" | "off";
+
+export interface Webhook {
+  url: string;
+  workspaces?: string[];
+}
 
 export interface NotifySettings {
   when?: NotifyWhen;
-  webhook?: string;
+  webhooks?: Webhook[];
 }
 
 /**

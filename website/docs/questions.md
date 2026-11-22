@@ -95,7 +95,7 @@ Wisp started.
 :::
 
 ::: details Do logs pile up on my disk?
-No. Wisp keeps the last 200 runs, a log over 10 MB keeps its last 5 MB, and everything
+No. Wisp keeps the last 50 runs of each pipeline (500 in all), a log over 10 MB keeps its last 5 MB, and everything
 together stays under 500 MB, the oldest going first. `wisp ps --clear` and
 `wisp history --clear` delete them sooner.
 :::

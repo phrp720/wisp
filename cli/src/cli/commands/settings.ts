@@ -1,12 +1,13 @@
-import { getNotify, getOpenWithDefaults, setNotify, setOpenWithDefaults } from "../../core/config.js";
+import { getNotify, getOpenWithDefaults, type NotifyChoice, setNotify, setOpenWithDefaults } from "../../core/config.js";
 import { detectEnvironment } from "../../core/environment.js";
 import { WispError } from "../../core/errors.js";
-import { LONG_RUN_MS, sendNotification, webhookProblem } from "../../core/notify.js";
+import { addWebhook, type Delivery, lastDelivery, LONG_RUN_MS, maskWebhook, readDeliveries, removeWebhook, sendNotification } from "../../core/notify.js";
+import { readProjectFile } from "../../core/project.js";
 import type { NotifyWhen } from "../../core/types.js";
 import { getPlatform } from "../../platform/index.js";
 import { MULTIPLEXERS } from "../../platform/terminals.js";
-import { dim, green, red } from "../format.js";
-import { emitJson } from "../lib/context.js";
+import { ago, dim, green, red } from "../format.js";
+import { emitJson, everything, workspaceFor } from "../lib/context.js";
 import type { CommandDef } from "../lib/define.js";
 
 const KINDS: Record<string, "folder" | "file" | "terminal"> = {
@@ -93,47 +94,93 @@ function positional(args: string[]): { folder?: string; file?: string; terminal?
 
 const WHEN: Record<NotifyWhen, string> = {
   failures: `a run fails that you might have missed: one nobody watched (cron, a script), or one over ${LONG_RUN_MS / 1000}s`,
+  changes: "a pipeline starts failing, and when it works again: once each, for checks that run every few minutes",
   all: `any run ends that you might have missed: one nobody watched, or one over ${LONG_RUN_MS / 1000}s`,
   off: "never",
 };
 
-export const notify: CommandDef<{ webhook?: string; test?: boolean; json?: boolean }> = {
+function describeDelivery(delivery: Delivery | undefined): string {
+  if (!delivery) return dim("nothing sent yet");
+  if (delivery.ok) return dim(`sent ${ago(delivery.at)} ago`);
+  return red(`✗ failed ${ago(delivery.at)} ago: ${delivery.problem ?? "no reason given"}`);
+}
+
+export const notify: CommandDef<{ test?: boolean; reveal?: boolean; json?: boolean }> = {
   name: "notify",
-  summary: "Choose when Wisp tells you a run failed, and where: this screen, a webhook",
-  args: [["[when]", "failures (the default), all, or off"]],
+  summary: "Choose when Wisp tells you a run failed, and where: this screen, webhooks",
+  args: [["[what...]", "failures (the default), changes, all or off; add <url> [workspace...]; remove <url | number> [workspace...]"]],
   options: [
-    ["--webhook <url>", "also post to this address: Slack, Discord, ntfy or your own; blank to stop"],
-    ["--test", "send a test notification now"],
+    ["--test", "send a test notification now, to every webhook"],
+    ["--reveal", "show the webhooks' whole addresses, secret included"],
     ["--json", "print the setting as JSON"],
   ],
-  examples: ["wisp notify", "wisp notify all", "wisp notify --webhook https://ntfy.sh/my-server", "wisp notify --test"],
+  examples: [
+    "wisp notify",
+    "wisp notify changes",
+    "wisp notify add https://ntfy.sh/my-server",
+    "wisp notify add https://hooks.slack.com/services/... staging production",
+    "wisp notify remove 2",
+    "wisp notify --test",
+    "wisp notify --reveal              # whole addresses, to copy one",
+  ],
 
-  async run([when], options) {
-    if (when !== undefined && !(when in WHEN)) throw new WispError(`Say failures, all or off, not "${when}"`, "INVALID_INPUT");
-    const webhook = options.webhook?.trim();
-    const refused = webhook ? webhookProblem(webhook) : undefined;
-    if (refused) throw new WispError(`"${webhook}": ${refused}`, "INVALID_INPUT");
-    const changing = when !== undefined || options.webhook !== undefined;
-    const settings = changing
-      ? await setNotify({ ...(when ? { when: when as NotifyWhen } : {}), ...(options.webhook !== undefined ? { webhook: webhook ?? "" } : {}) })
-      : await getNotify();
+  async run(args, options) {
+    const [first, ref, ...names] = args;
+    let settings: NotifyChoice;
+    if (first === "add" || first === "remove") {
+      if (!ref) throw new WispError(`Say which webhook: wisp notify ${first} <url>`, "INVALID_INPUT");
+      const files = await Promise.all(names.map(async (name) => (await workspaceFor(name)).workspace.file));
+      const { webhooks } = await getNotify();
+      settings = await setNotify({ webhooks: first === "add" ? addWebhook(webhooks, ref.trim(), files) : removeWebhook(webhooks, ref, files) });
+    } else if (first !== undefined) {
+      if (!(first in WHEN) || args.length > 1) throw new WispError(`Say failures, changes, all or off, or add or remove: not "${args.join(" ")}"`, "INVALID_INPUT");
+      settings = await setNotify({ when: first as NotifyWhen });
+    } else settings = await getNotify();
+
     const environment = detectEnvironment();
     const screen = environment.ssh ? "none: this is an SSH session" : environment.gui ? "this one" : "none: no display here";
+    const files = [...new Set(settings.webhooks.flatMap((hook) => hook.workspaces ?? []))];
+    const reads = files.length > 0 ? await everything() : [];
+    const nameOf = new Map(
+      await Promise.all(
+        files.map(async (file) => [file, reads.find((read) => read.workspace.file === file)?.workspace.name ?? (await readProjectFile(file).then((read) => read.workspace.name).catch(() => file))] as const),
+      ),
+    );
+    const named = (file: string) => ({ name: nameOf.get(file) ?? file, file });
 
     const problems = options.test
       ? await sendNotification(
-          { ok: false, bolt: "A test", workspace: "Wisp", failedStep: "nothing, it's a test", durationMs: 0, watched: false },
-          { platform: getPlatform(), environment, settings },
+          { ok: false, bolt: "A test", workspace: "Wisp", failedStep: "nothing", error: "it's a test", durationMs: 0, watched: false },
+          { platform: getPlatform(), environment, settings: { ...settings, webhooks: settings.webhooks.map(({ url }) => ({ url })) } },
         )
       : undefined;
     if (problems && problems.length > 0) process.exitCode = 1;
+    const deliveries = await readDeliveries();
+    const shown = (url: string) => (options.reveal ? url : maskWebhook(url));
 
     if (options.json) {
-      return emitJson({ when: settings.when, webhook: settings.webhook ?? null, screen: environment.gui && !environment.ssh, ...(problems ? { test: { ok: problems.length === 0, problems } } : {}) });
+      return emitJson({
+        when: settings.when,
+        webhooks: settings.webhooks.map((hook, at) => ({
+          number: at + 1,
+          url: shown(hook.url),
+          workspaces: hook.workspaces ? hook.workspaces.map(named) : null,
+          lastDelivery: lastDelivery(deliveries, hook.url) ?? null,
+        })),
+        screen: environment.gui && !environment.ssh,
+        ...(problems ? { test: { ok: problems.length === 0, problems } } : {}),
+      });
     }
-    console.log(`${dim("when   ")} ${settings.when}${dim(` — ${WHEN[settings.when]}`)}`);
-    console.log(`${dim("screen ")} ${screen}`);
-    console.log(`${dim("webhook")} ${settings.webhook ?? dim("none")}`);
+    console.log(`${dim("when    ")} ${settings.when}${dim(` — ${WHEN[settings.when]}`)}`);
+    console.log(`${dim("screen  ")} ${screen}`);
+    if (settings.webhooks.length === 0) console.log(`${dim("webhooks")} ${dim("none: wisp notify add <url> [workspace...]")}`);
+    else {
+      console.log(dim("webhooks"));
+      settings.webhooks.forEach((hook, at) => {
+        console.log(`  ${dim(`${at + 1}`)}  ${shown(hook.url)}  ${dim(!hook.workspaces ? "every workspace" : reads.length > 1 && reads.every((read) => hook.workspaces?.includes(read.workspace.file)) ? "all workspaces" : hook.workspaces.map((file) => named(file).name).join(", "))}`);
+        console.log(`     ${describeDelivery(lastDelivery(deliveries, hook.url))}`);
+      });
+    }
     if (problems) {
       console.log();
       if (problems.length === 0) console.log(`${green("✓")} sent`);

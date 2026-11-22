@@ -294,6 +294,12 @@
               "exclusiveMinimum": 0,
               "default": 60,
               "description": "Seconds before giving up."
+            },
+            "status": {
+              "type": "integer",
+              "minimum": 100,
+              "maximum": 599,
+              "description": "With a url: the HTTP status it must answer with, like 200. Left out, any status below 500 counts, so a 404 is up and a 502 is not."
             }
           }
         }

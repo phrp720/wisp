@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { render } from "ink-testing-library";
 import { describe, expect, it, vi } from "vitest";
 
@@ -57,8 +58,8 @@ function services(overrides: Partial<Services> = {}, library: Library = { reads:
       choices: () => ({ editors: [{ label: "Visual Studio Code", value: "Visual Studio Code" }], terminals: ["Terminal", "Ghostty", "tmux"] }),
       mouse: async () => true,
       setMouse: async (on) => on,
-      notify: async () => ({ when: "failures" }),
-      setNotify: async (change) => ({ when: "failures", ...change }),
+      notify: async () => ({ when: "failures", webhooks: [] }),
+      setNotify: async (change) => ({ when: "failures", webhooks: [], ...change }),
     },
     editing: {
       bolt: async (_file, bolt) => ({ label: bolt, steps: [] }),
@@ -513,6 +514,25 @@ describe("the TUI", () => {
     await eventually(() => expect(run).not.toHaveBeenCalled());
   });
 
+  it("names a pipeline's inputs in its details", async () => {
+    const deploy = read("/dev/acme/.wisp.json", { name: "Acme", pipelines: [{ label: "Deploy", inputs: { variant: { ask: "Which?" }, port: { default: "443" } }, confirm: "Deploy {{variant}}?", steps: [{ url: "https://localhost:{{port}}" }] }] });
+    const app = await open(services({}, { reads: [deploy], here: deploy.workspace.file, unreadable: [] }));
+    await eventually(() => expect(app.lastFrame()).toMatch(/inputs: variant, port +│\n│ +│.*asks first: Deploy \{\{variant\}\}\? · never run yet/));
+  });
+
+  it("gives a pipeline's notes two lines, and ends a longer one with …", async () => {
+    const long = "docker compose up --wait for a variant, project dir is the repo root where the .env lives. Stop it with wisp down deploy and the same variant. Opens the site when it is up.";
+    const deploy = read("/dev/acme/.wisp.json", { name: "Acme", pipelines: [{ label: "Deploy", notes: long, steps: [{ url: "localhost:3000" }] }] });
+    const app = await open(services({}, { reads: [deploy], here: deploy.workspace.file, unreadable: [] }));
+    await eventually(() => expect(app.lastFrame()).toContain("⚡ Deploy"));
+    const frame = app.lastFrame() ?? "";
+    const at = frame.split("\n").findIndex((line) => line.includes("⚡ Deploy"));
+    const [first, second, third] = frame.split("\n").slice(at + 1, at + 4);
+    expect(first).toContain("docker compose up --wait");
+    expect(second).toMatch(/\S+.*…/);
+    expect(third).not.toMatch(/[a-z]/);
+  });
+
   it("says in a pipeline's details that it asks first", async () => {
     const asking = read("/dev/acme/.wisp.json", { name: "Acme", pipelines: [{ label: "Ship", confirm: "Ship it?", steps: [{ url: "localhost:3000" }] }] });
     const app = await open(services({}, { reads: [asking], here: asking.workspace.file, unreadable: [] }));
@@ -900,7 +920,7 @@ describe("the TUI", () => {
 
   it("changes your own settings by category, with s: the values on the right, saved together", async () => {
     const set = vi.fn(async (change: Record<string, string>) => change);
-    const app = await open(services({ settings: { get: async () => ({}), set, choices: () => ({ editors: [{ label: "Visual Studio Code", value: "Visual Studio Code" }], terminals: ["Ghostty", "tmux"] }), mouse: async () => true, setMouse: async (on) => on, notify: async () => ({ when: "failures" }), setNotify: async (change) => ({ when: "failures", ...change }) } }));
+    const app = await open(services({ settings: { get: async () => ({}), set, choices: () => ({ editors: [{ label: "Visual Studio Code", value: "Visual Studio Code" }], terminals: ["Ghostty", "tmux"] }), mouse: async () => true, setMouse: async (on) => on, notify: async () => ({ when: "failures", webhooks: [] }), setNotify: async (change) => ({ when: "failures", webhooks: [], ...change }) } }));
     await tick();
     app.stdin.write("s");
     await eventually(() => expect(app.lastFrame()).toContain("mouse on"));
@@ -967,7 +987,7 @@ describe("the TUI", () => {
   });
 
   it("chooses when Wisp tells you about a run, and refuses a webhook that isn't https, from settings", async () => {
-    const setNotify = vi.fn(async (change: { when?: "failures" | "all" | "off"; webhook?: string }) => ({ when: change.when ?? "all", ...(change.webhook ? { webhook: change.webhook } : {}) }));
+    const setNotify = vi.fn(async (change: { when?: "failures" | "changes" | "all" | "off"; webhooks?: { url: string; workspaces?: string[] }[] }) => ({ when: change.when ?? "changes", webhooks: change.webhooks ?? [] }));
     const api = services();
     const app = await open({ ...api, settings: { ...api.settings, setNotify } });
     app.stdin.write("s");
@@ -978,27 +998,121 @@ describe("the TUI", () => {
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ Notifications/));
     await tick();
     app.stdin.write("\r");
-    await eventually(() => expect(app.lastFrame()).toContain("[ Save ]"));
+    await eventually(() => expect(app.lastFrame()).toMatch(/❯ Tell me +when a run fails/));
+    await eventually(() => expect(app.lastFrame()).toContain("+  add a webhook"));
     await tick();
-    app.stdin.write(ARROW_RIGHT);
-    await eventually(() => expect(app.lastFrame()).toContain("● when any run ends"));
-    await tick();
-    app.stdin.write("\u0013");
-    await eventually(() => expect(setNotify).toHaveBeenCalledWith({ when: "all", webhook: "" }));
-    await eventually(() => expect(app.lastFrame()).not.toContain("[ Save ]"));
-
-    await tick();
-
     app.stdin.write("\r");
     await eventually(() => expect(app.lastFrame()).toContain("[ Save ]"));
     await tick();
-    app.stdin.write(ARROW_DOWN);
+    app.stdin.write(ARROW_RIGHT);
+    await eventually(() => expect(app.lastFrame()).toContain("● when a pipeline starts failing or works again"));
+    await tick();
+    app.stdin.write("\u0013");
+    await eventually(() => expect(setNotify).toHaveBeenCalledWith({ when: "changes" }));
+    await eventually(() => expect(app.lastFrame()).toMatch(/❯ Tell me +when a pipeline starts failing/));
+
+    await tick();
+    app.stdin.write("a");
+    await eventually(() => expect(app.lastFrame()).toContain("Add webhooks"));
     await tick();
     for (const char of "ntfy.sh/x") app.stdin.write(char);
     await tick();
     app.stdin.write("\u0013");
     await eventually(() => expect(app.lastFrame()).toContain("a web address, starting with https://"));
     await eventually(() => expect(setNotify).toHaveBeenCalledTimes(1));
+  });
+
+  it("removes a webhook from the list, adds several in one form, and changes which workspaces one is for, from settings", async () => {
+    const setNotify = vi.fn(async (change: { when?: "failures" | "changes" | "all" | "off"; webhooks?: { url: string; workspaces?: string[] }[] }) => ({ when: change.when ?? "failures", webhooks: change.webhooks ?? [] }));
+    const api = services();
+    const old = "https://ntfy.sh/old-and-secret";
+    const deliveries = async () => ({ [createHash("sha256").update(old).digest("hex").slice(0, 16)]: { at: new Date().toISOString(), ok: false, problem: "404 Not Found" } });
+    const app = await open({ ...api, settings: { ...api.settings, notify: async () => ({ when: "failures", webhooks: [{ url: old }] }), setNotify, deliveries } });
+    app.stdin.write("s");
+    await eventually(() => expect(app.lastFrame()).toContain("when a run fails"));
+    await tick();
+    app.stdin.write("j");
+    app.stdin.write("j");
+    await eventually(() => expect(app.lastFrame()).toMatch(/❯ Notifications/));
+    await tick();
+    app.stdin.write("\r");
+    await eventually(() => expect(app.lastFrame()).toMatch(/❯ +1 +https:\/\/ntfy\.sh\/…cret +every workspace/));
+    expect(app.lastFrame()).toContain("✗ last one failed: 404 Not Found");
+    expect(app.lastFrame()).not.toContain("old-and-secret");
+    await tick();
+    app.stdin.write("D");
+    await eventually(() => expect(app.lastFrame()).toContain("Remove this webhook?"));
+    await tick();
+    app.stdin.write("y");
+    await eventually(() => expect(setNotify).toHaveBeenCalledWith({ webhooks: [] }));
+    await eventually(() => expect(app.lastFrame()).toContain("+  add a webhook"));
+    expect(app.lastFrame()).toContain("Removed https://ntfy.sh/…cret");
+
+    await tick();
+    app.stdin.write("a");
+    await eventually(() => expect(app.lastFrame()).toContain("Add webhooks"));
+    await tick();
+    for (const char of "https://hooks.slack.com/x") app.stdin.write(char);
+    await eventually(() => expect(app.lastFrame()).toContain("Address 2"));
+    app.stdin.write(ARROW_DOWN);
+    await tick();
+    for (const char of "https://discord.com/api/webhooks/1/y") app.stdin.write(char);
+    await eventually(() => expect(app.lastFrame()).toContain("Address 3"));
+    app.stdin.write(ARROW_DOWN);
+    await tick();
+    app.stdin.write(ARROW_DOWN);
+    await eventually(() => expect(app.lastFrame()).toContain("none or all ticked: every workspace"));
+    app.stdin.write(ARROW_RIGHT);
+    app.stdin.write(ARROW_RIGHT);
+    await tick();
+    app.stdin.write(" ");
+    await tick();
+    app.stdin.write("\u0013");
+    const both = [
+      { url: "https://hooks.slack.com/x", workspaces: [infra.workspace.file] },
+      { url: "https://discord.com/api/webhooks/1/y", workspaces: [infra.workspace.file] },
+    ];
+    await eventually(() => expect(setNotify).toHaveBeenCalledWith({ webhooks: both }));
+    await eventually(() => expect(app.lastFrame()).toMatch(/2 +https:\/\/discord\.com\/api\/…\/1\/y +infra/));
+
+    await tick();
+    app.stdin.write("k");
+    await tick();
+    app.stdin.write("\r");
+    await eventually(() => expect(app.lastFrame()).toContain("[ Save ]"));
+    await tick();
+    app.stdin.write(ARROW_RIGHT);
+    app.stdin.write(ARROW_RIGHT);
+    await tick();
+    app.stdin.write(" ");
+    await tick();
+    app.stdin.write("\u0013");
+    await eventually(() => expect(setNotify).toHaveBeenLastCalledWith({ webhooks: [both[0], { url: both[1]?.url }] }));
+  });
+
+  it("says all workspaces when a webhook names every one, and saves ticking them all as every workspace", async () => {
+    const setNotify = vi.fn(async (change: { webhooks?: { url: string; workspaces?: string[] }[] }) => ({ when: "failures" as const, webhooks: change.webhooks ?? [] }));
+    const api = services();
+    const files = [morning, infra, acme].map((entry) => entry.workspace.file);
+    const app = await open({ ...api, settings: { ...api.settings, notify: async () => ({ when: "failures", webhooks: [{ url: "https://ntfy.sh/all-of-them", workspaces: files }, { url: "https://ntfy.sh/just-infra-x", workspaces: [infra.workspace.file] }] }), setNotify } });
+    app.stdin.write("s");
+    await eventually(() => expect(app.lastFrame()).toContain("when a run fails"));
+    await tick();
+    app.stdin.write("j");
+    app.stdin.write("j");
+    await eventually(() => expect(app.lastFrame()).toMatch(/❯ Notifications/));
+    await tick();
+    app.stdin.write("\r");
+    await eventually(() => expect(app.lastFrame()).toMatch(/1 +https:\/\/ntfy\.sh\/…them +all workspaces/));
+    expect(app.lastFrame()).toMatch(/2 +https:\/\/ntfy\.sh\/…ra-x +infra/);
+    await tick();
+    app.stdin.write("j");
+    await tick();
+    app.stdin.write("\r");
+    await eventually(() => expect(app.lastFrame()).toContain("[ Save ]"));
+    await tick();
+    app.stdin.write("\u0013");
+    await eventually(() => expect(setNotify).toHaveBeenCalledWith({ webhooks: [{ url: "https://ntfy.sh/all-of-them" }, { url: "https://ntfy.sh/just-infra-x", workspaces: [infra.workspace.file] }] }));
   });
 
   it("sets up only the suggested pipelines left ticked", async () => {
@@ -1264,6 +1378,36 @@ describe("commands that finish, down and history in the TUI", () => {
       if (!(app.lastFrame() ?? "").includes("Workspaces")) app.stdin.write("1");
       expect(app.lastFrame()).toContain("Workspaces");
     });
+  });
+
+  it("says on a run's page where its notification went, and that it didn't arrive", async () => {
+    const entry: HistoryEntry = { id: "4e5f6a7b8c9d", number: 3, workspace: acme.workspace.file, workspaceName: "Acme", bolt: "Backup", startedAt: new Date(Date.now() - 60_000).toISOString(), finishedAt: new Date().toISOString(), ok: false, steps: [{ kind: "command", label: "dump", value: "pg_dump", ok: false, error: "exited with code 1", durationMs: 500 }], notified: [{ url: "https://hooks.slack.com/services/…x7Qa", ok: true }, { url: "https://discord.com/api/…Zk3p", ok: false, problem: "404 Not Found" }] };
+    const app = render(<App services={services({ history: async () => [entry] })} glyphs={unicode} size={{ columns: 130, rows: 30 }} />);
+    await tick();
+    app.stdin.write("h");
+    await eventually(() => expect(app.lastFrame()).toContain("Backup #3"));
+    await tick();
+    app.stdin.write("\r");
+    await eventually(() => expect(app.lastFrame()).toContain("Notified"));
+    await eventually(() => expect(app.lastFrame()).toContain("1 of 2 failed: https://discord.com/api/…Zk3p 404 Not Found"));
+  });
+
+  it("warns along the top when a webhook is failing, and s opens its settings", async () => {
+    const api = services();
+    const app = await open({ ...api, settings: { ...api.settings, notify: async () => ({ when: "failures", webhooks: [{ url: "https://ntfy.sh/old-and-secret" }] }), failingWebhooks: async () => 1 } });
+    await eventually(() => expect(app.lastFrame()).toContain("a webhook is failing: s"));
+    app.stdin.write("s");
+    await eventually(() => expect(app.lastFrame()).toMatch(/❯ Notifications/));
+    await eventually(() => expect(app.lastFrame()).toContain("https://ntfy.sh/…cret"));
+  });
+
+  it("says nothing along the top while every webhook works", async () => {
+    const api = services();
+    const app = await open({ ...api, settings: { ...api.settings, failingWebhooks: async () => 0 } });
+    await tick();
+    expect(app.lastFrame()).not.toContain("failing");
+    app.stdin.write("s");
+    await eventually(() => expect(app.lastFrame()).toMatch(/❯ Opening/));
   });
 
   it("retries the failed part of a past run from history", async () => {
@@ -1658,7 +1802,7 @@ describe("doing everything without JSON", () => {
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ .*1 .*apps\/api/));
     await tick();
     app.stdin.write("k");
-    await eventually(() => expect(app.lastFrame()).toMatch(/❯ Inputs +none/));
+    await eventually(() => expect(app.lastFrame()).toMatch(/❯ \+  add an input/));
     await tick();
     app.stdin.write("k");
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ Ask first +no/));
@@ -1746,11 +1890,11 @@ describe("doing everything without JSON", () => {
     const bolt = async (_file: string, label: string) => ({ label, inputs: { tag: { ask: "Which tag?" } }, steps: [{ run: "./deploy.sh {{tag}}", finishes: true }] });
     const app = await open(services({ editing: { ...services().editing, bolt, setInput, removeInput } }));
     app.stdin.write("e");
-    await eventually(() => expect(app.lastFrame()).toMatch(/Inputs +tag · Which tag\?/));
+    await eventually(() => expect(app.lastFrame()).toMatch(/│ Inputs .*\n│ +tag  Which tag\?/));
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ .*1 .*deploy\.sh/));
     await tick();
     app.stdin.write("k");
-    await eventually(() => expect(app.lastFrame()).toMatch(/❯ +\+  add an input/));
+    await eventually(() => expect(app.lastFrame()).toMatch(/❯ \+  add another input/));
     await tick();
     app.stdin.write("\r");
     await eventually(() => expect(app.lastFrame()).toContain("[ Add input ]"));
@@ -1774,7 +1918,7 @@ describe("doing everything without JSON", () => {
     await eventually(() => expect(app.lastFrame()).not.toContain("[ Add input ]"));
     await tick();
     app.stdin.write("k");
-    await eventually(() => expect(app.lastFrame()).toMatch(/❯ Inputs +tag/));
+    await eventually(() => expect(app.lastFrame()).toMatch(/❯ tag  Which tag\?/));
     await tick();
     app.stdin.write("D");
     await eventually(() => expect(app.lastFrame()).toContain("Remove this input?"));
@@ -1791,7 +1935,7 @@ describe("doing everything without JSON", () => {
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ .*1 .*deploy\.sh/));
     await tick();
     app.stdin.write("k");
-    await eventually(() => expect(app.lastFrame()).toMatch(/❯ Inputs +none/));
+    await eventually(() => expect(app.lastFrame()).toMatch(/❯ \+  add an input/));
     await tick();
     app.stdin.write("k");
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ Ask first +no/));
@@ -1874,8 +2018,7 @@ describe("doing everything without JSON", () => {
     app.stdin.write("4");
     await tick();
     for (const char of "soon") app.stdin.write(char);
-    app.stdin.write("\r"); // to the button
-    app.stdin.write("\r"); // Add step
+    app.stdin.write("\u0013"); // Add step
     await tick();
     await eventually(() => expect(app.lastFrame()).toContain("Not something Wisp can wait for"));
   });
@@ -2403,6 +2546,27 @@ describe("the mouse", () => {
     await tick();
     await tick();
     await eventually(() => expect(setUp).toHaveBeenCalledWith(suggestion, ["Check"]));
+  });
+
+  it("opens the notification settings from a click on the webhook warning, from anywhere", async () => {
+    const api = services();
+    const { app, mouse, frame } = await withMouse({ ...api, settings: { ...api.settings, failingWebhooks: async () => 1 } });
+    await eventually(() => expect(frame()).toContain("a webhook is failing: s"));
+    const header = frame().split("\n")[0] ?? "";
+    const start = header.indexOf("● a webhook");
+    const end = header.indexOf("failing: s") + "failing: s".length;
+    expect(mouse.emit({ kind: "click", x: end + 1, y: 0 })).toBe(false);
+    expect(mouse.emit({ kind: "click", x: start - 1, y: 0 })).toBe(false);
+    expect(mouse.emit({ kind: "click", x: end - 1, y: 0 })).toBe(true);
+    await eventually(() => expect(frame()).toMatch(/❯ Notifications/));
+    await eventually(() => {
+      if (!frame().includes("Workspaces")) app.stdin.write("\u001B");
+      expect(frame()).toContain("Workspaces");
+    });
+    app.stdin.write("2");
+    await eventually(() => expect(frame()).toContain("Nothing is running"));
+    expect(mouse.emit({ kind: "click", x: start, y: 0 })).toBe(true);
+    await eventually(() => expect(frame()).toMatch(/❯ Notifications/));
   });
 
   it("leaves settings by its tabs, by click or 1 2 3, but not while a category is open", async () => {

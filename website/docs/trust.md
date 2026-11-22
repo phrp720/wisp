@@ -1,7 +1,8 @@
 # Trust
 
-A cloned repository could put anything in its `.wisp.json`. So its commands, and any file or
-app that would run code when opened, **wait until you've seen them and said yes**.
+A cloned repository could put anything in its `.wisp.json`. So its commands, any file or app
+that would run code when opened, and any website or wait for one that reads your environment
+(`{{env.NAME}}`), **wait until you've seen them and said yes**.
 
 ```bash
 wisp check    # see exactly what would run
@@ -15,7 +16,8 @@ the **Trust this file** button starts unselected, so a stray `⏎` allows nothin
 
 - Approval is tied to the file's **exact contents**. Any change, a `git pull` included, asks
   again, and `wisp check` shows what changed.
-- Until then, links, folders and plain files still open; only what could run code waits.
+- Until then, links, folders and plain files still open; only what could run code or read
+  your environment waits.
 - Changes you make yourself, through the dashboard's editor, keep the file trusted.
 - Your [personal workspaces](./workspaces#personal-workspaces) are yours, so their commands
   run without asking.

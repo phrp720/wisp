@@ -62,6 +62,10 @@ Runs another pipeline of the same file as one step. [Pipelines as steps](./pipel
 Ports and websites give up after 60 seconds. For longer, use the object form:
 `{ "wait": { "url": "http://localhost:3000", "timeout": 120 } }`.
 
+A website is up when it answers with anything below 500: a 404 still means the server is
+running, a 502 means what is behind it is not. To ask for one exact answer, add `status`:
+`{ "wait": { "url": "https://staging.example.com/health", "status": 200 } }`.
+
 ## Open
 
 ### Open a website
@@ -72,6 +76,18 @@ Ports and websites give up after 60 seconds. For longer, use the object form:
 
 A bare host, like `staging.acme.com`, is taken as `https://`. On macOS, a tab that's
 already open is focused instead of opening a second one.
+
+An address can come from an environment variable, whole or in part:
+
+```json
+{ "url": "{{env.PRODUCTION_URL}}/admin" }
+```
+
+Wisp reads `$PRODUCTION_URL` when the step runs, and the step fails if it isn't set. The
+address stays out of the file and out of [History](./history), which keeps the step as written.
+A file that reads your environment this way waits for [trust](./trust), because a cloned file
+could otherwise send a secret to any site. A [wait for a website](#wait-until-something-is-ready) can do the
+same: `{ "wait": { "url": "{{env.PRODUCTION_URL}}/health" } }`.
 
 ### Open a folder
 

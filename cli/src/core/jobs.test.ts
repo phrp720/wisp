@@ -1,3 +1,4 @@
+import { createServer } from "node:http";
 import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -6,12 +7,13 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { Platform } from "../platform/types.js";
 import type { Environment } from "./environment.js";
-import { forgetHistory, getHistory, listHistory, recordHistory, withWorkspaceNames, type HistoryEntry } from "./history.js";
+import { forgetHistory, getHistory, KEEP_PER_PIPELINE, listHistory, recordHistory, retained, withWorkspaceNames, type HistoryEntry } from "./history.js";
 import { spawn, spawnSync } from "node:child_process";
 
 import { listRuns, stopRun } from "./processes.js";
 import { windowInvocation } from "./shell.js";
 import { interpret } from "./project.js";
+import { setNotify } from "./config.js";
 import { pipelineStatus, downPipeline, planPipeline, resolvePipeline, switchToWorkspace } from "./switch.js";
 import type { Workspace } from "./types.js";
 
@@ -161,6 +163,15 @@ describe("commands that finish, and failures", () => {
 
     expect((await listHistory()).map((entry) => entry.bolt)).toEqual(["Build", "Lint"]);
     expect((await listHistory({ bolt: "lin" })).map((entry) => entry.bolt)).toEqual(["Lint"]);
+  });
+
+  it("keep the last runs of each pipeline, so a check run every minute pushes out only its own", () => {
+    const run = (bolt: string, at: number): HistoryEntry => ({ id: `${bolt}${at}`, workspace: "/w/.wisp.json", workspaceName: "W", bolt, startedAt: "", finishedAt: "", ok: true, steps: [] });
+    const entries = [...Array.from({ length: KEEP_PER_PIPELINE + 10 }, (_, at) => run("Check", at)), run("Deploy (retry)", 0), run("Deploy", 1)];
+    const { kept, dropped } = retained(entries);
+    expect(kept.filter((entry) => entry.bolt === "Check")).toHaveLength(KEEP_PER_PIPELINE);
+    expect(kept.filter((entry) => entry.bolt.startsWith("Deploy"))).toHaveLength(2);
+    expect(dropped.map((entry) => entry.id)).toEqual(Array.from({ length: 10 }, (_, at) => `Check${KEEP_PER_PIPELINE + at}`));
   });
 
   it("are not recorded on a dry run", async () => {
@@ -395,7 +406,48 @@ describe("telling you a run failed", () => {
       await switchToWorkspace(ws, { bolt: "backup", watched: true }, { platform, environment: desktop, defaults: {} });
       expect(shown).toEqual([]);
       const result = await switchToWorkspace(ws, { bolt: "backup", watched: false }, { platform, environment: desktop, defaults: {} });
-      expect(shown).toEqual([`✗ Backup failed | at dump · ${ws.name} · wisp history ${result.historyId}`]);
+      expect(shown).toEqual([`✗ Backup failed | at dump: exited with code 3 · ${ws.name} · wisp history ${result.historyId}`]);
+    } finally {
+      process.env["WISP_NOTIFY"] = "off";
+    }
+  });
+
+  it("keeps with the run where its notification went, and whether it arrived", async () => {
+    const server = createServer((_request, response) => {
+      response.statusCode = 410;
+      response.end();
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const { port } = server.address() as { port: number };
+    const ws = workspace({ pipelines: [{ label: "Backup", steps: [{ run: "exit 3", label: "dump", finishes: true }] }] });
+    process.env["WISP_NOTIFY"] = "failures";
+    try {
+      await setNotify({ webhooks: [{ url: `http://127.0.0.1:${port}/hook-secret` }] });
+      const result = await switchToWorkspace(ws, { bolt: "backup", watched: false }, { platform: recorder(), environment: { ...desktop, gui: false }, defaults: {} });
+      const entry = await getHistory(result.historyId as string);
+      expect(entry?.notified).toEqual([{ url: `http://127.0.0.1:${port}/…cret`, ok: false, problem: "410 Gone" }]);
+      expect(entry?.ok).toBe(false);
+      expect(entry?.steps).toHaveLength(1);
+    } finally {
+      process.env["WISP_NOTIFY"] = "off";
+      server.close();
+    }
+  });
+
+  it("with changes: once when a check starts failing, once when it works again", async () => {
+    const shown: string[] = [];
+    const platform = { ...recorder(), notify: async (title: string) => void shown.push(title) };
+    const flag = join(dir, "up");
+    const ws = workspace({ pipelines: [{ label: "Check", steps: [{ run: `test -f "${flag}"`, label: "site", finishes: true }] }] });
+    const check = () => switchToWorkspace(ws, { bolt: "check", watched: false }, { platform, environment: desktop, defaults: {} });
+    process.env["WISP_NOTIFY"] = "changes";
+    try {
+      await check();
+      await check();
+      await writeFile(flag, "");
+      await check();
+      await check();
+      expect(shown).toEqual(["✗ Check failed", "✓ Check works again"]);
     } finally {
       process.env["WISP_NOTIFY"] = "off";
     }

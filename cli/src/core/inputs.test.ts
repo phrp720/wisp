@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 
 import { describe, expect, it } from "vitest";
 
-import { checkValue, fillTarget, parseGiven, placeholders } from "./inputs.js";
+import { checkValue, envNames, fillEnv, fillTarget, parseGiven, placeholders } from "./inputs.js";
 import type { InputSpec } from "./types.js";
 
 const tag: InputSpec = { name: "tag", ask: "Which tag?" };
@@ -10,6 +10,19 @@ const tag: InputSpec = { name: "tag", ask: "Which tag?" };
 describe("placeholders", () => {
   it("finds {{name}}, with or without spaces, and leaves other braces alone", () => {
     expect(placeholders("deploy {{env}} --tag {{ tag }} {} {{.Names}} ${HOME}")).toEqual(["env", "tag"]);
+  });
+});
+
+describe("{{env.NAME}}", () => {
+  it("is not an input, and is filled from the environment, whole", () => {
+    expect(placeholders("{{env.PRODUCTION_URL}}/admin")).toEqual([]);
+    expect(envNames("{{ env.PRODUCTION_URL }}/{{env.TEAM}} {{env.TEAM}}")).toEqual(["PRODUCTION_URL", "TEAM"]);
+    expect(fillEnv("{{env.PRODUCTION_URL}}/admin", { PRODUCTION_URL: "https://shop.example.com " })).toBe("https://shop.example.com/admin");
+  });
+
+  it("refuses to fill one that isn't set, naming every one missing", () => {
+    expect(() => fillEnv("{{env.A}}/{{env.B}}", { A: "x" })).toThrow("$B isn't set here");
+    expect(() => fillEnv("{{env.A}}/{{env.B}}", { A: " " })).toThrow("$A, $B aren't set here");
   });
 });
 

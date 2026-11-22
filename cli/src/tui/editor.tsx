@@ -534,7 +534,11 @@ export function PipelineEditor({ file, bolt, workspace, others, adding = false, 
   if (!sideBySide && open) return right(true, height);
 
   const leftWidth = sideBySide ? Math.min(60, Math.max(36, Math.floor(columns * 0.42))) : undefined;
-  const room = Math.max(1, height - 12 - inputs.length - (deleting === undefined && dropping === undefined ? 0 : 1));
+  const inputDetail = (input: RawInput) =>
+    [input.choices && input.choices.length > 0 ? input.choices.join(" · ") : "", input.default !== undefined && input.default !== "" ? `default ${input.default}` : ""].filter(Boolean).join(", ");
+  const inputLines = inputs.reduce((total, [, input]) => total + (inputDetail(input) ? 2 : 1), 0);
+  const nameWidth = Math.min(16, Math.max(0, ...inputs.map(([name]) => name.length)));
+  const room = Math.max(1, height - 14 - inputLines - (deleting === undefined && dropping === undefined ? 0 : 1));
   const stepRows = rows.map((entry, at) => ({ entry, at })).slice(first);
   const { items } = windowed(stepRows, Math.max(0, selected - first), room);
   const icon = (kind: string | undefined) => (glyphs.border !== "round" ? "" : (STEP_KINDS.find((entry) => entry.kind === kind)?.icon ?? "🔗") + " ");
@@ -545,15 +549,6 @@ export function PipelineEditor({ file, bolt, workspace, others, adding = false, 
         {pointer(at)}
         <Text bold={at === selected} color={at === selected ? TONE.accent : undefined}>{name.padEnd(11)}</Text>
         {value ? <Text>{value}</Text> : <Text dimColor>{empty}</Text>}
-      </Text>
-    </Box>
-  );
-
-  const addInputRow = (at: number) => (
-    <Box ref={rowNodes.set(at)}>
-      <Text wrap="truncate-end">
-        {pointer(at)}
-        <Text color={TONE.accent} bold={at === selected}>{`${"".padEnd(11)}+  add an input`}</Text>
       </Text>
     </Box>
   );
@@ -578,22 +573,42 @@ export function PipelineEditor({ file, bolt, workspace, others, adding = false, 
       {detail(2, "Notes", raw?.notes ?? "", "none yet")}
       {detail(3, "On failure", raw?.keepGoing ? "keep going" : "stop", "")}
       {detail(4, "Ask first", asking === true ? "yes" : asking || "", "no")}
-      {inputs.map(([name, input], at) => (
-        <Box key={`input:${name}`} flexDirection="column">
-          {detail(5 + at, at === 0 ? "Inputs" : "", `${name}${input.ask ? ` · ${input.ask}` : ""}${input.choices ? ` · ${input.choices.join(", ")}` : ""}`, "")}
-          {name === dropping ? (
-            <AskHere
-              question="Remove this input?"
-              yes="Remove"
-              onAnswer={(yes) => {
-                setDropping(undefined);
-                if (yes) void change(() => editing.removeInput(file, label, name), 5 + Math.max(0, Math.min(at, inputs.length - 2)), `Removed the input ${name}`);
-              }}
-            />
-          ) : null}
-        </Box>
-      ))}
-      {inputs.length === 0 ? detail(first - 1, "Inputs", "", "none") : addInputRow(first - 1)}
+      <Text> </Text>
+      <Text bold>Inputs</Text>
+      {inputs.map(([name, input], at) => {
+        const position = 5 + at;
+        const on = position === selected;
+        const detailLine = inputDetail(input);
+        return (
+          <Box key={`input:${name}`} flexDirection="column">
+            <Box ref={rowNodes.set(position)} flexDirection="column">
+              <Text wrap="truncate-end">
+                {pointer(position)}
+                <Text bold={on} color={name === dropping ? "red" : on ? TONE.accent : undefined}>{name.padEnd(nameWidth)}</Text>
+                {"  "}
+                {input.ask ? <Text>{input.ask}</Text> : <Text dimColor>no question: it asks for {name}</Text>}
+              </Text>
+              {detailLine ? <Text dimColor wrap="truncate-end">{`  ${"".padEnd(nameWidth)}  ${detailLine}`}</Text> : null}
+            </Box>
+            {name === dropping ? (
+              <AskHere
+                question="Remove this input?"
+                yes="Remove"
+                onAnswer={(yes) => {
+                  setDropping(undefined);
+                  if (yes) void change(() => editing.removeInput(file, label, name), 5 + Math.max(0, Math.min(at, inputs.length - 2)), `Removed the input ${name}`);
+                }}
+              />
+            ) : null}
+          </Box>
+        );
+      })}
+      <Box ref={rowNodes.set(first - 1)}>
+        <Text wrap="truncate-end">
+          {pointer(first - 1)}
+          <Text color={TONE.accent} bold={first - 1 === selected}>{`+  ${inputs.length === 0 ? "add an input" : "add another input"}`}</Text>
+        </Text>
+      </Box>
       <Text> </Text>
       <Text bold>Steps</Text>
       {items.map(({ entry, at }) => {

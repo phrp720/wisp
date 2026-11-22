@@ -53,7 +53,7 @@ export function stepLines(context: { read: WorkspaceRead; bolt: Pipeline; reads:
       if (target) return [target];
       const placed = { ...(step.name ? { name: step.name } : {}), ...(step.after && step.after.length > 0 ? { after: step.after } : {}), held: true };
       if (step.kind === "compose") return [{ ...composeTarget(step, "up"), ...placed }];
-      const item = step.kind === "asset" ? heldById.get(step.id) : undefined;
+      const item = step.kind === "asset" ? heldById.get(step.id) : step.kind === "wait" && step.held ? heldById.get(step.held) : undefined;
       if (!item) return [];
       return [{ kind: item.kind, label: item.label, id: item.id, value: item.value, ...(item.cwd ? { cwd: item.cwd } : {}), ...placed }];
     });

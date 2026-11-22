@@ -82,6 +82,10 @@ describe("editing a workspace without writing JSON", () => {
     expect(buildStep("run", { run: "" }).errors).toEqual({ run: "Command is needed" });
     expect(buildStep("wait", { wait: "soon" }).errors["wait"]).toMatch(/try http/);
     expect(buildStep("wait", { wait: "5" }).step).toEqual({ wait: 5 });
+    expect(buildStep("wait", { wait: "https://example.com/health", timeout: "2m", status: "200", label: "site" }).step).toEqual({ wait: { url: "https://example.com/health", timeout: 120, status: 200 }, label: "site" });
+    expect(buildStep("wait", { wait: "db:5432", timeout: "30", status: "200" }).step).toEqual({ wait: { port: 5432, host: "db", timeout: 30 } });
+    expect(buildStep("wait", { wait: "5s", timeout: "30" }).step).toEqual({ wait: "5s" });
+    expect(buildStep("wait", { wait: "https://example.com", status: "ok" }).errors["status"]).toMatch(/HTTP status/);
     expect(buildStep("compose", { compose: "compose.yaml", services: "db, cache" }).step).toEqual({ compose: "compose.yaml", services: ["db", "cache"] });
     expect(buildStep("run", { run: "pnpm dev", label: "api", cwd: "apps/api" }).step).toEqual({ run: "pnpm dev", cwd: "apps/api", label: "api" });
   });
@@ -118,6 +122,7 @@ describe("editing a workspace without writing JSON", () => {
     expect(buildStep("run", { run: "pnpm dev", finishes: "running", restart: "on-failure" }).step).toEqual({ run: "pnpm dev", restart: "on-failure" });
     expect(stepValues({ run: "pnpm build", finishes: true })["finishes"]).toBe("finishes");
     expect(stepValues({ run: "pnpm dev" })["finishes"]).toBe("running");
+    expect(stepValues({ wait: { url: "https://example.com/health", timeout: 90, status: 200 }, label: "site" })).toEqual({ wait: "https://example.com/health", timeout: "90", status: "200", label: "site" });
   });
 
   it("guesses from a command whether it finishes or keeps running", () => {

@@ -1,19 +1,21 @@
 import { connect } from "node:net";
 
+import { envNames, fillEnv } from "./inputs.js";
 import type { WaitSpec } from "./types.js";
 
 /** How a wait reads in a list: `port 5432`, `http://localhost:3000`, `3s`. */
 export function describeWait(wait: WaitSpec): string {
   if ("seconds" in wait) return `${wait.seconds}s`;
-  if ("url" in wait) return wait.url;
+  if ("url" in wait) return wait.status ? `${wait.url} (${wait.status})` : wait.url;
   return wait.host === "localhost" ? `port ${wait.port}` : `${wait.host}:${wait.port}`;
 }
 
 /**
  * Wait until something is ready, or give up.
  *
- * A port is ready when it accepts a connection; a url when it answers at all — even a 404
- * means the server is up, which is all a bolt needs to know before opening it.
+ * A port is ready when it accepts a connection. A url is ready when it answers with the
+ * status it names, or with anything below 500 when it names none: a 404 still means the
+ * server is up, a 502 means what is behind it is not.
  */
 export async function waitFor(
   wait: WaitSpec,
@@ -26,8 +28,19 @@ export async function waitFor(
     return;
   }
 
+  const address = "url" in wait ? fillEnv(wait.url) : "";
+  if ("url" in wait && !/^https?:\/\/[^/\s]/i.test(address)) {
+    const names = envNames(wait.url);
+    throw new Error(names.length > 0 ? `${names.map((name) => `$${name}`).join(", ")} ${names.length === 1 ? "doesn't" : "don't"} make a website address: it needs to start with https:// or http://` : `"${address}" is not a website address: it needs to start with https:// or http://`);
+  }
   const deadline = Date.now() + wait.timeout * 1000;
-  const check = "url" in wait ? () => answers(wait.url) : () => listening(wait.host, wait.port);
+  let last: number | undefined;
+  const check = "url" in wait
+    ? async () => {
+        last = await answers(address);
+        return last !== undefined && (wait.status ? last === wait.status : last < 500);
+      }
+    : () => listening(wait.host, wait.port);
 
   for (let attempt = 0; ; attempt += 1) {
     if (signal?.aborted) throw new Error("cancelled");
@@ -37,7 +50,7 @@ export async function waitFor(
       if (reason) throw new Error(reason);
     }
     if (Date.now() >= deadline) {
-      throw new Error(`gave up after ${wait.timeout}s waiting for ${describeWait(wait)}`);
+      throw new Error(`gave up after ${wait.timeout}s waiting for ${describeWait(wait)}${last !== undefined ? `: it answered ${last}` : ""}`);
     }
     await sleep(250, signal);
   }
@@ -56,13 +69,13 @@ function listening(host: string, port: number): Promise<boolean> {
   });
 }
 
-async function answers(url: string): Promise<boolean> {
+async function answers(url: string): Promise<number | undefined> {
   try {
     const response = await fetch(url, { signal: AbortSignal.timeout(2000), redirect: "manual" });
     await response.body?.cancel();
-    return true;
+    return response.status;
   } catch {
-    return false;
+    return undefined;
   }
 }
 

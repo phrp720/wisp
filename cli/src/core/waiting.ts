@@ -20,7 +20,7 @@ export function waitingForTrust(read: WorkspaceRead, label?: string): Withheld[]
     if (!bolt || seen.has(bolt.label)) return;
     seen.add(bolt.label);
     for (const step of bolt.steps) {
-      const id = step.kind === "asset" ? step.id : step.kind === "compose" ? `compose:${step.file}` : undefined;
+      const id = step.kind === "asset" ? step.id : step.kind === "compose" ? `compose:${step.file}` : step.kind === "wait" ? step.held : undefined;
       const item = id ? held.get(id) : undefined;
       if (item) found.set(item.id, item);
       if (step.kind === "pipeline") visit(step.bolt);

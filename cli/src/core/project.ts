@@ -5,7 +5,7 @@ import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } 
 import { parseDuration } from "./duration.js";
 import { getOpenWithDefaults } from "./config.js";
 import { WispError, describe } from "./errors.js";
-import { INPUT_NAME, INPUT_VALUE, notPlain, placeholders } from "./inputs.js";
+import { INPUT_NAME, INPUT_VALUE, envNames, notPlain, placeholders } from "./inputs.js";
 import { currentOS, expandHome, workspacesDir } from "./paths.js";
 import { hashContents, localFileFor, readTrustedBytes, trustStateOf } from "./trust.js";
 import type {
@@ -270,7 +270,7 @@ export function interpret(
     file: input.file,
     personal: input.personal,
     trusted,
-    links,
+    links: links.filter((link) => allow(ctx, "link", link, link.url)),
     folders: folders.filter((folder) => allow(ctx, "folder", folder, folder.path)),
     files: files.filter((file) => allow(ctx, "file", file, file.path)),
     apps: apps.filter((app) => allow(ctx, "app", app, app.app)),
@@ -304,10 +304,12 @@ export function interpret(
 
   if (!trusted && ctx.withheld.length > 0) {
     const commandCount = ctx.withheld.filter((item) => item.kind === "command").length;
-    const other = ctx.withheld.length - commandCount;
+    const linkCount = ctx.withheld.filter((item) => item.kind === "link" || item.kind === "wait").length;
+    const other = ctx.withheld.length - commandCount - linkCount;
     const parts = [
       commandCount > 0 ? plural(commandCount, "command") : "",
       other > 0 ? `${plural(other, "item")} that would run code when opened` : "",
+      linkCount > 0 ? `${plural(linkCount, "website")} that ${linkCount === 1 ? "reads" : "read"} your environment` : "",
     ].filter(Boolean);
 
     ctx.found.push({
@@ -353,6 +355,10 @@ function allow(ctx: Context, kind: TargetKind, asset: { id: string; label: strin
 
 /** Why opening this would run code, or nothing when it would not. */
 export function runsCode(kind: TargetKind, value: string): string | undefined {
+  if (kind === "link") {
+    const names = envNames(value);
+    return names.length > 0 ? `reads ${names.map((name) => `$${name}`).join(", ")} from your environment` : undefined;
+  }
   if (kind === "app") {
     // A name or bundle id is looked up among installed apps; a path is whatever is there.
     return /[\\/]/.test(value) ? "an app given as a path runs whatever is at that path" : undefined;
@@ -737,16 +743,19 @@ function bolts(entries: Entry[], ctx: Context): Pipeline[] {
       if (inputs.length > 0) bolt.inputs = inputs;
     }
     const declared = new Set((bolt.inputs ?? []).map((input) => input.name));
-    const undeclared = (text: string, where: string) => {
+    const undeclared = (text: string, where: string, address?: string) => {
+      const inAddress = new Set(address ? placeholders(address) : []);
       for (const name of new Set(placeholders(text))) {
         if (declared.has(name)) continue;
-        ctx.found.push({ level: "warning", at: where, message: `{{${name}}} is not one of "${label}"'s inputs — it is left as written`, hint: `Add it to the pipeline: "inputs": { "${name}": { "ask": "…" } }` });
+        const hint = `Add it to the pipeline: "inputs": { "${name}": { "ask": "…" } }`;
+        if (inAddress.has(name)) ctx.found.push({ level: "error", at: where, message: `{{${name}}} is not one of "${label}"'s inputs, so "${address}" can't be opened`, hint });
+        else ctx.found.push({ level: "warning", at: where, message: `{{${name}}} is not one of "${label}"'s inputs — it is left as written`, hint });
       }
     };
     if (bolt.confirm) undeclared(bolt.confirm, `${at}.confirm`);
     for (const key of ["steps", "down"]) {
       const list = Array.isArray(entry[key]) ? (entry[key] as unknown[]) : [];
-      list.forEach((step, position) => undeclared(JSON.stringify(step), `${at}.${key}[${position}]`));
+      list.forEach((step, position) => undeclared(JSON.stringify(step), `${at}.${key}[${position}]`, stepAddress(step)));
     }
 
     if (entry["keepGoing"] !== undefined) {
@@ -921,6 +930,12 @@ function specialStep(target: Record<string, unknown>, at: string, ctx: Context):
       });
       return undefined;
     }
+    const names = "url" in wait ? envNames(wait.url) : [];
+    if (names.length > 0 && !ctx.trusted && "url" in wait) {
+      const id = `wait:${at}`;
+      ctx.withheld.push({ kind: "wait", id, label: `wait for ${wait.url}`, value: wait.url, reason: `reads ${names.map((name) => `$${name}`).join(", ")} from your environment` });
+      return { kind: "wait", wait, held: id };
+    }
     return { kind: "wait", wait };
   }
 
@@ -966,12 +981,14 @@ function specialStep(target: Record<string, unknown>, at: string, ctx: Context):
  * `5` waits five seconds. `"5432"` or `"db:5432"` waits for a port, `"http://…"` for a url
  * to answer. The object form says the same with a `timeout`.
  */
+const WAIT_URL = /^(https?:\/\/|\{\{\s*(env\.)?[A-Za-z_][A-Za-z0-9_-]*\s*\}\})/i;
+
 export function parseWait(value: unknown): WaitSpec | undefined {
   if (typeof value === "number") return value > 0 ? { seconds: value } : undefined;
 
   if (typeof value === "string") {
     const text = value.trim();
-    if (/^https?:\/\//i.test(text)) return { url: text, timeout: DEFAULT_WAIT_TIMEOUT };
+    if (WAIT_URL.test(text)) return { url: text, timeout: DEFAULT_WAIT_TIMEOUT };
     const port = /^(?:([\w.-]+):)?(\d{1,5})$/.exec(text);
     if (port) return { port: Number(port[2]), host: port[1] ?? "localhost", timeout: DEFAULT_WAIT_TIMEOUT };
     const seconds = /^(\d+(?:\.\d+)?)s$/.exec(text);
@@ -983,8 +1000,9 @@ export function parseWait(value: unknown): WaitSpec | undefined {
   const timeout =
     typeof value["timeout"] === "number" && value["timeout"] > 0 ? value["timeout"] : DEFAULT_WAIT_TIMEOUT;
 
-  if (typeof value["url"] === "string" && /^https?:\/\//i.test(value["url"])) {
-    return { url: value["url"], timeout };
+  if (typeof value["url"] === "string" && WAIT_URL.test(value["url"].trim())) {
+    const status = value["status"];
+    return { url: value["url"], timeout, ...(Number.isInteger(status) && (status as number) >= 100 && (status as number) <= 599 ? { status: status as number } : {}) };
   }
   if (typeof value["port"] === "number" && value["port"] > 0 && value["port"] < 65536) {
     const host = optionalString(value["host"]) ?? "localhost";
@@ -1228,9 +1246,18 @@ function writtenPath(entry: unknown, key: string): string | undefined {
   return isRecord(entry) && typeof entry[key] === "string" ? entry[key].trim() || undefined : undefined;
 }
 
+function stepAddress(step: unknown): string | undefined {
+  if (!isRecord(step)) return undefined;
+  if (typeof step["url"] === "string") return step["url"];
+  const wait = step["wait"];
+  if (isRecord(wait) && typeof wait["url"] === "string") return wait["url"];
+  return undefined;
+}
+
 function isUrlish(value: string): boolean {
+  const filled = value.replace(/\{\{\s*(env\.)?[A-Za-z_][A-Za-z0-9_-]*\s*\}\}/g, "1");
   try {
-    new URL(/^[a-z][a-z0-9+.-]*:/i.test(value) ? value : `https://${value}`);
+    new URL(/^[a-z][a-z0-9+.-]*:/i.test(filled) ? filled : `https://${filled}`);
     return true;
   } catch {
     return false;

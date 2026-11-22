@@ -55,7 +55,7 @@ export type View =
   | { kind: "run-inputs"; file: string; workspace: string; bolt: string; specs: InputSpec[] }
   | { kind: "delete-workspace"; file: string; name: string; personal: boolean }
   /** Your own settings: the app for folders and files, where commands run. */
-  | { kind: "settings" }
+  | { kind: "settings"; start?: "notifications" }
   /** Stopping a bolt that needed others: those too, or only it? */
   | { kind: "stop-bolt"; file: string; bolt: string; needs: string[]; sharedWith: string[] }
   | { kind: "setup"; suggestion: SetupSuggestion };

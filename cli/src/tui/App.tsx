@@ -10,7 +10,7 @@ import type { RunStatus } from "../core/processes.js";
 import { composeFiles, retryPlan } from "../core/switch.js";
 import type { Pipeline, Diagnostic, SwitchResult, WorkspaceRead } from "../core/types.js";
 import { flow } from "./steps.js";
-import { Footer, Header, headerTabAt, runningStatus } from "./chrome.js";
+import { Footer, Header, headerTabAt, runningStatus, webhookWarning } from "./chrome.js";
 import { SetupPanel, TrustPanel } from "./dialogs.js";
 import { PipelineEditor } from "./editor.js";
 import { Choice, Form } from "./forms.js";
@@ -71,6 +71,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
   const [notice, setNotice] = useState<Notice>();
   // Past runs, for the last result beside each bolt and the recent runs under them.
   const [recent, setRecent] = useState<HistoryEntry[]>([]);
+  const [webhooksFailing, setWebhooksFailing] = useState(0);
   const [screenHint, setScreenHint] = useState<string>();
   // Whether the finished run is the one being looked at in Running, so it does not vanish mid-read.
   const watchingDone = useRef(false);
@@ -365,8 +366,11 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
   useEffect(() => {
     let alive = true;
     const load = async () => {
-      const next = await services.history().catch(() => []);
-      if (alive) setRecent(next);
+      const [next, failingHooks] = await Promise.all([services.history().catch(() => []), services.settings.failingWebhooks?.().catch(() => 0) ?? Promise.resolve(0)]);
+      if (alive) {
+        setRecent(next);
+        setWebhooksFailing(failingHooks);
+      }
     };
     void load();
     const timer = setInterval(load, 5000);
@@ -374,7 +378,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
       alive = false;
       clearInterval(timer);
     };
-  }, [services, active?.done]);
+  }, [services, active?.done, view.kind === "settings"]);
 
   // Workspace files edited elsewhere — in an editor, by a `git pull` — are read again.
   const watched = useMemo(() => reads.map((read) => read.workspace.file), [reads]);
@@ -848,7 +852,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
     }
     if (input === "D" && bolt) return setView({ kind: "delete-bolt", file: current.workspace.file, bolt: bolt.label });
     if (input === "d" || input === "u") return setDetailScroll((top) => Math.max(0, Math.min(detailLimit.current, top + (input === "d" ? 5 : -5))));
-    if (input === "s") return setView({ kind: "settings" });
+    if (input === "s") return setView(webhooksFailing > 0 ? { kind: "settings", start: "notifications" } : { kind: "settings" });
     if ((input === "K" || input === "J") && bolt && focus === "bolts") {
       const by = input === "K" ? -1 : 1;
       savedAt.current = Date.now();
@@ -907,10 +911,11 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
     // The tabs along the top.
     if (event.y === 0) {
       if (event.kind !== "click" || !(TABS_CLICKABLE.has(view.kind) || ((view.kind === "editor" || view.kind === "settings") && !formOpen.current))) return false;
-      const tab = headerTabAt(event.x, glyphs, runningStatus(glyphs, runningCount, failing)?.text ?? "");
+      const tab = headerTabAt(event.x, glyphs, runningStatus(glyphs, runningCount, failing)?.text ?? "", webhookWarning(glyphs, webhooksFailing));
       if (tab === "bolts" && view.kind !== "browse") setView({ kind: "browse" });
       if (tab === "running" && view.kind !== "processes") setView(activity());
       if (tab === "history" && view.kind !== "history") setView(history_());
+      if (tab === "webhooks") setView({ kind: "settings", start: "notifications" });
       return tab !== undefined;
     }
     // From the panels' top border down.
@@ -1018,6 +1023,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
         here={hereLabel}
         running={runningCount}
         failing={failing}
+        webhooksFailing={webhooksFailing}
         tab={view.kind === "processes" || (view.kind === "help" && view.back?.kind === "processes") ? "running" : view.kind === "history" ? "history" : "bolts"}
       />
 
@@ -1180,7 +1186,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
           }}
         />
       ) : view.kind === "settings" ? (
-        <SettingsScreen services={services} glyphs={glyphs} height={bodyHeight} columns={columns} onMouse={setMouseOn} onJump={(input) => void jump(input)} onBusy={setFormOpen} onClose={() => setView({ kind: "browse" })} onSaved={(text) => {
+        <SettingsScreen key={view.start ?? "top"} services={services} glyphs={glyphs} height={bodyHeight} columns={columns} start={view.start} workspaces={reads.map((read) => ({ name: read.workspace.name, file: read.workspace.file }))} onMouse={setMouseOn} onJump={(input) => void jump(input)} onBusy={setFormOpen} onClose={() => setView({ kind: "browse" })} onSaved={(text) => {
           say(text);
           // Each workspace fixes which app opens its folders and files when it is read, so
           // read them again: the next run uses the new choice, without restarting Wisp.

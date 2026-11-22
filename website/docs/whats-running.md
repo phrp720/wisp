@@ -51,6 +51,6 @@ question. Then fix the step:
 
 ## Disk space
 
-Wisp keeps the last 200 runs. A log over 10 MB keeps its last 5 MB, even while its server
+Wisp keeps the last 50 runs of each pipeline, and 500 in all. A log over 10 MB keeps its last 5 MB, even while its server
 runs, and everything together stays under 500 MB, the oldest going first.
 `wisp ps --clear` forgets finished commands straight away.

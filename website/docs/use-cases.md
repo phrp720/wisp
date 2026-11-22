@@ -210,7 +210,7 @@ In `crontab -e`, and once, where to send a failure:
 ```
 
 ```bash
-wisp notify --webhook https://ntfy.sh/my-server    # or a Slack or Discord webhook
+wisp notify add https://ntfy.sh/my-server    # or a Slack, Discord or Teams webhook
 ```
 
 If it fails, or hangs past its 30 minutes, you get a message. `wisp history` has every run,

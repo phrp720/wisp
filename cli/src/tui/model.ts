@@ -4,9 +4,11 @@ import type { Environment } from "../core/environment.js";
 import type { HistoryEntry } from "../core/history.js";
 import type { RunStatus, StartResult } from "../core/processes.js";
 import type { DownResult, PlannedStep } from "../core/switch.js";
-import type { Pipeline, InputSpec, NotifySettings, NotifyWhen, SwitchResult, SwitchTarget, TargetResult, WorkspaceRead } from "../core/types.js";
+import type { NotifyChoice } from "../core/config.js";
+import type { Delivery } from "../core/notify.js";
+import type { Pipeline, InputSpec, NotifySettings, SwitchResult, SwitchTarget, TargetResult, WorkspaceRead } from "../core/types.js";
 
-export type NotifyChoice = NotifySettings & { when: NotifyWhen };
+export type { NotifyChoice };
 import type { Unreadable } from "../core/workspaces.js";
 
 /** Everything the TUI shows: the workspaces, in the order the list shows them. */
@@ -96,6 +98,10 @@ export interface SettingsService {
   setMouse(on: boolean): Promise<boolean>;
   notify(): Promise<NotifyChoice>;
   setNotify(change: NotifySettings): Promise<NotifyChoice>;
+  /** Each webhook's last delivery, looked up with lastDelivery. */
+  deliveries?(): Promise<Record<string, Delivery>>;
+  /** How many webhooks' last delivery failed. */
+  failingWebhooks?(): Promise<number>;
 }
 
 /** The edits the TUI's forms make — the core's, passed in so a test can watch them. */

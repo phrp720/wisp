@@ -3,11 +3,12 @@
 import { Box, type DOMElement, Text, useInput } from "ink";
 import { useEffect, useRef, useState } from "react";
 
-import { webhookProblem } from "../core/notify.js";
+import type { Delivery } from "../core/notify.js";
 import { type FieldSpec, Form } from "./forms.js";
 import type { Glyphs } from "./glyphs.js";
 import { useMouse, useRefs } from "./mouse.js";
 import type { NotifyChoice, OpenWith, Services } from "./model.js";
+import { NotificationsPanel, WHEN, webhookCount } from "./notifications.js";
 import { TONE } from "./tones.js";
 
 type Category = "opening" | "running" | "notifications" | "dashboard";
@@ -19,16 +20,17 @@ const CATEGORIES: { key: Category; label: string; intro: string }[] = [
   { key: "dashboard", label: "Dashboard", intro: "How this screen behaves." },
 ];
 
-const WHEN = { failures: "when a run fails", all: "when any run ends", off: "never" } as const;
 const DEFAULT = "__default";
 const OTHER = "__other";
 
-export function SettingsScreen({ services, glyphs, height, columns = 100, onClose, onSaved, onMouse, onJump, onBusy }: { services: Services; glyphs: Glyphs; height: number; columns?: number; onClose: () => void; onSaved: (text: string) => void; onMouse?: (on: boolean) => void; onJump?: (input: string) => void; onBusy?: (busy: boolean) => void }) {
+export function SettingsScreen({ services, glyphs, height, columns = 100, workspaces = [], start, onClose, onSaved, onMouse, onJump, onBusy }: { services: Services; glyphs: Glyphs; height: number; columns?: number; workspaces?: { name: string; file: string }[]; start?: Category | undefined; onClose: () => void; onSaved: (text: string) => void; onMouse?: (on: boolean) => void; onJump?: (input: string) => void; onBusy?: (busy: boolean) => void }) {
   const [current, setCurrent] = useState<OpenWith>();
   const [mouse, setMouse] = useState<boolean>();
   const [notify, setNotify] = useState<NotifyChoice>();
-  const [index, setIndexState] = useState(0);
-  const indexRef = useRef(0);
+  const [deliveries, setDeliveries] = useState<Record<string, Delivery>>({});
+  const first = Math.max(0, CATEGORIES.findIndex((entry) => entry.key === start));
+  const [index, setIndexState] = useState(first);
+  const indexRef = useRef(first);
   const setIndex = (next: number) => {
     indexRef.current = next;
     setIndexState(next);
@@ -50,6 +52,7 @@ export function SettingsScreen({ services, glyphs, height, columns = 100, onClos
     void services.settings.get().then(setCurrent);
     void services.settings.mouse().then(setMouse);
     void services.settings.notify().then(setNotify);
+    void services.settings.deliveries?.().then(setDeliveries, () => undefined);
   }, [services]);
 
   const leave = () => {
@@ -97,13 +100,32 @@ export function SettingsScreen({ services, glyphs, height, columns = 100, onClos
     if (!loaded) return "…";
     if (key === "opening") return current.folder === current.file ? describe("folder", current.folder) : `${describe("folder", current.folder)} · ${describe("file", current.file)}`;
     if (key === "running") return current.terminal ? describe("terminal", current.terminal) : "in the background";
-    if (key === "notifications") return `${WHEN[notify.when]}${notify.webhook ? " · webhook" : ""}`;
+    if (key === "notifications") return `${WHEN[notify.when]}${webhookCount(notify.webhooks.length)}`;
     return `mouse ${mouse ? "on" : "off"}`;
   };
 
   const form = () => {
     if (!loaded) return <Text dimColor>…</Text>;
-    const { fields, initial, save } = categoryForm(category.key, { current, mouse, notify, editors: choices.editors, terminals: choices.terminals });
+    if (category.key === "notifications") {
+      return (
+        <NotificationsPanel
+          key={`notifications:${session}`}
+          services={services}
+          notify={notify}
+          deliveries={deliveries}
+          workspaces={workspaces}
+          glyphs={glyphs}
+          height={height}
+          title={category.label}
+          intro={category.intro}
+          active={editing}
+          onChange={setNotify}
+          onSaved={onSaved}
+          onClose={leave}
+        />
+      );
+    }
+    const { fields, initial, save } = categoryForm(category.key, { current, mouse, editors: choices.editors, terminals: choices.terminals });
     return (
       <Form
         key={`${category.key}:${session}`}
@@ -122,7 +144,6 @@ export function SettingsScreen({ services, glyphs, height, columns = 100, onClos
           const outcome = await save(values, services);
           if (outcome.errors) return outcome.errors;
           if (outcome.current) setCurrent(outcome.current);
-          if (outcome.notify) setNotify(outcome.notify);
           if (outcome.mouse !== undefined) {
             setMouse(outcome.mouse);
             onMouse?.(outcome.mouse);
@@ -171,16 +192,15 @@ export function SettingsScreen({ services, glyphs, height, columns = 100, onClos
 interface Saved {
   errors?: Record<string, string>;
   current?: OpenWith;
-  notify?: NotifyChoice;
   mouse?: boolean;
   said?: string;
 }
 
 function categoryForm(
   category: Category,
-  state: { current: OpenWith; mouse: boolean; notify: NotifyChoice; editors: { value: string; label: string }[]; terminals: string[] },
+  state: { current: OpenWith; mouse: boolean; editors: { value: string; label: string }[]; terminals: string[] },
 ): { fields: FieldSpec[]; initial: Record<string, string>; save: (values: Record<string, string>, services: Services) => Promise<Saved> } {
-  const { current, mouse, notify, editors, terminals } = state;
+  const { current, mouse, editors, terminals } = state;
 
   if (category === "opening") {
     const apps = [{ value: DEFAULT, label: "the system default" }, ...editors, { value: OTHER, label: "another app…" }];
@@ -227,23 +247,6 @@ function categoryForm(
       save: async (values, services) => {
         const next = await services.settings.set({ terminal: values["terminal"] === DEFAULT ? "" : (values["terminal"] ?? "") });
         return { current: next, said: `Commands run ${describe("terminal", next.terminal)}` };
-      },
-    };
-  }
-
-  if (category === "notifications") {
-    return {
-      fields: [
-        { key: "when", label: "Tell me", hint: "on this screen, and at the webhook if there is one", choices: (Object.keys(WHEN) as (keyof typeof WHEN)[]).map((value) => ({ value, label: WHEN[value] })) },
-        { key: "webhook", label: "Webhook", hint: "for a server: Slack, Discord and ntfy get a message, any other address JSON. Empty for none", placeholder: "https://ntfy.sh/my-server" },
-      ],
-      initial: { when: notify.when, webhook: notify.webhook ?? "" },
-      save: async (values, services) => {
-        const url = values["webhook"]?.trim() ?? "";
-        const refused = url ? webhookProblem(url) : undefined;
-        if (refused) return { errors: { webhook: refused } };
-        const next = await services.settings.setNotify({ when: values["when"] as NotifyChoice["when"], webhook: url });
-        return { notify: next, said: `Tell me ${WHEN[next.when]}${next.webhook ? `, and at ${next.webhook}` : ""}` };
       },
     };
   }

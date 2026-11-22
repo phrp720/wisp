@@ -6,7 +6,22 @@ export const INPUT_VALUE = /^(?!-)[\p{L}\p{N}._/:@+=,~-]+(?: +(?!-)[\p{L}\p{N}._
 const PLACEHOLDER = /\{\{\s*([A-Za-z][A-Za-z0-9_-]*)\s*\}\}/g;
 const ENCODED = /%7B%7B([A-Za-z][A-Za-z0-9_-]*)%7D%7D/gi;
 
+const ENV_PLACEHOLDER = /\{\{\s*env\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g;
+
 export type InputValues = Record<string, string>;
+
+export function envNames(text: string): string[] {
+  return [...new Set([...text.matchAll(ENV_PLACEHOLDER)].map((match) => match[1] as string))];
+}
+
+export function fillEnv(text: string, env: NodeJS.ProcessEnv = process.env): string {
+  const missing = envNames(text).filter((name) => !env[name]?.trim());
+  if (missing.length > 0) {
+    const names = missing.map((name) => `$${name}`).join(", ");
+    throw new WispError(`${names} ${missing.length === 1 ? "isn't" : "aren't"} set here`, "INVALID_INPUT", "Set it where Wisp runs, like your shell profile or the crontab line");
+  }
+  return text.replace(ENV_PLACEHOLDER, (_whole, name: string) => (env[name] as string).trim());
+}
 
 export function placeholders(text: string): string[] {
   return [...text.matchAll(PLACEHOLDER)].map((match) => match[1] as string);

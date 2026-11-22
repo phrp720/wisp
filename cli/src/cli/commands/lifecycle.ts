@@ -155,6 +155,9 @@ async function showEntry(entry: HistoryEntry, options: { log?: string; json?: bo
     else console.log(`  ${number} ${dim("·")} ${dim(`${kindLabel(step.kind)} ${step.label}`)} ${dim("waiting")}`);
   });
   if (entry.interrupted) console.log(dim("  Wisp stopped before this run finished."));
+  if (entry.notified && entry.notified.length > 0) {
+    console.log(`  ${dim("notified")} ${entry.notified.map((sent) => (sent.ok ? `${sent.url} ${green("✓")}` : `${sent.url} ${red(`✗ ${sent.problem ?? ""}`.trim())}`)).join(dim(", "))}`);
+  }
 }
 
 async function clearHistory(query: string | undefined, options: { all?: boolean; json?: boolean }): Promise<void> {

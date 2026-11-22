@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, resolve } from "node:path";
 
+import { failingWebhooks, readDeliveries } from "../core/notify.js";
 import { declineSetup, getMouse, getNotify, getOpenWithDefaults, recordProject, setMouse, setNotify, setOpenWithDefaults, setupDeclined } from "../core/config.js";
 import { installedEditors } from "../core/editors.js";
 import { detectEnvironment } from "../core/environment.js";
@@ -166,6 +167,8 @@ export function realServices(hooks: { suspend: () => void; resume: () => void })
       setMouse: (on) => setMouse(on),
       notify: () => getNotify(),
       setNotify: (change) => setNotify(change),
+      deliveries: () => readDeliveries(),
+      failingWebhooks: async () => failingWebhooks((await getNotify()).webhooks, await readDeliveries()).length,
       choices: () => {
         const environment = detectEnvironment();
         const platform = getPlatform(environment.os);

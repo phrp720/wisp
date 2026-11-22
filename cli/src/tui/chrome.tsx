@@ -21,7 +21,7 @@ function typingHint(view: View): string | undefined {
 /** The three screens, as tabs along the top: the one you are on, and the key for each. */
 export type Tab = "bolts" | "running" | "history";
 
-export function Header({ services, glyphs, columns, here, running, failing, tab }: { services: Services; glyphs: Glyphs; columns: number; here?: string | undefined; running: number; failing: string[]; tab: Tab }) {
+export function Header({ services, glyphs, columns, here, running, failing, webhooksFailing = 0, tab }: { services: Services; glyphs: Glyphs; columns: number; here?: string | undefined; running: number; failing: string[]; webhooksFailing?: number; tab: Tab }) {
   const { environment } = services;
   // Where a command will go, said up front: it is the one thing that differs by place.
   const badges: string[] = [];
@@ -42,6 +42,7 @@ export function Header({ services, glyphs, columns, here, running, failing, tab 
           {status ? <Text color={status.color}>{status.text}</Text> : null}
           {"   "}
           <TabLabel number="3" title="History" on={tab === "history"} />
+          {webhooksFailing > 0 ? <Text color={TONE.failed}>{`   ${webhookWarning(glyphs, webhooksFailing)}`}</Text> : null}
           {badges.length > 0 ? <Text color="yellow">{`  ${badges.join(" · ")}`}</Text> : null}
         </Text>
       </Box>
@@ -62,15 +63,20 @@ export function runningStatus(glyphs: Glyphs, running: number, failing: string[]
   return undefined;
 }
 
+export function webhookWarning(glyphs: Glyphs, failing: number): string {
+  if (failing === 0) return "";
+  return `${glyphs.dot} ${failing === 1 ? "a webhook is" : `${failing} webhooks are`} failing: s`;
+}
+
 /**
  * The tab along the top under a column, for a click. Worked out from what the header
  * draws: the padding, the name (and its crystal ball, two columns wide), three spaces
- * between the tabs, and the status beside Running.
+ * between the tabs, the status beside Running, and the webhook warning after History.
  */
-export function headerTabAt(x: number, glyphs: Glyphs, status: string): Tab | undefined {
+export function headerTabAt(x: number, glyphs: Glyphs, status: string, warning = ""): Tab | "webhooks" | undefined {
   let at = 1 + (glyphs.border === "round" ? 3 : 0) + "wisp".length + 3;
-  for (const [tab, width] of [["bolts", "1 Pipelines".length], ["running", "2 Running".length + status.length], ["history", "3 History".length]] as const) {
-    if (x >= at && x < at + width) return tab;
+  for (const [tab, width] of [["bolts", "1 Pipelines".length], ["running", "2 Running".length + status.length], ["history", "3 History".length], ["webhooks", warning.length]] as const) {
+    if (width > 0 && x >= at && x < at + width) return tab;
     at += width + 3;
   }
   return undefined;

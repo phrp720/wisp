@@ -54,7 +54,7 @@ How names are matched: [Running pipelines](./running-pipelines#how-wisp-reads-a-
 | `wisp scan ~/dev` | find the projects you already have; `--remember`, `--depth 4` |
 | `wisp hook pre-push verify` | run a pipeline from a git hook; `--list`, `--remove`, `--force` |
 | `wisp open-with` | what opens folders and files, and where commands run: [Settings](./settings) |
-| `wisp notify` | when Wisp tells you about a run, and a webhook: [Notifications](./notifications) |
+| `wisp notify` | when Wisp tells you about a run, and its webhooks (`add`, `remove`): [Notifications](./notifications) |
 | `wisp completion --install` | tab completion for zsh, bash and fish |
 
 ## Finding things
@@ -76,7 +76,7 @@ How names are matched: [Running pipelines](./running-pipelines#how-wisp-reads-a-
 | `WISP_HEADLESS` | `1` when there's no screen to open things on; `0` when there is but Wisp can't tell |
 | `WISP_NO_TUI` | `1` to never open the dashboard; `wisp` prints what it can run instead |
 | `WISP_ASCII` | `1` for plain characters, no emoji or box drawing |
-| `WISP_NOTIFY` | `off`, `failures` or `all`, for one command |
+| `WISP_NOTIFY` | `off`, `failures`, `changes` or `all`, for one command |
 
 ## Exit codes
 

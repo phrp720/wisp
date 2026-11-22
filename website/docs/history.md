@@ -1,8 +1,9 @@
 # History
 
 Every run is kept, the way a CI keeps them: numbered per pipeline, with the branch and commit
-it ran on, what started it, the [values it was given](./inputs), and each step's time and
-output. A run shows up as soon as it starts, and fills in as it goes.
+it ran on, what started it, the [values it was given](./inputs), each step's time and
+output, and which webhooks it [notified](./notifications) and whether they got it. A run shows
+up as soon as it starts, and fills in as it goes.
 
 <Recording name="jobs" alt="A Verify pipeline fails at its test; History shows the run like CI, with the test's output; after the fix, --retry runs only what failed, and it passes" />
 
@@ -42,5 +43,6 @@ wisp history --clear            # this project's (--all: every project's)
 `D` does the same in the dashboard, after asking. Runs still going are kept.
 
 ::: info How long runs are kept
-The last 200, with their output. Older ones are deleted as new ones come in.
+The last 50 runs of each pipeline, with their output, and 500 in all. Older ones are deleted
+as new ones come in, so a check run every few minutes pushes out only its own.
 :::
