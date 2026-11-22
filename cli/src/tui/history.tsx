@@ -334,7 +334,7 @@ export function HistoryScreen(props: HistoryScreenProps) {
                     {entry.git ? <Text color="yellow" dimColor>{`  ${entry.git.commit}`}</Text> : null}
                     {subject ? <Text dimColor>{` ${subject}`}</Text> : null}
                     {entry.trigger === "hook" ? <Text dimColor>{"  · git hook"}</Text> : null}
-                    {filter?.bolt ? null : <Text dimColor>{`  · ${entry.workspaceName}`}</Text>}
+                    {filter?.bolt ? null : <Text dimColor>{`${state || failedAt || entry.git || subject || entry.trigger === "hook" ? "  · " : "  "}${entry.workspaceName}`}</Text>}
                   </Text>
                 </Box>
                 <Box flexShrink={0}>

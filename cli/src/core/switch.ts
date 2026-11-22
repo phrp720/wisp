@@ -1075,6 +1075,7 @@ export function matchPipeline(workspace: Workspace, ref: string): { bolt?: Pipel
   // A slug is the label with its spaces punched out — the form a shell history hands back.
   const bySlug = bolts.filter((bolt) => pipelineSlug(bolt) === slugify(needle) || slugify(bolt.label) === slugify(needle));
   if (bySlug.length === 1) return { bolt: bySlug[0] as Pipeline, candidates: bySlug };
+  if (bySlug.length > 1) return { candidates: bySlug };
 
   const matches = bolts.filter((bolt) => hasWords(bolt.label, needle));
   if (matches.length === 1) return { bolt: matches[0] as Pipeline, candidates: matches };
@@ -1095,6 +1096,7 @@ export function resolvePipeline(workspace: Workspace, ref: string): Pipeline {
     throw new WispError(
       `"${ref}" matches several pipelines: ${candidates.map((match) => match.label).join(", ")}`,
       "AMBIGUOUS",
+      `Use the full label in quotes, like \`wisp "${candidates[0]?.label}"\`, or give one of them a different "slug".`,
     );
   }
 

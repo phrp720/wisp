@@ -138,6 +138,15 @@ describe("the TUI", () => {
     await eventually(() => expect(app.lastFrame()).toContain("another workspace is called Acme too"));
   });
 
+  it("puts a dot before a run's workspace only when something comes before it", async () => {
+    const plain: HistoryEntry = { id: "cccccccccccc", workspace: acme.workspace.file, workspaceName: "Acme", bolt: "Dev", number: 1, startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), ok: true, steps: [] };
+    const committed: HistoryEntry = { ...plain, id: "dddddddddddd", bolt: "Verify", git: { branch: "main", commit: "630d9e5", subject: "feat: login" } };
+    const app = await open(services({ history: async () => [committed, plain] }));
+    app.stdin.write("h");
+    await eventually(() => expect(app.lastFrame()).toContain("feat: login  · A"));
+    await eventually(() => expect(app.lastFrame()).toMatch(/Dev #1 +Acme/));
+  });
+
   it("shows the pipelines in one box and the selected one in a box below, with the command that runs it", async () => {
     const app = await open(services());
     await eventually(() => {

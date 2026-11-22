@@ -59,6 +59,9 @@ scripts can count on through renames:
 `wisp acme up` runs it, and the words of its label still work too. In the dashboard's
 editor it's the **Slug** row, with the default shown until you type your own.
 
+Two pipelines can't answer to the same slug: `wisp check` warns, and neither runs by that
+name until one changes.
+
 To rename one, press `e` on it in the dashboard, or:
 
 ```bash

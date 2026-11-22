@@ -1003,7 +1003,7 @@ function checkSlugs(bolts: Pipeline[], ctx: Context): void {
   for (const bolt of bolts) {
     const slug = pipelineSlug(bolt);
     const other = seen.get(slug);
-    if (other) ctx.found.push({ level: "warning", at: "pipelines", pipeline: bolt.label, message: `"${other}" and "${bolt.label}" both answer to ${slug}`, hint: 'Give one a "slug" of its own' });
+    if (other) ctx.found.push({ level: "warning", at: "pipelines", pipeline: bolt.label, message: `"${other}" and "${bolt.label}" both answer to ${slug}`, hint: 'Give one of them a different "slug": until then, neither runs by that name' });
     else seen.set(slug, bolt.label);
   }
 }

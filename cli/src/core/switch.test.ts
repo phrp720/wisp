@@ -55,6 +55,12 @@ describe("matchPipeline", () => {
     expect(matchPipeline(ws, "cli").bolt?.label).toBe("Work on the CLI");
   });
 
+  it("refuses a slug two pipelines share, rather than guessing from a word", () => {
+    const twins = workspace({ pipelines: [{ label: "Start the whole stack", slug: "up" }, { label: "Bring it up", slug: "up" }] });
+    expect(matchPipeline(twins, "up").bolt).toBeUndefined();
+    expect(() => resolvePipeline(twins, "up")).toThrow(/several pipelines/);
+  });
+
   it("answers to a pipeline's own slug, and still to the words of its label", () => {
     const own = workspace({ pipelines: [{ label: "Start the whole stack", slug: "up" }, { label: "Verify" }] });
     expect(matchPipeline(own, "up").bolt?.label).toBe("Start the whole stack");

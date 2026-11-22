@@ -82,6 +82,7 @@ export async function resolveRun(
         throw new WispError(
           `"${first}" matches several pipelines: ${candidates.map((candidate) => `${candidate.label} (${pipelineSlug(candidate)})`).join(", ")}`,
           "AMBIGUOUS",
+          `Use the full label in quotes, like \`wisp "${candidates[0]?.label}"\`, or give one of them a different "slug".`,
         );
       }
     }
