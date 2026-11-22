@@ -1,49 +1,55 @@
 # The dashboard
 
-`wisp` opens a dashboard of all your projects in your terminal: run a pipeline, watch what it
-started, look back at past runs, and make pipelines through forms. It works the same at your
-desk, over SSH and in tmux.
+`wisp` opens a dashboard of all your workspaces, right in your terminal: run a pipeline,
+watch what it started, look back at past runs, and make pipelines through forms. It works the
+same at your desk, over SSH and in tmux.
 
 <Recording name="dashboard" alt="Wisp's dashboard: running a pipeline in its box, its server's live output on the Running tab, then the History tab" />
 
 ## Three tabs
 
-- **`1` Pipelines:** your workspaces on the left, their pipelines on the right, and under them the
-  selected pipeline: its steps, what's up, how its last run went, and the command that runs it
-  from a terminal. `⏎` runs it right there, each step ticking off. `c` checks it: what it
-  would do, with nothing run. A pipeline with a problem says so on its row (`✗ 1 problem`), and
-  its box says what's wrong and how to fix it.
-- **`2` Running:** what each pipeline started, with live output, health and ports.
-  [More](./running#the-running-tab).
-- **`3` History:** every run like a CI run, with its branch, commit and each step's output.
-  [More](./runs#history).
+| Tab | |
+|---|---|
+| **`1` Pipelines** | your workspaces on the left, their pipelines on the right, the selected one's steps below |
+| **`2` Running** | what each pipeline started, with live output, health and ports. [More](./whats-running#the-running-tab) |
+| **`3` History** | every run, with its commit and each step's output. [More](./history) |
 
-A pipeline that [asks for values](./file#inputs) shows a short form first, and one that
-[asks first](./file#asking-first) asks on its row.
+## Running one
+
+Select a pipeline and press `⏎`: it runs right there, each step ticking off in its box, while
+the list stays where it is.
+
+- `x` stops it, and `r` retries from a failed step.
+- `⏎` again closes the result, so a second `⏎` runs it again.
+- `c` checks it instead: what it would do, with nothing run.
+
+A pipeline that [asks for values](./inputs) shows a short form first, and one that
+[asks first](./asking-first) asks on its row. A pipeline with a problem says so on its row
+(`✗ 1 problem`), and its box says what's wrong and how to fix it.
 
 ## No JSON needed
 
-`a` adds a pipeline and `e` edits one. The editor shows the pipeline on the left (its name, notes,
-what a failure does, whether it asks first, its inputs and its steps) and the form for the
-selected row on the right.
+`a` adds a pipeline and `e` edits one. The editor shows the pipeline on the left (its name,
+notes, what a failure does, whether it asks first, its inputs and its steps) and the form for
+the selected row on the right.
 
-New steps are picked from a list (run a command, start Docker services, run a pipeline, wait,
-open something) and each has a **Depends on** list of the other steps to tick. `a` adds a
-step after the selected one, already depending on it. `D` removes it, `K` `J` move it.
-`E` opens the file itself if you'd rather.
+New steps are picked from the same list as on the [Steps](./steps) page: Start, Wait, Open.
+Each step has a **Depends on** list of the other steps to tick. `a` adds a step below the
+selected one, already depending on it; `D` removes it; `K` `J` move it. `E` opens the file in
+your editor if you'd rather.
 
 <Recording name="editor" alt="Making a pipeline in the dashboard: name it, then add a command, a wait and a website through short forms, then run it" />
 
 ## The mouse
 
-Click a tab, a workspace, a pipeline, a row or a button. The wheel scrolls what's under it. A
-click only selects: `⏎` runs a pipeline, so a stray click never starts anything, and allowing
+Click a tab, a workspace, a pipeline, a row or a button, and the wheel scrolls what's under
+it. A click only selects: `⏎` runs, so a stray click never starts anything, and allowing
 commands or confirming a delete stays on the keyboard. Forms have `[ Cancel ]` (or
 `[ Back ]`) beside the button that saves.
 
-Over SSH it works too, since your terminal sends the clicks. In tmux it needs
-`set -g mouse on`. While Wisp has the mouse, selecting text takes Shift (Option in iTerm2);
-turn the mouse off in [Settings](./settings) to select freely.
+Over SSH it works too. In tmux, it needs `set -g mouse on`. While Wisp has the mouse,
+selecting text takes Shift (Option in iTerm2); turn the mouse off in [Settings](./settings) to
+select freely.
 
 ## Keys
 

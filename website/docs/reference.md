@@ -1,6 +1,6 @@
 # File reference
 
-Every field a `.wisp.json` can hold. For a gentler introduction, see [The .wisp.json file](./file).
+Every field a `.wisp.json` can hold. For a gentler introduction, see [Pipelines](./pipelines) and [Steps](./steps).
 Your editor autocompletes all of this once the file has its `$schema` line.
 
 ## The workspace
@@ -18,12 +18,12 @@ Your editor autocompletes all of this once the file has its `$schema` line.
 
 | Field | |
 |---|---|
-| `label` | its name, and what you type: its slug or any whole word of it runs it. Keep it short: "Deploy", "Work on api" |
+| `label` | its name, and what you type: its slug or any whole word of it runs it. Keep it short: "Dev", "Verify", "Deploy" |
 | `notes` | a line on what it does, shown in `wisp show`, `wisp pick`, tab completion and the dashboard |
 | `steps` | its [steps](#steps), in order |
-| `keepGoing` | `true` reports a failed step and runs the rest anyway; without it, a failed step [stops the run](./runs#when-a-step-fails) |
-| `confirm` | a question to [ask before it runs](./file#asking-first), like `"Deploy to production?"`; `true` asks "Run "Deploy"?" |
-| `inputs` | [values it asks for](./file#inputs) each time it runs, used in its steps as `{{name}}`: `{ "env": { "ask": "Deploy where?", "choices": ["staging", "production"], "default": "staging" } }` |
+| `keepGoing` | `true` reports a failed step and runs the rest anyway; without it, a failed step [stops the run](./commands#when-it-fails) |
+| `confirm` | a question to [ask before it runs](./asking-first), like `"Deploy to production?"`; `true` asks "Run "Deploy"?" |
+| `inputs` | [values it asks for](./inputs) each time it runs, used in its steps as `{{name}}`: `{ "env": { "ask": "Deploy where?", "choices": ["staging", "production"], "default": "staging" } }` |
 | `down` | steps `wisp down` runs after stopping what it started, like `docker compose stop` |
 | `color` | a hex colour |
 
@@ -41,7 +41,7 @@ for it) and `os` (see [Several operating systems](#several-operating-systems)).
 | Field | |
 |---|---|
 | `run` | the command line; pipes and `&&` work. One per OS when they differ |
-| `finishes` | `true` for a command that ends, like a test or a build: Wisp [waits for it](./runs) and keeps its output. Left out, it keeps running, like a server |
+| `finishes` | `true` for a command that ends, like a test or a build: Wisp [waits for it](./commands#keeps-running-or-finishes) and keeps its output. Left out, it keeps running, like a server |
 | `timeout` | with `finishes`: how long it may take, like `"30s"`, `"10m"`, `"1h"` or a number of seconds. Longer, and Wisp stops it and the step fails. Left out, Wisp waits as long as it takes |
 | `cwd` | the folder to run it in, relative to the file; left out, the project's folder |
 | `env` | environment variables, on top of yours |
@@ -67,7 +67,7 @@ Starts the services and waits until they're healthy. Leave out `services` for al
 ```
 
 Runs a pipeline of the same file as one step: done when all its steps are. It runs once per
-run, however many steps run it. See [pipelines in pipelines](./file#pipelines-in-pipelines).
+run, however many steps run it. See [Pipelines in pipelines](./pipelines-in-pipelines).
 
 ### Wait
 
@@ -119,9 +119,9 @@ Any step can say which steps of its pipeline it waits for, by their `label`:
 { "run": "pnpm build", "after": ["lint", "test"], "finishes": true }
 ```
 
-Left out, it starts right away, with the pipeline. See [order](./file#order).
+Left out, it starts right away, with the pipeline. See [Order](./order).
 
-In your [personal workspaces](./file#personal-workspaces), a folder or file step can also say
+In your [personal workspaces](./workspaces#personal-workspaces), a folder or file step can also say
 `"openWith": "WebStorm"`. A project's file can't: everyone chooses their own editor.
 
 ## Several operating systems

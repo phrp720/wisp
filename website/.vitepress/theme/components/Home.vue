@@ -86,7 +86,7 @@ const uses = [
   { icon: "deploy", title: "Release and deploy", flow: [["checks:pipeline"], ["deploy:run"], ["health:wait"]], text: "The checks first, then it asks where and asks before it goes. Every deploy's log is kept.", link: "/docs/use-cases#release-and-deploy" },
   { icon: "server", title: "Run a server", flow: [["pull:run"], ["install:run"], ["restart:run"]], text: "Pull, install, migrate and restart the app, the same way for whoever SSHs in, from whatever folder they land in.", link: "/docs/use-cases#run-a-server" },
   { icon: "clock", title: "Scheduled jobs", flow: [["dump:run"], ["prune:run"]], text: "Backups and cleanups from cron, stopped if they hang, with a message to Slack or ntfy if they fail.", link: "/docs/use-cases#scheduled-jobs" },
-  { icon: "laptop", title: "Your own machine", flow: [["tunnel:run"], ["port 5433:wait"]], text: "Pipelines outside any repo: an SSH tunnel kept open and ready, the day's tabs and apps.", link: "/docs/use-cases#your-own-machine" },
+  { icon: "laptop", title: "Your own machine", flow: [["tunnel:run"], ["port 5433:wait"]], text: "Pipelines outside any repo: an SSH tunnel kept open and ready, your photos backed up to the NAS.", link: "/docs/use-cases#your-own-machine" },
 ];
 
 const more = [
@@ -138,7 +138,7 @@ const more = [
           <li><b>Waits</b> for a port, a website or a few seconds.</li>
           <li><b>Other pipelines</b>, and links, folders, files and apps to open.</li>
         </ul>
-        <a class="more" href="/docs/file">The file, step by step →</a>
+        <a class="more" href="/docs/steps">Every kind of step →</a>
       </div>
       <div class="pipeline">
         <svg class="graph" viewBox="0 0 600 150" role="img" aria-label="The Dev pipeline: db and web start together; api waits for db; a wait for port 3000 waits for api; the page opens once both up and web are done">
@@ -219,7 +219,7 @@ const more = [
         <p class="eyebrow">History</p>
         <h2>Every run, kept like CI.</h2>
         <p class="lead">Each run is numbered, with its commit and each step's output and time. The first failure stops the run, a retry runs only what failed, and a timeout stops a step that hangs. Run a pipeline before every <code>git push</code>, or every night from cron.</p>
-        <a class="more" href="/docs/runs">Runs and history →</a>
+        <a class="more" href="/docs/history">History →</a>
       </div>
       <Recording name="jobs" alt="A Check pipeline fails at its test; History shows the run like CI, with the test's output; after the fix, --retry runs only the test, and it passes" />
     </section>

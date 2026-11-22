@@ -208,7 +208,7 @@ export const hook: CommandDef<{ remove?: boolean; list?: boolean; force?: boolea
     ["--remove", "take a hook back out"],
     ["-f, --force", "replace a hook that Wisp did not write"],
   ],
-  examples: ["wisp hook pre-push check", "wisp hook --list", "wisp hook pre-push --remove"],
+  examples: ["wisp hook pre-push verify", "wisp hook --list", "wisp hook pre-push --remove"],
 
   async run([name, boltRef], options) {
     const dir = hooksDir();
@@ -223,7 +223,7 @@ export const hook: CommandDef<{ remove?: boolean; list?: boolean; force?: boolea
         const bolt = /wisp use '[^']*' '([^']*)'/.exec(text)?.[1] ?? "?";
         console.log(`  ${bold(file)} ${dim("→")} ${bolt}`);
       }
-      if (found === 0) console.log(dim("No Wisp hooks here. `wisp hook pre-push check` adds one."));
+      if (found === 0) console.log(dim("No Wisp hooks here. `wisp hook pre-push verify` adds one."));
       return;
     }
 

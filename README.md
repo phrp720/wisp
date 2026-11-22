@@ -27,7 +27,7 @@
 <p align="center">
   <a href="https://willowisp.dev/docs/getting-started">Get started</a> ·
   <a href="https://willowisp.dev/docs/use-cases">Use cases</a> ·
-  <a href="https://willowisp.dev/docs/commands">Commands</a> ·
+  <a href="https://willowisp.dev/docs/cli">CLI</a> ·
   <a href="https://willowisp.dev/docs/reference">File reference</a> ·
   <a href="https://willowisp.dev/docs/agents">For AI agents</a>
 </p>

@@ -43,14 +43,14 @@ before it does something dangerous, and lives in the repo for the whole team.
 No. Run `wisp init` in the project, or just open `wisp` there: it reads what the project
 already has and suggests pipelines. After that, `a` adds a pipeline and `e` edits one, through forms.
 
-→ [Getting started](./getting-started) · [The dashboard](./dashboard#no-json-needed)
+→ [Pipelines](./pipelines#let-wisp-write-it) · [The dashboard](./dashboard#no-json-needed)
 :::
 
-::: details Something without a repository, like my morning links?
+::: details Something without a repository, like a tunnel or my backups?
 Press `N` in the dashboard for a personal workspace. Same format, kept in Wisp's own
 folder, and its commands run without asking: they're yours.
 
-→ [Personal workspaces](./file#personal-workspaces)
+→ [Personal workspaces](./workspaces#personal-workspaces)
 :::
 
 ::: details Is there tab completion?
@@ -60,11 +60,11 @@ Yes, for zsh, bash and fish: `wisp completion --install`, then open a new termin
 ## Running things
 
 ::: details How does Wisp read `wisp <name>`?
-One word is a pipeline of the project you're in: `wisp api` runs "Work on api". Two words are a
-workspace and its pipeline, from any folder: `wisp acme api`. A word has to be a whole word of the
+One word is a pipeline of the project you're in: `wisp dev` runs *Dev*. Two words are a
+workspace and its pipeline, from any folder: `wisp acme dev`. A word has to be a whole word of the
 name or its slug, so `wisp doc` never runs "Documentation" by surprise.
 
-→ [How Wisp reads a name](./commands#how-wisp-reads-wisp-name)
+→ [How Wisp reads a name](./running-pipelines#how-wisp-reads-a-name)
 :::
 
 ::: details Why didn't my command run?
@@ -78,7 +78,7 @@ change, a `git pull` included, asks again. `wisp check` shows what is waiting.
 A command keeps running by default, like a server: Wisp starts it and moves on. One marked
 `"finishes": true`, like a test, a build or a backup, is waited for and ends with ✓ or ✗.
 
-→ [Keeps running, or finishes?](./runs#keeps-running-or-finishes)
+→ [Keeps running, or finishes?](./commands#keeps-running-or-finishes)
 :::
 
 ::: details A command asks something (y/n, a password). What do I do?
@@ -86,7 +86,7 @@ Nothing can answer it in the background, so Wisp shows it as **waiting for an an
 it a flag that skips the question (`--yes`, `CI=1`), or run commands in a terminal window
 (Settings), where you can answer.
 
-→ [Commands that ask something](./running#commands-that-ask-something)
+→ [Commands that ask something](./whats-running#commands-that-ask-something)
 :::
 
 ::: details How do I stop everything?
@@ -103,7 +103,8 @@ together stays under 500 MB, the oldest going first. `wisp ps --clear` and
 ## Servers
 
 ::: details Can I use it on a server?
-Yes: SSH in and `wisp shop deploy`, `wisp ps` or `wisp logs shop -f`, from wherever you land.
+Yes: SSH in and run `wisp shop deploy`, `wisp ps` or `wisp logs app -f` from whatever folder
+you land in.
 Install Wisp there, then run a pipeline once or `wisp scan /srv` so it knows where things are.
 
 → [Run a server](./use-cases#run-a-server)
@@ -127,7 +128,7 @@ choose tmux in Settings: `tmux attach -t wisp`.
 Yes: commit the `.wisp.json`. Paths in it are relative, so it works on every machine,
 Windows included. Your own extra pipelines go in a `.wisp.local.json`, kept out of git.
 
-→ [Your own additions](./file#your-own-additions)
+→ [Your own additions](./workspaces#your-own-additions)
 :::
 
 ::: details Is it safe to clone a repository that has a `.wisp.json`?

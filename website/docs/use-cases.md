@@ -1,7 +1,7 @@
 # Use cases
 
 What Wisp is for, each with a pipeline to copy. Put it in the project's `.wisp.json`, or in
-a [personal workspace](./file#personal-workspaces) when it belongs to no repository.
+a [personal workspace](./workspaces#personal-workspaces) when it belongs to no repository.
 
 The names are yours. Wisp has no built-in `dev` or `deploy`: you run a pipeline from any
 folder as `wisp <workspace> <pipeline>`, so `wisp acme dev` runs the *Dev* pipeline of the
@@ -17,10 +17,7 @@ forget to stop.
 
 ### The database, the API, the web app
 
-```
-db ──▶ api ──▶ up ──┐
-web ────────────────┴──▶ page
-```
+<Pipeline name="dev" />
 
 ```json
 {
@@ -72,11 +69,7 @@ run kept like CI keeps it.
 
 ### Lint, types and tests, then the build
 
-```
-lint  ──┐
-types ──┼──▶ build
-test  ──┘
-```
+<Pipeline name="verify" />
 
 ```json
 {
@@ -138,24 +131,14 @@ The tag only goes out when every check passed.
 
 ### Use a secret
 
-Wisp keeps no secrets. A step fetches its own from where you keep them, so nothing secret is
-written in the file, shown on screen or kept in history:
+A step fetches its own secret from where you keep it, so nothing secret is written in the
+file, shown on screen or kept in history:
 
 ```json
 { "run": "TOKEN=$(op read op://ops/deploy/token) ./deploy.sh", "finishes": true }
 ```
 
-That one reads it from 1Password. Elsewhere:
-
-| Kept in | The step runs |
-|---|---|
-| macOS Keychain | `TOKEN=$(security find-generic-password -s deploy -w) ./deploy.sh` |
-| pass | `TOKEN=$(pass show deploy/token) ./deploy.sh` |
-| a `.env` file | `set -a; . ./.env; set +a; ./deploy.sh` |
-| 1Password, on Windows | `$env:TOKEN = op read op://ops/deploy/token; ./deploy.ps1` |
-
-Keep a `.env` out of git, and on a server readable only by you: `chmod 600 .env`. If your
-script prints the secret, it lands in the log: no tool can stop that.
+The same for the macOS Keychain, pass or a `.env` file: [Secrets](./secrets).
 
 ## Run a server
 
@@ -254,8 +237,9 @@ Each step runs even if another fails, and the run still says what failed.
 
 ## Your own machine
 
-Not everything belongs to a repository. Press `N` in the dashboard for a personal workspace, say *Me*. Its pipelines run from any folder, and without asking for trust, since
-they're yours.
+Not everything belongs to a repository. Press `N` in the dashboard for a personal
+workspace, say *Homelab*. Its pipelines run from any folder, and without asking for trust,
+since they're yours.
 
 ### A tunnel to the production database
 
@@ -272,20 +256,24 @@ Keeps an SSH tunnel open, and opens it again if it drops.
 }
 ```
 
-`wisp me tunnel` opens it, ready when the command returns. `wisp down me tunnel` closes it.
+`wisp homelab tunnel` opens it, ready when the command returns. `wisp down homelab tunnel`
+closes it.
 
-### Open your morning
+### Back up your photos
+
+To the NAS first, then a copy offsite, each allowed two hours:
 
 ```json
 {
-  "label": "Morning",
+  "label": "Back up photos",
   "steps": [
-    { "url": "mail.google.com" },
-    { "url": "calendar.google.com" },
-    { "app": "Slack" }
+    { "run": "rsync -a --delete ~/Pictures/ nas:/volume1/photos", "label": "nas", "finishes": true, "timeout": "2h" },
+    { "run": "restic backup ~/Pictures", "label": "offsite", "after": "nas", "finishes": true, "timeout": "2h" }
   ]
 }
 ```
+
+`wisp homelab photos`, or every Sunday from cron: `0 2 * * 0 wisp homelab photos`.
 
 ### Several projects at once
 
