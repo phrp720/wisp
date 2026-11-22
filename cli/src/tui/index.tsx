@@ -3,6 +3,7 @@ import { render } from "ink";
 import { stopAttached } from "../core/switch.js";
 import { App } from "./App.js";
 import { mouseStdin, terminalMouse } from "./mouse.js";
+import { inPlaceStdout } from "./screen.js";
 import { ENTER_SCREEN, LEAVE_SCREEN, realServices } from "./services.js";
 
 /**
@@ -23,7 +24,6 @@ export async function startTui(): Promise<void> {
     mouse.pause();
     stdout.write(LEAVE_SCREEN + "\u001B[?25h");
   };
-  stdout.write(ENTER_SCREEN + "\u001B[?25l");
   process.once("exit", leave);
   // Closed window, `kill`, logged out: whatever Wisp was running attached goes with it,
   // rather than carrying on where nobody can see it.
@@ -49,7 +49,9 @@ export async function startTui(): Promise<void> {
     },
   });
 
-  instance = render(<App services={services} mouse={mouse} />, { stdin: input, exitOnCtrlC: true, patchConsole: false });
+  const initial = await services.load().catch(() => undefined);
+  stdout.write(ENTER_SCREEN + "\u001B[?25l");
+  instance = render(<App services={services} mouse={mouse} {...(initial ? { initial } : {})} />, { stdin: input, stdout: inPlaceStdout(stdout), exitOnCtrlC: true, patchConsole: false });
   try {
     await instance.waitUntilExit();
   } finally {

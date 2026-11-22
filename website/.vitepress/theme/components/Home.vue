@@ -231,7 +231,7 @@ const more = [
         <p class="lead">How to deploy, update and back up the app, written once next to it. Whoever SSHs in runs <code>wisp shop deploy</code> from any folder: it asks before it goes, and every run is kept. A backup from cron messages you when it fails, and what Wisp starts keeps running after you log out.</p>
         <a class="more" href="/docs/use-cases#run-a-server">Server use cases →</a>
       </div>
-      <img class="recording" src="/demo/server.gif" width="960" height="820" loading="lazy" alt="wisp shop deploy, from the home folder: it asks where, asks before it goes, then builds and ships" />
+      <img class="recording" src="/demo/server.gif" width="1400" height="720" loading="lazy" alt="wisp shop deploy, from the home folder: it asks where, asks before it goes, then builds and ships" />
     </section>
 
     <section class="band">

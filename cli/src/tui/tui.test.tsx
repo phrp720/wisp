@@ -110,6 +110,15 @@ async function open(api: Services) {
 }
 
 describe("the TUI", () => {
+  it("given the workspaces already read, draws them in its first frame, with no loading screen", () => {
+    const library: Library = { reads: [morning, infra, acme], here: acme.workspace.file, unreadable: [] };
+    const app = render(<App services={services({}, library)} glyphs={unicode} size={{ columns: 100, rows: 24 }} initial={library} />);
+    const frame = app.frames[0] ?? "";
+    expect(frame).not.toContain("reading your workspaces");
+    expect(frame).toContain("❯ Work on api");
+    app.unmount();
+  });
+
   it("starts on the project you are in, with its pipelines ready to run", async () => {
     const { lastFrame } = await open(services());
     const frame = lastFrame() ?? "";

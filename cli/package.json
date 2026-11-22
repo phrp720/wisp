@@ -25,7 +25,7 @@
     "node": ">=22.12"
   },
   "bin": {
-    "wisp": "./dist/cli/index.js"
+    "wisp": "./dist/bin/wisp.js"
   },
   "main": "./dist/core/index.js",
   "types": "./dist/core/index.d.ts",
@@ -45,7 +45,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && node -e \"require('fs').chmodSync('dist/cli/index.js', 0o755)\"",
+    "build": "tsc -p tsconfig.json && node scripts/bundle.mjs",
     "dev": "tsx src/cli/index.ts",
     "start": "tsx src/cli/index.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -67,6 +67,7 @@
     "@types/node": "^26.1.2",
     "@types/react": "^19.3.0",
     "ajv": "^8.20.0",
+    "esbuild": "^0.28.2",
     "ink-testing-library": "^4.0.0",
     "tsx": "^4.23.1",
     "typescript": "^7.0.2",

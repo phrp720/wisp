@@ -33,22 +33,23 @@ export interface AppProps {
   size?: { columns: number; rows: number };
   /** Clicks and the wheel. Without it (in tests, or piped), the dashboard is keys only. */
   mouse?: MouseSource;
+  initial?: Library;
 }
 
 /** Screens the tabs along the top can be clicked from: not one with a form half filled in. */
 const TABS_CLICKABLE = new Set<View["kind"]>(["browse", "processes", "history", "help", "search"]);
 
-export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProps) {
+export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }: AppProps) {
   const { exit } = useApp();
   const { columns, rows } = useTerminalSize(size);
 
-  const [library, setLibrary] = useState<Library>();
+  const [library, setLibrary] = useState<Library | undefined>(initial);
   const [loadError, setLoadError] = useState<string>();
   // Read by the key handler through their refs, which update the moment they are set: keys
   // can arrive faster than React re-renders, and each must see what the one before did.
   const [wsIndex, setWsIndex, wsRef] = useLatest(0);
   const [boltIndex, setBoltIndex, boltRef] = useLatest(0);
-  const [focus, setFocus, focusRef] = useLatest<Focus>("workspaces");
+  const [focus, setFocus, focusRef] = useLatest<Focus>(initial && startsOnPipelines(initial) ? "bolts" : "workspaces");
   const [view, setView, viewRef] = useLatest<View>({ kind: "browse" });
   const [message, setMessage, messageRef] = useLatest<string | undefined>(undefined);
   const [tick, setTick] = useState(0);
@@ -180,9 +181,8 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
   // First load: start on the project you are standing in, with its bolts in focus — the
   // same answer bare `wisp` gives on the command line, one keypress from running.
   useEffect(() => {
-    void reload().then(async (next) => {
-      const first = next ? ordered(next)[0] : undefined;
-      if (next?.here && first?.workspace.file === next.here && first.workspace.bolts.length > 0) setFocus("bolts");
+    void (initial ? Promise.resolve(initial) : reload()).then(async (next) => {
+      if (next && startsOnPipelines(next)) setFocus("bolts");
       // Opened in a project that has no file yet: offer to set it up, right here.
       if (next && !next.here) {
         const suggestion = await services.suggestSetup().catch(() => undefined);
@@ -1371,4 +1371,9 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
 
 function startedBy(run: RunState): string | undefined {
   return [...run.steps].reverse().find((step) => step.result?.run && step.result.ok && !step.target.workspace)?.result?.run;
+}
+
+function startsOnPipelines(library: Library): boolean {
+  const first = ordered(library)[0];
+  return Boolean(library.here && first?.workspace.file === library.here && first.workspace.bolts.length > 0);
 }

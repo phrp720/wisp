@@ -48,7 +48,7 @@
       "color": "#93c5fd",
       "steps": [
         { "run": "pnpm build", "label": "build the CLI", "finishes": true },
-        { "run": "mkdir -p \"$HOME/.local/bin\" && ln -sf \"$PWD/cli/dist/cli/index.js\" \"$HOME/.local/bin/wisp-dev\"", "label": "link wisp-dev to the build", "after": "build the CLI", "finishes": true },
+        { "run": "mkdir -p \"$HOME/.local/bin\" && ln -sf \"$PWD/cli/dist/bin/wisp.js\" \"$HOME/.local/bin/wisp-dev\"", "label": "link wisp-dev to the build", "after": "build the CLI", "finishes": true },
         { "run": "\"$HOME/.local/bin/wisp-dev\" --version", "label": "check wisp-dev runs", "after": "link wisp-dev to the build", "finishes": true }
       ]
     },

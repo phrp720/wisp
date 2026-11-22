@@ -35,11 +35,11 @@ jobs:
       - name: Smoke test the CLI
         shell: bash
         run: |
-          node cli/dist/cli/index.js --version
-          node cli/dist/cli/index.js doctor
-          node cli/dist/cli/index.js check
-          node cli/dist/cli/index.js "Check everything" --dry-run
-          node cli/dist/cli/index.js spec > /dev/null
+          node cli/dist/bin/wisp.js --version
+          node cli/dist/bin/wisp.js doctor
+          node cli/dist/bin/wisp.js check
+          node cli/dist/bin/wisp.js "Check everything" --dry-run
+          node cli/dist/bin/wisp.js spec > /dev/null
 
   website:
     runs-on: ubuntu-latest
