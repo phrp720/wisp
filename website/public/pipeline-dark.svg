@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-14 -14 628 178" width="628" height="178" role="img" aria-label="The Dev pipeline: db and web start together; api waits for db; a wait for port 3000 waits for api; the page opens once both are done">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8b87a0"/>
+    </marker>
+  </defs>
+  <rect x="-13.5" y="-13.5" width="627" height="177" rx="14" fill="#12111a" stroke="#a78bfa" stroke-opacity="0.18"/>
+  <g fill="none" stroke="#8b87a0" stroke-width="1.5">
+    <path d="M110,36 H146" marker-end="url(#arrow)"/>
+    <path d="M250,36 H286" marker-end="url(#arrow)"/>
+    <path d="M400,36 C425,36 422,76 446,76" marker-end="url(#arrow)"/>
+    <path d="M110,116 H400 C425,116 422,76 446,76" marker-end="url(#arrow)"/>
+  </g>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">
+    <rect x="10" y="16" width="100" height="40" rx="9" fill="#17151f" stroke="#a78bfa" stroke-opacity="0.55"/>
+    <text x="22" y="31" font-size="10" fill="#8b87a0">docker</text>
+    <text x="22" y="48" font-size="13" fill="#e4e1f0">db</text>
+    <rect x="150" y="16" width="100" height="40" rx="9" fill="#17151f" stroke="#a78bfa" stroke-opacity="0.55"/>
+    <text x="162" y="31" font-size="10" fill="#8b87a0">run</text>
+    <text x="162" y="48" font-size="13" fill="#e4e1f0">api</text>
+    <rect x="290" y="16" width="110" height="40" rx="9" fill="#17151f" stroke="#a78bfa" stroke-opacity="0.55"/>
+    <text x="302" y="31" font-size="10" fill="#8b87a0">wait</text>
+    <text x="302" y="48" font-size="13" fill="#e4e1f0">:3000</text>
+    <rect x="10" y="96" width="100" height="40" rx="9" fill="#17151f" stroke="#a78bfa" stroke-opacity="0.55"/>
+    <text x="22" y="111" font-size="10" fill="#8b87a0">run</text>
+    <text x="22" y="128" font-size="13" fill="#e4e1f0">web</text>
+    <rect x="450" y="56" width="140" height="40" rx="9" fill="#17151f" stroke="#a78bfa" stroke-opacity="0.55"/>
+    <text x="462" y="71" font-size="10" fill="#8b87a0">link</text>
+    <text x="462" y="88" font-size="13" fill="#e4e1f0">localhost:5173</text>
+  </g>
+</svg>

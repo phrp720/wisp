@@ -40,10 +40,12 @@
 A **pipeline** is a name and its steps, in a `.wisp.json` next to your code or in a personal
 workspace. Steps start together unless they say what they wait for:
 
-```
-db ──▶ api ──▶ up ──┐
-web ────────────────┴──▶ page
-```
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="website/public/pipeline-light.svg" />
+    <img src="website/public/pipeline-dark.svg" alt="The Dev pipeline: db and web start together; api waits for db; a wait for port 3000 waits for api; the page opens once both are done" width="628" />
+  </picture>
+</p>
 
 ```json
 {
@@ -85,32 +87,10 @@ Then Wisp:
 - **Works with agents.** Every command takes `--json`, nothing prompts without a terminal,
   and `wisp help agents` prints the whole reference. An agent can't approve its own commands.
 
-## Use cases
-
-| | Its steps | |
-|---|---|---|
-| **Bring up a dev stack** | `db → api → page` | The database, the API once it's healthy, the web app beside them, the page. One command stops it all. |
-| **Check before you push** | `lint · types · test → build` | Side by side, then the build. As a git hook, a failure stops the push. |
-| **Release and deploy** | `checks → deploy → health` | The checks first, then it asks where and asks before it goes. Every deploy's log is kept. |
-| **Run a server** | `pull → install → migrate → restart` | The way to update the app, the same for whoever SSHs in. |
-| **Scheduled jobs** | `dump → prune` | From cron: stopped if it hangs, a message to Slack or ntfy if it fails, every run in history. |
-| **Your own machine** | `mail · calendar · Slack` | Pipelines outside any repo: the day's tabs and apps, an SSH tunnel kept open. |
-
-You name the pipelines and run them from any folder as `wisp <workspace> <pipeline>`,
-e.g. `wisp shop deploy` for the Deploy pipeline of your Shop project. Each use case, with the
-pipeline to copy: [Use cases](https://willowisp.dev/docs/use-cases).
-
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: light)" srcset="website/public/demo/dashboard-light.gif" />
     <img src="website/public/demo/dashboard.gif" alt="Wisp's dashboard: running a pipeline in its box, its server's live output on the Running tab, then the History tab" width="900" />
-  </picture>
-</p>
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: light)" srcset="website/public/demo/server-light.gif" />
-    <img src="website/public/demo/server.gif" alt="wisp shop deploy, from the home folder: it asks where, asks before it goes, then builds and ships" width="640" />
   </picture>
 </p>
 
