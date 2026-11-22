@@ -518,6 +518,7 @@ describe("the TUI", () => {
     const deploy = read("/dev/acme/.wisp.json", { name: "Acme", pipelines: [{ label: "Deploy", inputs: { variant: { ask: "Which?" }, port: { default: "443" } }, confirm: "Deploy {{variant}}?", steps: [{ url: "https://localhost:{{port}}" }] }] });
     const app = await open(services({}, { reads: [deploy], here: deploy.workspace.file, unreadable: [] }));
     await eventually(() => expect(app.lastFrame()).toMatch(/inputs: variant, port +│\n│ +│.*asks first: Deploy \{\{variant\}\}\? · never run yet/));
+    expect(app.lastFrame()).toMatch(/│ ─{60,} │\n[^\n]*│ inputs: variant, port/);
   });
 
   it("gives a pipeline's notes two lines, and ends a longer one with …", async () => {

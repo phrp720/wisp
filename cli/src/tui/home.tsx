@@ -305,7 +305,7 @@ function PipelineDetails(props: {
 
   const problemLines = problems.length > 0 ? problems.reduce((sum, problem) => sum + 1 + (problem.hint ? 1 : 0), 0) + 1 : 0;
   const above = (full ? 1 + notes.length + (needs.length > 1 ? 1 : 0) + 2 : notes.length + 1) + problemLines;
-  const bottom = full ? 2 + (inputNames.length > 0 ? 1 : 0) : 0;
+  const bottom = full ? 3 + (inputNames.length > 0 ? 1 : 0) : 0;
   const drawn = fitGraph(plan, width, Math.floor((room - above - bottom) * 0.45));
   const lines = stepLines({ read, bolt, reads, runs, containers, glyphs, after: !drawn });
   const space = Math.max(1, room - above - bottom - (drawn ? drawn.height + 1 : 0));
@@ -378,6 +378,7 @@ function PipelineDetails(props: {
       {full ? (
         <>
           <Box flexGrow={1} />
+          <Box borderStyle={glyphs.border === "round" ? "single" : "classic"} borderColor="gray" borderDimColor borderTop borderBottom={false} borderLeft={false} borderRight={false} />
           {inputNames.length > 0 ? (
             <Text wrap="truncate-end">
               <Text dimColor>inputs: </Text>
