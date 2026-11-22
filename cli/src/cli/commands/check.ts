@@ -25,6 +25,7 @@ export const check: CommandDef<{ json?: boolean }> = {
     const { errors, warnings } = countDiagnostics(read.diagnostics);
 
     if (options.json) {
+      if (errors > 0) process.exitCode = 1;
       return emitJson({
         file: read.workspace.file,
         local: read.workspace.local ?? null,

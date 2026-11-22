@@ -18,6 +18,14 @@ Commands never prompt without a terminal, `--json` makes every result machine-re
 An agent can write and run pipelines, but **it cannot approve its own commands**: `wisp trust`
 stays yours.
 
+## The Wisp skill
+
+Wisp's skill is in [`skills/wisp`](https://github.com/phrp720/wisp/tree/main/skills/wisp).
+Agents that support skills load it whenever a task involves Wisp.
+
+The complete reference is also on the web as [llms-full.txt](/llms-full.txt), with an index at
+[llms.txt](/llms.txt).
+
 ---
 
 <!--@include: ../../docs/SPEC.md-->

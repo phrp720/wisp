@@ -5,9 +5,12 @@
  */
 export const SPEC = `# Wisp reference
 
-Wisp starts a project's working context with one word. A \`.wisp.json\` in a project
-lists **pipelines**; running a pipeline opens or runs what it lists, in order: folders, files,
-links, apps and shell commands, with optional waits and dependencies between them.
+Wisp runs pipelines on the machine it is installed on, a laptop or a server. A
+\`.wisp.json\` in a project lists **pipelines**: each is a list of steps (shell commands,
+Docker services, waits, other pipelines, and links, folders, files and apps to open) that
+start together unless they name what they wait for with \`after\`.
+\`wisp <workspace> <pipeline>\` runs one from any folder. Wisp keeps track of what it
+started and keeps every run.
 
 ## Files
 
@@ -261,7 +264,72 @@ CLI instead.
   \`{"ok": false, "error": {"code": "NO_PIPELINE", "message": "…", "hint": "…"}}\`, with exit 1.
   Without \`--json\`, errors go to stderr.
 - Exit 0: everything ran. Exit 1: a step failed, \`check\` found errors, or the command
-  was refused (the message says why, and usually what to run instead).
+  was refused (the message says why, and usually what to run instead). The same with
+  \`--json\`: \`"ok": false\` and exit 1 go together.
 - Without a terminal Wisp never prompts: \`wisp\` with no pipeline lists the pipelines, and a pipeline
   that asks first stops with \`CONFIRM_NEEDED\` unless given \`--yes\`.
+
+### What --json prints
+
+Shortened; paths are absolute, and fields with nothing to say are left out.
+
+\`wisp show --json\`: the workspace and its pipelines. In a file not yet trusted, its
+commands are not in \`steps\` but in \`withheld\`, so look at both.
+
+\`\`\`json
+{ "name": "Shop", "file": "/…/.wisp.json", "personal": false, "trust": "untrusted",
+  "pipelines": [{ "label": "Check", "slug": "check", "notes": "lint, then test",
+    "inputs": [{ "name": "env", "ask": "env", "choices": ["staging", "production"], "default": "staging" }],
+    "confirm": "Deploy to {{env}}?",
+    "steps": [{ "kind": "command", "name": "test", "value": "pnpm test", "finishes": true, "after": ["lint"] }] }],
+  "diagnostics": [], "withheld": [{ "kind": "command", "label": "test", "value": "pnpm test", "cwd": "/…" }] }
+\`\`\`
+
+\`wisp check --json\`: \`errors\` and \`warnings\` count \`diagnostics\`; \`commands\` is every
+command the file declares, with where it runs.
+
+\`\`\`json
+{ "file": "/…/.wisp.json", "trust": "untrusted", "errors": 0, "warnings": 1,
+  "diagnostics": [{ "level": "warning", "at": "trust", "message": "2 commands declared but will not run", "hint": "…" }],
+  "commands": [{ "label": "test", "run": "pnpm test", "cwd": "/…", "finishes": true }], "withheld": [] }
+\`\`\`
+
+\`wisp <pipeline> --json\` (and with \`--dry-run\`): how each step went. \`history\` is the run's
+id (\`null\` for a dry run); \`log\` is a step's output file; a failed step has \`error\`.
+
+\`\`\`json
+{ "workspace": "Shop", "pipeline": "Check", "ok": false, "dryRun": false, "history": "54b4b6af2c92",
+  "steps": [
+    { "kind": "command", "name": "lint", "value": "pnpm lint", "ok": true, "durationMs": 720, "log": "/…/1.log" },
+    { "kind": "command", "name": "test", "value": "pnpm test", "ok": false, "error": "exited with code 3", "durationMs": 526, "log": "/…/2.log" }],
+  "waitingForTrust": [] }
+\`\`\`
+
+\`wisp history <id> --json\`: the same steps with \`stage\` (when each could start), plus
+\`number\`, \`trigger\` (\`cli\`, \`hook\`, \`tui\` or \`retry\`), \`startedAt\` and \`finishedAt\`.
+\`wisp history <id> --log <n>\` prints step n's output as plain text.
+
+### Error codes
+
+| Code | Means | Next |
+|---|---|---|
+| \`NO_PROJECT\` | no \`.wisp.json\` above this folder, and no workspace named | \`wisp init\`, or name a workspace |
+| \`NO_TARGET\` | not in a project, and the command needs one | name a workspace (the message lists them) |
+| \`NO_PIPELINE\` | this project has no pipeline by that name | \`wisp show\` |
+| \`NOT_FOUND\` | no workspace, or no pipeline in it, by that name | \`wisp list\`, \`wisp show <workspace>\` |
+| \`AMBIGUOUS\` | the name matches several | use the slug or the full label |
+| \`NOT_TRUSTED\` | the file's commands are not approved yet | ask the user to run \`wisp trust\` |
+| \`CONFIRM_NEEDED\` | the pipeline asks first | ask the user, then pass \`--yes\` |
+| \`INPUT_NEEDED\` | an input has no value and no default | \`--input name=value\` |
+| \`INVALID_INPUT\` | a value or argument Wisp can't take | the message says which |
+| \`PROJECT_INVALID\`, \`INVALID_JSON\` | the file is not valid JSON, or not an object | \`wisp check\` |
+| \`BROKEN_PIPELINE\`, \`CYCLE\` | \`after\` names a missing step, or steps or pipelines wait for each other | \`wisp check\` |
+| \`PROJECT_EXISTS\` | \`wisp init\` found a file already | edit it, or \`--force\` if the user wants it replaced |
+| \`NOTHING_TO_RETRY\` | \`--retry\` with nothing that failed, or a pipeline changed since | run it whole |
+| \`NO_SHELL\` | the shell a command asks for is not here | the message names it |
+| \`NO_DISPLAY\` | nowhere to open a terminal window | \`--detach\` or \`--inline\` |
+| \`HOOK_EXISTS\`, \`NOT_OURS\` | a git hook Wisp did not write is in the way | leave it to the user |
+| \`NO_REPOSITORY\` | \`wisp hook\` outside a git repository | |
+| \`LOCKED\` | another wisp holds a lock too long | the message names the lock file |
+| \`DUPLICATE_NAME\` | a pipeline or workspace by that name exists | pick another name |
 `;

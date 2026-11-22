@@ -7,11 +7,15 @@ import { dim } from "./format.js";
 import { withImplicitUse } from "./lib/argv.js";
 import { COMMANDS, verbs } from "./lib/commands.js";
 import { fail, register } from "./lib/define.js";
+import { quietOnClosedPipe } from "./lib/pipes.js";
 import { VERSION } from "./version.js";
+
+quietOnClosedPipe(process.stdout);
+quietOnClosedPipe(process.stderr);
 
 const program = new Command()
   .name("wisp")
-  .description("Start a project's working context with one word: its links, folders, files, apps and commands")
+  .description("Pipelines for your own machines: your dev stack, checks, deploys and backups, run by name from any folder")
   .version(VERSION)
   .showHelpAfterError()
   // Bare `wisp` answers "what can I run from here", the question you have every day,

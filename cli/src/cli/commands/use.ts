@@ -158,6 +158,7 @@ export const use: CommandDef<UseOptions> = {
     const untrusted = waitingForTrust(read, result.bolt?.label ?? label);
 
     if (json) {
+      if (!result.ok) process.exitCode = 1;
       return emitJson({
         workspace: workspace.name,
         pipeline: result.bolt?.label,

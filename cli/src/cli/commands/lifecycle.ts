@@ -43,6 +43,7 @@ export const down: CommandDef<{ deps?: boolean; dryRun?: boolean; json?: boolean
     );
 
     if (options.json) {
+      if (result.teardown && !result.teardown.ok) process.exitCode = 1;
       return emitJson({ stopped: result.stopped.map((run) => ({ id: run.id, label: run.label })), teardown: result.teardown?.targets ?? [] });
     }
 

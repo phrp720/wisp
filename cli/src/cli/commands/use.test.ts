@@ -64,6 +64,28 @@ describe("the line a run ends with", () => {
   });
 });
 
+describe("a run that fails", () => {
+  let mine: string;
+
+  beforeEach(async () => {
+    mine = join(dir, "home", "workspaces", "Checks.json");
+    await mkdir(join(dir, "home", "workspaces"), { recursive: true });
+    await writeFile(mine, JSON.stringify({ name: "Checks", pipelines: [{ label: "Lint", steps: [{ run: "exit 3", label: "lint", finishes: true }] }] }));
+  });
+
+  it("exits 1", async () => {
+    await use.run([mine, "Lint"], {});
+    expect(process.exitCode).toBe(1);
+  });
+
+  it("exits 1 under --json too, beside ok: false", async () => {
+    await use.run([mine, "Lint"], { json: true });
+    const result = JSON.parse(printed.join("\n")) as { ok: boolean };
+    expect(result.ok).toBe(false);
+    expect(process.exitCode).toBe(1);
+  });
+});
+
 describe("a pipeline that asks before it runs", () => {
   let mine: string;
 
