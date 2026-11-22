@@ -3,7 +3,8 @@ name: Release
 # Push a tag like v0.1.0 to release. The tag must match cli/package.json's version.
 #
 # GitHub Releases always happens. npm is off until switched on, so the first release needs
-# no tokens at all (see RELEASING.md): variable PUBLISH_NPM = true, secret NPM_TOKEN.
+# no tokens at all (see RELEASING.md): variable PUBLISH_NPM = true, and this workflow added
+# as the package's trusted publisher on npmjs.com. No npm token is stored anywhere.
 
 on:
   push:
@@ -106,8 +107,7 @@ jobs:
           cache: pnpm
           registry-url: https://registry.npmjs.org
       - run: pnpm install --frozen-lockfile
+      - run: npm install -g npm@11.6.2
       - name: Publish @squaredasher/wisp
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_CONFIG_PROVENANCE: "true"
-        run: pnpm --filter @squaredasher/wisp publish --access public --no-git-checks
+        working-directory: cli
+        run: npm publish --access public

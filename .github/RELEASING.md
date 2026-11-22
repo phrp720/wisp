@@ -30,8 +30,21 @@ Secrets are encrypted and never appear in logs or in this repository.
 
 | Channel | Variable | Secret |
 |---|---|---|
-| npm (`@squaredasher/wisp`) | `PUBLISH_NPM` = `true` | `NPM_TOKEN`: an npm *granular* token that can publish only this package |
+| npm (`@squaredasher/wisp`) | `PUBLISH_NPM` = `true` | none: `release.yml` is the package's trusted publisher (below) |
 | Website (Cloudflare Worker, on every push to main) | `DEPLOY_WEBSITE` = `true` | `CLOUDFLARE_API_TOKEN` (the *Edit Cloudflare Workers* template) and `CLOUDFLARE_ACCOUNT_ID` |
+
+### npm, without a token
+
+npm trusts this workflow directly, so no token is stored anywhere. A trusted publisher can only
+be added to a package that exists, so the very first version is published once by hand:
+
+```bash
+cd cli && npm login && npm publish --access public
+```
+
+Then on npmjs.com, open the package's **Settings, Trusted Publisher**, choose GitHub Actions,
+and enter `phrp720`, `wisp` and `release.yml`. Set `PUBLISH_NPM` = `true`, and every later tag
+publishes by itself.
 
 npm packages are published with provenance, so npm shows they were built by this workflow
 from this repository.
