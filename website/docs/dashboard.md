@@ -69,5 +69,6 @@ Lowercase keys are everyday and safe. A capital is the heavier form of the same 
 | `/` | search every workspace and pipeline; in a log or an open run, filter its lines |
 | `[` · `]` · `f` | on Running: the selected command's tabs · its log full screen |
 | `u` · `d` · `G` | scroll output up · down · back to the newest |
+| `v` | show or hide the graph of a pipeline's steps, there and in History |
 | `t` | allow a file's commands ([trust](./trust)) |
 | `s` · `r` · `q` | [settings](./settings) · reload the files · quit |

@@ -7,6 +7,7 @@ import { tildify } from "../core/paths.js";
 import type { RunStatus } from "../core/processes.js";
 import { composeTarget, stagesOfTargets, stepTargets } from "../core/switch.js";
 import type { Pipeline, SwitchTarget, WorkspaceRead } from "../core/types.js";
+import type { GraphNode } from "./graph.js";
 import type { Glyphs } from "./glyphs.js";
 import { TONE } from "./tones.js";
 import { describeStep, shortUrl } from "./model.js";
@@ -38,31 +39,50 @@ export function flow(read: WorkspaceRead, bolt: Pipeline, seen = new Set<string>
 }
 
 /** Every step, numbered by when it can start, each bolt it runs opened up beneath it. */
-export function stepLines(context: { read: WorkspaceRead; bolt: Pipeline; reads: WorkspaceRead[]; runs: RunStatus[]; containers: Container[]; glyphs: Glyphs }): Line[] {
+type Shown = SwitchTarget & { held?: boolean };
+
+export function shownTargets(read: WorkspaceRead, bolt: Pipeline): Shown[] {
+  const aligned = stepTargets(read.workspace, bolt.steps);
+  const heldById = new Map(read.withheld.map((item) => [item.id, item]));
+  return bolt.steps.flatMap((step, at): Shown[] => {
+    const target = aligned[at];
+    if (target) return [target];
+    const placed = { ...(step.name ? { name: step.name } : {}), ...(step.after && step.after.length > 0 ? { after: step.after } : {}), held: true };
+    if (step.kind === "compose") return [{ ...composeTarget(step, "up"), ...placed }];
+    const item = step.kind === "asset" ? heldById.get(step.id) : step.kind === "wait" && step.held ? heldById.get(step.held) : undefined;
+    if (!item) return [];
+    return [{ kind: item.kind, label: item.label, id: item.id, value: item.value, ...(item.cwd ? { cwd: item.cwd } : {}), ...placed }];
+  });
+}
+
+export function planGraph(read: WorkspaceRead, bolt: Pipeline, glyphs: Glyphs): GraphNode[][] {
+  const all = shownTargets(read, bolt);
+  const stages = stagesOfTargets(all);
+  const columns = new Map<number, GraphNode[]>();
+  all.forEach((target, at) => {
+    const stage = stages[at] ?? at + 1;
+    const label = target.kind === "pipeline" ? `${glyphs.bolt}${target.label}` : (target.name ?? target.label);
+    const node: GraphNode = { label, ok: true, state: "waiting", ...(target.held ? { detail: "not trusted yet" } : {}) };
+    columns.set(stage, [...(columns.get(stage) ?? []), node]);
+  });
+  return [...columns.entries()].sort(([left], [right]) => left - right).map(([, nodes]) => nodes);
+}
+
+export function stepLines(context: { read: WorkspaceRead; bolt: Pipeline; reads: WorkspaceRead[]; runs: RunStatus[]; containers: Container[]; glyphs: Glyphs; after?: boolean }): Line[] {
   const { glyphs } = context;
   const lines: Line[] = [];
   const done = new Set<string>();
 
   const walk = (read: WorkspaceRead, bolt: Pipeline, depth: number, tag: string) => {
     const indent = "   ".repeat(depth);
-    const aligned = stepTargets(read.workspace, bolt.steps);
     const withheld = new Set(read.withheld.map((item) => item.id));
-    const heldById = new Map(read.withheld.map((item) => [item.id, item]));
-    const all: (SwitchTarget & { held?: boolean })[] = bolt.steps.flatMap((step, at) => {
-      const target = aligned[at];
-      if (target) return [target];
-      const placed = { ...(step.name ? { name: step.name } : {}), ...(step.after && step.after.length > 0 ? { after: step.after } : {}), held: true };
-      if (step.kind === "compose") return [{ ...composeTarget(step, "up"), ...placed }];
-      const item = step.kind === "asset" ? heldById.get(step.id) : step.kind === "wait" && step.held ? heldById.get(step.held) : undefined;
-      if (!item) return [];
-      return [{ kind: item.kind, label: item.label, id: item.id, value: item.value, ...(item.cwd ? { cwd: item.cwd } : {}), ...placed }];
-    });
+    const all = shownTargets(read, bolt);
     const stages = stagesOfTargets(all);
 
     all.forEach((target, index) => {
       const key = `${read.workspace.file}#${bolt.label}#${tag}${index}`;
       const shown = `${indent}${`${tag}${stages[index]}.`.padStart(3)} `;
-      const after = target.after ? <Text dimColor>{`  after ${target.after.join(", ")}`}</Text> : null;
+      const after = target.after && (context.after !== false || depth > 0 || tag !== "") ? <Text dimColor>{`  after ${target.after.join(", ")}`}</Text> : null;
       if (target.kind === "pipeline") {
         const found = findPipeline(read, target.label);
         const twice = found ? done.has(`${read.workspace.file}#${found.label}`) : false;
@@ -83,7 +103,7 @@ export function stepLines(context: { read: WorkspaceRead; bolt: Pipeline; reads:
         }
         return;
       }
-      const status = target.held || withheld.has(target.id) ? { text: "not allowed yet — t", color: "yellow" } : statusOf(target, read, context.runs, context.containers, glyphs);
+      const status = target.held || withheld.has(target.id) ? { text: "not trusted yet — t", color: "yellow" } : statusOf(target, read, context.runs, context.containers, glyphs);
       lines.push({
         key,
         node: (

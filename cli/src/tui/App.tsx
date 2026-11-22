@@ -72,6 +72,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
   // Past runs, for the last result beside each bolt and the recent runs under them.
   const [recent, setRecent] = useState<HistoryEntry[]>([]);
   const [webhooksFailing, setWebhooksFailing] = useState(0);
+  const [showGraph, setShowGraph] = useState(true);
   const [screenHint, setScreenHint] = useState<string>();
   // Whether the finished run is the one being looked at in Running, so it does not vanish mid-read.
   const watchingDone = useRef(false);
@@ -852,6 +853,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
     }
     if (input === "D" && bolt) return setView({ kind: "delete-bolt", file: current.workspace.file, bolt: bolt.label });
     if (input === "d" || input === "u") return setDetailScroll((top) => Math.max(0, Math.min(detailLimit.current, top + (input === "d" ? 5 : -5))));
+    if (input === "v") return setShowGraph((on) => !on);
     if (input === "s") return setView(webhooksFailing > 0 ? { kind: "settings", start: "notifications" } : { kind: "settings" });
     if ((input === "K" || input === "J") && bolt && focus === "bolts") {
       const by = input === "K" ? -1 : 1;
@@ -1217,6 +1219,8 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
       ) : view.kind === "history" ? (
         <HistoryScreen
           names={workspaceNames}
+          showGraph={showGraph}
+          onToggleGraph={() => setShowGraph((on) => !on)}
           services={services}
           glyphs={glyphs}
           height={bodyHeight}
@@ -1309,6 +1313,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
               read={current}
               {...(checked && checked.read === current ? { diagnostics: checked.diagnostics } : {})}
               reads={reads}
+              graph={showGraph}
               instead={
                 view.kind === "run-inputs"
                   ? (room: number) => (

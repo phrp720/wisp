@@ -18,7 +18,10 @@ wisp history <id> --log 3      # what step 3 printed
 ## In the dashboard
 
 The History tab (`3`) lists pipelines on the left and their runs on the right. Open a run
-for a summary, the pipelines it went through, and every step's output.
+for a summary, its steps drawn as a graph (what waited for what, and what ran side by side),
+and every step's output. `v` hides the graph or brings it back, here and on the Pipelines tab,
+where the same graph shows what a pipeline will do before you run it. A big one draws a line a
+step, and folds a long column into `+N more`.
 
 `/` filters a run's output, all steps at once: type `FAIL` or `error` to go straight to what
 broke. Each step says how many lines matched.

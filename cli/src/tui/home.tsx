@@ -14,7 +14,8 @@ import { shortest } from "../cli/lib/render.js";
 import { AskHere } from "./forms.js";
 import type { Glyphs } from "./glyphs.js";
 import { type SearchHit, windowed } from "./model.js";
-import { flow, stepLines, usedBy } from "./steps.js";
+import { flow, planGraph, stepLines, usedBy } from "./steps.js";
+import { fitGraph, StepGraph } from "./graph.js";
 import { counts, needsTrust, since } from "./state.js";
 import { TONE } from "./tones.js";
 
@@ -129,8 +130,9 @@ export function WorkspacePanel(props: {
   scrollLimit?: { current: number };
   instead?: ((room: number) => ReactNode) | undefined;
   diagnostics?: Diagnostic[];
+  graph?: boolean;
 }) {
-  const { read, reads, pipelineIndex, focused, glyphs, height, width = 80, here = false, runs, containers, history, confirming, scroll = 0, scrollLimit, instead } = props;
+  const { read, reads, pipelineIndex, focused, glyphs, height, width = 80, here = false, runs, containers, history, confirming, scroll = 0, scrollLimit, instead, graph = true } = props;
   const problems = (props.diagnostics ?? read.diagnostics).filter((entry) => entry.level !== "note" && entry.at !== "trust");
   const problemsOf = (entry: Pipeline) => problems.filter((problem) => problem.pipeline?.toLowerCase() === entry.label.toLowerCase());
   const fileProblems = problems.filter((problem) => !problem.pipeline || !read.workspace.bolts.some((entry) => entry.label.toLowerCase() === problem.pipeline?.toLowerCase()));
@@ -176,11 +178,11 @@ export function WorkspacePanel(props: {
       <Text dimColor wrap="truncate-start">{tildify(workspace.file) + (workspace.local ? "  + local" : "")}</Text>
       <Text wrap="truncate-end">
         {needsTrust(read) ? (
-          <Text color="yellow">{`${read.trust === "stale" ? "Changed since you allowed it" : "Not allowed to run commands yet"} — press t to review ${read.withheld.length === 1 ? "it" : `the ${read.withheld.length}`}`}</Text>
+          <Text color="yellow">{`${read.trust === "stale" ? "Changed since you trusted it" : "Not trusted yet"}: press t to review ${read.withheld.length === 1 ? "it" : `the ${read.withheld.length}`}`}</Text>
         ) : workspace.personal ? (
           <Text dimColor>Yours — its commands run without asking</Text>
         ) : read.declaredCommands.length > 0 ? (
-          <Text color="green">{`${glyphs.ok} Allowed to run its commands`}</Text>
+          <Text color="green">{`${glyphs.ok} Trusted`}</Text>
         ) : (
           <Text dimColor>nothing here runs code</Text>
         )}
@@ -239,6 +241,7 @@ export function WorkspacePanel(props: {
       scrollLimit={scrollLimit}
       problems={[...problemsOf(selected), ...fileProblems]}
       width={Math.max(10, width - 4)}
+      graph={graph}
     />
   ) : null;
 
@@ -287,19 +290,25 @@ function PipelineDetails(props: {
   scrollLimit?: { current: number } | undefined;
   problems: Diagnostic[];
   width: number;
+  graph: boolean;
 }) {
   const { read, bolt, state, last, here, glyphs, full, room, reads, runs, containers, scroll, scrollLimit, problems, width } = props;
   const notes = bolt.notes ? twoLines(bolt.notes, full ? width : width - 2) : [];
   const inputNames = (bolt.inputs ?? []).map((input) => input.name);
   const { workspace } = read;
-  const lines = stepLines({ read, bolt, reads, runs, containers, glyphs });
+  const plan = full && props.graph ? planGraph(read, bolt, glyphs) : [];
+  const stages = planGraph(read, bolt, glyphs);
+  const together = stages.length === 1 && bolt.steps.every((step) => step.kind !== "pipeline") ? (stages[0]?.length ?? 0) : 0;
   const needs = flow(read, bolt);
   const neededBy = usedBy(read, bolt);
   const typed = here ? shortest(bolt, workspace.bolts, true) : `${slugify(workspace.name)} ${shortest(bolt, workspace.bolts)}`;
 
   const problemLines = problems.length > 0 ? problems.reduce((sum, problem) => sum + 1 + (problem.hint ? 1 : 0), 0) + 1 : 0;
   const above = (full ? 1 + notes.length + (needs.length > 1 ? 1 : 0) + 2 : notes.length + 1) + problemLines;
-  const space = Math.max(1, room - above - (full ? 2 + (inputNames.length > 0 ? 1 : 0) : 0));
+  const bottom = full ? 2 + (inputNames.length > 0 ? 1 : 0) : 0;
+  const drawn = fitGraph(plan, width, Math.floor((room - above - bottom) * 0.45));
+  const lines = stepLines({ read, bolt, reads, runs, containers, glyphs, after: !drawn });
+  const space = Math.max(1, room - above - bottom - (drawn ? drawn.height + 1 : 0));
   const overflow = lines.length > space;
   const fit = overflow ? Math.max(1, space - 1) : lines.length;
   const most = Math.max(0, lines.length - fit);
@@ -354,7 +363,12 @@ function PipelineDetails(props: {
         <Text dimColor>{full ? "It has no steps yet — press e to add some." : "  It has no steps yet — press e to add some."}</Text>
       ) : (
         <Box flexDirection="column" paddingLeft={full ? 0 : 2} flexShrink={0}>
-          <Text dimColor>{bolt.keepGoing ? "When you run it, it will (and keep going if a step fails):" : "When you run it, it will:"}</Text>
+          <Text dimColor>{together > 1 ? `When you run it, these ${together} run at the same time${bolt.keepGoing ? ", and it keeps going if one fails" : ""}:` : bolt.keepGoing ? "When you run it, it will (and keep going if a step fails):" : "When you run it, it will:"}</Text>
+          {drawn ? (
+            <Box marginBottom={1}>
+              <StepGraph graph={drawn.graph} compact={drawn.compact} glyphs={glyphs} />
+            </Box>
+          ) : null}
           {lines.slice(top, top + fit).map((line) => (
             <Box key={line.key}>{line.node}</Box>
           ))}

@@ -2,7 +2,7 @@ import { Box, type DOMElement, measureElement, Text, useInput } from "ink";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { cleanOutput } from "../core/ansi.js";
-import { allSteps, baseLabel, withWorkspaceNames, type HistoryEntry, type HistoryStep, type StepProgress } from "../core/history.js";
+import { allSteps, baseLabel, withWorkspaceNames, type HistoryEntry, type HistoryStep } from "../core/history.js";
 import { ASK_KEYS, AskHere } from "./forms.js";
 import type { Glyphs } from "./glyphs.js";
 import { HelpPanel } from "./panels.js";
@@ -12,6 +12,7 @@ import { TONE } from "./tones.js";
 import { matchesAll, shortUrl, windowed, type Services } from "./model.js";
 import { FilterLine, filterLog, MatchLine } from "./logfilter.js";
 import { useMouse } from "./mouse.js";
+import { fitGraph, Mark, StepGraph, type GraphNode } from "./graph.js";
 
 export interface HistoryScreenProps {
   services: Services;
@@ -29,6 +30,8 @@ export interface HistoryScreenProps {
   onRerun: (entry: HistoryEntry) => void;
   onHint?: (hint: string) => void;
   names?: ReadonlyMap<string, string>;
+  showGraph?: boolean;
+  onToggleGraph?: () => void;
 }
 
 /** A bolt in the sidebar: the filter, like a workflow in a CI's list. */
@@ -47,7 +50,7 @@ export interface PipelineFilter {
  * their logs expanding in place.
  */
 export function HistoryScreen(props: HistoryScreenProps) {
-  const { services, glyphs, height, columns, onClose, onRunning, onRetry, onRerun, onJump, onHint, names } = props;
+  const { services, glyphs, height, columns, onClose, onRunning, onRetry, onRerun, onJump, onHint, names, showGraph = true, onToggleGraph } = props;
   const [recorded, setEntries] = useState<HistoryEntry[]>();
   const entries = useMemo(() => recorded && (names ? withWorkspaceNames(recorded, names) : recorded), [recorded, names]);
   const [filterIndex, setFilterIndex] = useState(0);
@@ -250,6 +253,8 @@ export function HistoryScreen(props: HistoryScreenProps) {
         onRetry={() => onRetry(opened)}
         onRerun={() => onRerun(opened)}
         onHelp={() => setHelp(true)}
+        showGraph={showGraph}
+        {...(onToggleGraph ? { onToggleGraph } : {})}
         {...(onJump ? { onJump } : {})}
         {...(onHint ? { onHint } : {})}
       />
@@ -396,8 +401,10 @@ function RunDetail(props: {
   onHelp: () => void;
   onJump?: (input: string) => void;
   onHint?: (hint: string) => void;
+  showGraph?: boolean;
+  onToggleGraph?: () => void;
 }) {
-  const { entry, services, glyphs, height, columns, onBack, onRetry, onRerun, onHelp, onJump, onHint } = props;
+  const { entry, services, glyphs, height, columns, onBack, onRetry, onRerun, onHelp, onJump, onHint, showGraph = true, onToggleGraph } = props;
   const all = useMemo(() => allSteps(entry), [entry]);
   const runningAt = all.findIndex((step) => step.state === "running");
   const firstFailed = runningAt >= 0 ? runningAt : Math.max(0, entry.steps.findIndex((step) => !step.ok && !step.skipped));
@@ -444,7 +451,7 @@ function RunDetail(props: {
   const hint = (
     typing
       ? ["type to filter the logs", "⏎ keep it", "esc clear"]
-      : ["↑↓ steps", "⏎ its log", "/ filter", "u d scroll", entry.ok || entry.running ? "" : "r retry", "R run again", "? keys", filtering ? "esc clear" : "esc back"]
+      : ["↑↓ steps", "⏎ its log", "/ filter", "u d scroll", onToggleGraph ? `v ${showGraph ? "hide" : "show"} graph` : "", entry.ok || entry.running ? "" : "r retry", "R run again", "? keys", filtering ? "esc clear" : "esc back"]
   )
     .filter(Boolean)
     .join(" · ");
@@ -551,10 +558,10 @@ function RunDetail(props: {
   });
 
   const graph = pipeline(entry);
-  const drawn = graph.flat().length > 1;
-  const tallest = Math.max(1, ...graph.map((column) => column.length));
-  const graphRows = drawn ? Math.max(1, Math.ceil(graphWidth(graph) / Math.max(20, columns - 6))) * tallest : 0;
-  const room = Math.max(3, height - 8 - graphRows * 3 - (filtering || typing ? 1 : 0));
+  const fitted = showGraph ? fitGraph(graph, columns - 6, Math.floor((height - 8) * 0.45)) : undefined;
+  const drawn = fitted !== undefined;
+  const graphLines = fitted ? fitted.height - 1 : 0;
+  const room = Math.max(3, height - 8 - graphLines - (filtering || typing ? 1 : 0));
   const selectedRow = Math.max(0, rows.findIndex((row) => row.step === selected));
   // The view follows the selected step, until you scroll yourself: then it stays where you
   // put it (it used to snap straight back to the step, so u and d seemed to do nothing).
@@ -588,7 +595,7 @@ function RunDetail(props: {
       setTop(Math.min(most, Math.max(0, first + event.by * 3)));
       return true;
     }
-    let line = event.y - 1 - (headLines.current ?? 5 + (drawn ? graphRows * 3 : 0));
+    let line = event.y - 1 - (headLines.current ?? 5 + graphLines);
     if (line < 0) return true;
     for (const row of visible) {
       const lines = row.lines ?? 1;
@@ -627,6 +634,7 @@ function RunDetail(props: {
     if (input === "r" && !entry.ok && !entry.running) return onRetry();
     if (input === "R") return onRerun();
     if (input === "?") return onHelp();
+    if (input === "v" && onToggleGraph) return onToggleGraph();
     const scrollTo = (next: number) => {
       setScrolled(true);
       setTop(Math.min(most, Math.max(0, next)));
@@ -663,23 +671,7 @@ function RunDetail(props: {
       </Text>
       <Summary entry={entry} />
       {drawn ? (
-      <Box flexWrap="wrap" marginTop={1}>
-        {graph.map((column, at) => (
-          <Box key={at} alignItems="flex-start">
-            {at > 0 ? <Box marginTop={1}><Text dimColor>{glyphs.border === "round" ? " ──▶ " : " --> "}</Text></Box> : null}
-            <Box flexDirection="column">
-              {column.map((node, row) => (
-                <Box key={row} borderStyle="round" borderColor={node.state === "running" ? "cyan" : node.state === "waiting" || node.skipped ? "gray" : node.ok ? "green" : "red"} paddingX={1}>
-                  <Text wrap="truncate-end">
-                    <Mark ok={node.ok} skipped={node.skipped} running={node.state === "running"} waiting={node.state === "waiting"} glyphs={glyphs} /> {node.label}
-                    {node.detail ? <Text dimColor>{` ${node.detail}`}</Text> : null}
-                  </Text>
-                </Box>
-              ))}
-            </Box>
-          </Box>
-        ))}
-      </Box>
+        <StepGraph graph={fitted.graph} compact={fitted.compact} glyphs={glyphs} />
       ) : (
         <Text> </Text>
       )}
@@ -743,14 +735,6 @@ function Summary({ entry }: { entry: HistoryEntry }) {
   );
 }
 
-export interface GraphNode {
-  label: string;
-  detail?: string;
-  ok: boolean;
-  skipped?: boolean;
-  state?: StepProgress;
-}
-
 /**
  * A run as a pipeline, in columns by when things could start: a box per bolt when the run
  * went through several, a box per step when it ran one. What ran at the same time stacks.
@@ -796,10 +780,6 @@ export function pipeline(entry: HistoryEntry): GraphNode[][] {
   );
 }
 
-function graphWidth(columns: GraphNode[][]): number {
-  return columns.reduce((total, column) => total + Math.max(...column.map((node) => node.label.length + (node.detail?.length ?? 0) + 6)) + 5, 0);
-}
-
 /** A past step as the sentence the rest of Wisp would use for it. */
 export function describeHistoryStep(step: HistoryStep): string {
   switch (step.kind) {
@@ -834,14 +814,6 @@ function pipelineFilters(entries: HistoryEntry[]): PipelineFilter[] {
   }
   const bolts = [...byKey.values()].sort((left, right) => (left.workspaceName ?? "").localeCompare(right.workspaceName ?? "") || (left.bolt ?? "").localeCompare(right.bolt ?? ""));
   return [{ key: "all", count: entries.length }, ...bolts];
-}
-
-function Mark({ ok, skipped, running, waiting, interrupted, glyphs }: { ok: boolean; skipped?: boolean | undefined; running?: boolean | undefined; waiting?: boolean | undefined; interrupted?: boolean | undefined; glyphs: Glyphs }) {
-  if (running) return <Text color="cyan">{glyphs.dot}</Text>;
-  if (waiting) return <Text dimColor>{glyphs.pending}</Text>;
-  if (skipped) return <Text dimColor>{glyphs.skip}</Text>;
-  if (interrupted) return <Text color="yellow">!</Text>;
-  return ok ? <Text color="green">{glyphs.ok}</Text> : <Text color="red">{glyphs.fail}</Text>;
 }
 
 function totalMs(entry: HistoryEntry): number {

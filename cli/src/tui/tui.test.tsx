@@ -157,7 +157,7 @@ describe("the TUI", () => {
       expect(list).toBeGreaterThan(-1);
       expect(details).toBeGreaterThan(frame.indexOf("Work on web"));
       expect(frame.slice(list, details)).toContain("╰");
-      expect(frame).toContain("When you run it, it will:");
+      expect(frame).toMatch(/When you run it, (it will|these \d+ run at the same time):/);
       expect(frame).toContain("never run yet");
       expect(frame).toContain("from a terminal: wisp api");
     });
@@ -556,7 +556,7 @@ describe("the TUI", () => {
     app.stdin.write(ARROW_DOWN);
     await tick();
     await eventually(() => expect(app.lastFrame()).toContain("Database"));
-    await eventually(() => expect(app.lastFrame()).toContain("not allowed yet — t"));
+    await eventually(() => expect(app.lastFrame()).toContain("not trusted yet — t"));
   });
 
   it("searches across every workspace and runs the hit", async () => {
@@ -831,8 +831,52 @@ describe("the TUI", () => {
     });
     const app = render(<App services={services({}, { reads: [shop], here: shop.workspace.file, unreadable: [] })} glyphs={unicode} size={{ columns: 100, rows: 30 }} />);
     await eventually(() => expect(app.lastFrame()).toContain("order  Database ──▶ Work on web"));
+    await tick();
+    app.stdin.write("v");
     await eventually(() => expect(app.lastFrame()).toMatch(/ 1\. ⚡ ?Database[\s\S]* {4}1\. start Docker services: db[\s\S]* 2\. start web +after db[\s\S]*pnpm dev · in apps\/web · restarted if it crashes[\s\S]* 3\. wait until port 3000 is open +after web[\s\S]* 4\. open/));
     await eventually(() => expect(app.lastFrame()).not.toContain("v view"));
+  });
+
+  it("draws a pipeline's steps as a graph above them, side by side where they run together, and v hides it", async () => {
+    const shop = read("/dev/shop/.wisp.json", {
+      name: "Shop",
+      pipelines: [{ label: "Check", steps: [{ run: "pnpm install", label: "install", finishes: true }, { run: "pnpm lint", label: "lint", finishes: true, after: "install" }, { run: "pnpm test", label: "test", finishes: true, after: "install" }, { run: "pnpm build", label: "build", finishes: true, after: ["lint", "test"] }] }],
+    });
+    const app = render(<App services={services({}, { reads: [shop], here: shop.workspace.file, unreadable: [] })} glyphs={unicode} size={{ columns: 120, rows: 40 }} />);
+    await eventually(() => expect(app.lastFrame()).toMatch(/│ · install │ ──▶ │ · lint │ ──▶ │ · build │/));
+    expect(app.lastFrame()).toMatch(/╭────────╮[^\n]*\n[^\n]*│ · test │/);
+    expect(app.lastFrame()).not.toContain("after install");
+    await tick();
+    app.stdin.write("v");
+    await eventually(() => expect(app.lastFrame()).not.toContain("│ · install │"));
+    expect(app.lastFrame()).toMatch(/2\. run lint +after install/);
+  });
+
+  it("draws no graph for steps that all run at once, and says so above them", async () => {
+    const shop = read("/dev/shop/.wisp.json", {
+      name: "Shop",
+      pipelines: [{ label: "Check", steps: [{ run: "docker info", label: "docker", finishes: true }, { run: "./variants.sh", label: "variants", finishes: true }, { run: "./tools.sh", label: "tools", finishes: true }] }],
+    });
+    const app = render(<App services={services({}, { reads: [shop], here: shop.workspace.file, unreadable: [] })} glyphs={unicode} size={{ columns: 120, rows: 40 }} />);
+    await eventually(() => expect(app.lastFrame()).toContain("When you run it, these 3 run at the same time:"));
+    expect(app.lastFrame()).not.toContain("│ · docker │");
+    expect(app.lastFrame()).toMatch(/1\. run docker[\s\S]*1\. run variants[\s\S]*1\. run tools/);
+  });
+
+  it("keeps a big pipeline's graph to part of the box: one line a step, then +N more, and its commands still show", async () => {
+    const many = Array.from({ length: 12 }, (_, at) => ({ run: `./check-${at + 1}.sh`, label: `check ${at + 1}`, finishes: true, after: "setup" }));
+    const shop = read("/dev/shop/.wisp.json", {
+      name: "Shop",
+      pipelines: [{ label: "Audit", steps: [{ run: "./setup.sh", label: "setup", finishes: true }, ...many, { run: "./report.sh", label: "report", finishes: true, after: many.map((step) => step.label) }] }],
+    });
+    const app = render(<App services={services({}, { reads: [shop], here: shop.workspace.file, unreadable: [] })} glyphs={unicode} size={{ columns: 120, rows: 40 }} />);
+    await eventually(() => expect(app.lastFrame()).toMatch(/· setup ──▶ · check 1 +──▶ · report/));
+    const frame = app.lastFrame() ?? "";
+    expect(frame).not.toContain("╭─────────╮");
+    expect(frame).toMatch(/│ +\+4 more +│/);
+    expect(frame).not.toContain("check 12");
+    expect(frame).toMatch(/1\. run setup/);
+    expect(frame).toContain("./setup.sh");
   });
 
   it("keeps a step that isn't allowed yet where the file has it, numbered by what it waits for", async () => {
@@ -848,10 +892,12 @@ describe("the TUI", () => {
       "untrusted",
     );
     const app = render(<App services={services({}, { reads: [shop], here: shop.workspace.file, unreadable: [] })} glyphs={unicode} size={{ columns: 100, rows: 30 }} />);
-    await eventually(() => expect(app.lastFrame()).toContain("When you run it, it will:"));
-    await eventually(() => expect(app.lastFrame()).toMatch(/start Docker services from docker-com.* +not allowed yet — t │/));
+    await eventually(() => expect(app.lastFrame()).toMatch(/When you run it, (it will|these \d+ run at the same time):/));
+    await eventually(() => expect(app.lastFrame()).toMatch(/start Docker services from docker-com.* +not trusted yet — t │/));
     await eventually(() => expect(app.lastFrame()).not.toContain("Docker services: Docker services"));
-    await eventually(() => expect(app.lastFrame()).toMatch(/ 1\. ⚡ ?Database[\s\S]* {4}1\. open[\s\S]* 2\. start web +after db +not allowed yet[\s\S]*pnpm dev[\s\S]* 3\. wait until port 3000 is open +after web[\s\S]* 4\. open http:\/\/localhost:3000 +after up/));
+    await tick();
+    app.stdin.write("v");
+    await eventually(() => expect(app.lastFrame()).toMatch(/ 1\. ⚡ ?Database[\s\S]* {4}1\. open[\s\S]* 2\. start web +after db +not trusted yet[\s\S]*pnpm dev[\s\S]* 3\. wait until port 3000 is open +after web[\s\S]* 4\. open http:\/\/localhost:3000 +after up/));
   });
 
   it("shows a pipeline's problems on its row and in its box, and the file's in the header, without a check to run", async () => {
@@ -1190,7 +1236,7 @@ describe("commands that finish, down and history in the TUI", () => {
     await eventually(() => expect(app.lastFrame()).not.toContain("When you run it"));
     await tick();
     app.stdin.write("\u001B");
-    await eventually(() => expect(app.lastFrame()).toContain("When you run it, it will:"));
+    await eventually(() => expect(app.lastFrame()).toMatch(/When you run it, (it will|these \d+ run at the same time):/));
     await eventually(() => expect(app.lastFrame()).not.toContain("All done."));
   });
 
@@ -1201,7 +1247,7 @@ describe("commands that finish, down and history in the TUI", () => {
     await eventually(() => expect(app.lastFrame()).toContain("All done."));
     await tick();
     app.stdin.write("\r");
-    await eventually(() => expect(app.lastFrame()).toContain("When you run it, it will:"));
+    await eventually(() => expect(app.lastFrame()).toMatch(/When you run it, (it will|these \d+ run at the same time):/));
     await eventually(() => expect(run).toHaveBeenCalledTimes(1));
     await tick();
     app.stdin.write("\r");
@@ -1378,6 +1424,26 @@ describe("commands that finish, down and history in the TUI", () => {
       if (!(app.lastFrame() ?? "").includes("Workspaces")) app.stdin.write("1");
       expect(app.lastFrame()).toContain("Workspaces");
     });
+  });
+
+  it("hides and shows a run's graph with v", async () => {
+    const step = (label: string, stage: number) => ({ kind: "command" as const, label, value: label, ok: true, durationMs: 500, finishes: true, stage });
+    const entry: HistoryEntry = { id: "5a6b7c8d9e0f", number: 2, workspace: acme.workspace.file, workspaceName: "Acme", bolt: "Check", startedAt: new Date(Date.now() - 60_000).toISOString(), finishedAt: new Date().toISOString(), ok: true, steps: [step("install", 1), step("lint", 2), step("test", 2), step("build", 3)] };
+    const app = render(<App services={services({ history: async () => [entry] })} glyphs={unicode} size={{ columns: 130, rows: 34 }} />);
+    await tick();
+    app.stdin.write("h");
+    await eventually(() => expect(app.lastFrame()).toContain("Check #2"));
+    await tick();
+    app.stdin.write("\r");
+    await eventually(() => expect(app.lastFrame()).toMatch(/│ ✓ install 500ms │ ──▶ │ ✓ lint 500ms │/));
+    await eventually(() => expect(app.lastFrame()).toContain("v hide graph"));
+    await tick();
+    app.stdin.write("v");
+    await eventually(() => expect(app.lastFrame()).not.toContain("│ ✓ install 500ms │"));
+    expect(app.lastFrame()).toContain("v show graph");
+    await tick();
+    app.stdin.write("v");
+    await eventually(() => expect(app.lastFrame()).toContain("│ ✓ install 500ms │"));
   });
 
   it("says on a run's page where its notification went, and that it didn't arrive", async () => {
