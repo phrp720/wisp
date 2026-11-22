@@ -1,7 +1,7 @@
 import { recordProject } from "../../core/config.js";
 import { listHistory, type HistoryEntry } from "../../core/history.js";
 import { WispError } from "../../core/errors.js";
-import { matchPipeline, planRetry, resolvePipeline, runPlan, stagesOf, switchToWorkspace, type PlannedStep } from "../../core/run/index.js";
+import { matchPipeline, planRetry, resolvePipeline, runPlan, switchToWorkspace, type PlannedStep } from "../../core/run/index.js";
 import { beforeRun } from "../lib/ask.js";
 import type { RunMode, SwitchOptions, SwitchResult, SwitchTarget, TargetResult, Workspace } from "../../core/types.js";
 import { bold, cyan, dim, green, kindLabel, plural, red, title, yellow } from "../lib/format.js";
@@ -272,7 +272,6 @@ function formatMs(ms: number): string {
 }
 
 function printPlan(plan: PlannedStep[], targets: TargetResult[]): void {
-  const stages = stagesOf(plan);
   const bolts = new Set(plan.map((step) => `${step.workspace.file}#${step.bolt}`));
   let heading: string | undefined;
   targets.forEach((target, at) => {
@@ -283,6 +282,6 @@ function printPlan(plan: PlannedStep[], targets: TargetResult[]): void {
       console.log(`  ${dim("⚡")}${bold(step.bolt)}${step.target.workspace ? dim(` (${step.target.workspace})`) : ""}`);
     }
     const after = target.after ? dim(` · after ${target.after.join(", ")}`) : "";
-    console.log(`${indent}${dim(String(stages[at]).padStart(3))}${resultLine(target).slice(1)}${after}`);
+    console.log(`${indent}${dim(String(at + 1).padStart(3))}${resultLine(target).slice(1)}${after}`);
   });
 }

@@ -185,7 +185,7 @@ describe("a pipeline with inputs", () => {
 });
 
 describe("a dry run of steps that wait for others", () => {
-  it("numbers them by when they can start, says what each waits for, and heads each pipeline", async () => {
+  it("numbers them in order, as history does, says what each waits for, and heads each pipeline", async () => {
     const mine = join(dir, "home", "workspaces", "Checks.json");
     await mkdir(join(dir, "home", "workspaces"), { recursive: true });
     await writeFile(
@@ -204,8 +204,8 @@ describe("a dry run of steps that wait for others", () => {
     expect(lines[at("⚡Database")]).toBe("  ⚡Database");
     expect(lines[at("db — true")]).toMatch(/^ {4}1 ✓ run +db/);
     expect(lines[at("⚡Check")]).toBe("  ⚡Check");
-    expect(lines[at("lint — true")]).toMatch(/^ {4}2 ✓ run +lint/);
-    expect(lines[at("test — true")]).toMatch(/^ {4}2 ✓ run +test/);
-    expect(lines[at("build — true")]).toMatch(/^ {4}3 ✓ run +build.* · after lint, test$/);
+    expect(lines[at("lint — true")]).toMatch(/^ {4}2 ✓ run +lint.* · after db$/);
+    expect(lines[at("test — true")]).toMatch(/^ {4}3 ✓ run +test.* · after db$/);
+    expect(lines[at("build — true")]).toMatch(/^ {4}4 ✓ run +build.* · after lint, test$/);
   });
 });

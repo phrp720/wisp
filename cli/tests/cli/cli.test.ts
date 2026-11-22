@@ -2,11 +2,12 @@ import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { Command } from "commander";
 import { describe, expect, it, vi } from "vitest";
 
 import { withImplicitUse } from "../../src/cli/lib/argv.js";
 import { COMMANDS, verbs } from "../../src/cli/lib/commands.js";
-import { fail, usageErrorJson } from "../../src/cli/lib/define.js";
+import { fail, register, usageErrorJson } from "../../src/cli/lib/define.js";
 import { WispError } from "../../src/core/errors.js";
 import { COMMAND_WORDS, shortest } from "../../src/cli/lib/render.js";
 import { SPEC } from "../../src/cli/spec.js";
@@ -28,6 +29,10 @@ describe("withImplicitUse", () => {
     expect(withImplicitUse(argv("help", "use"), commands)).toEqual(argv("help", "use"));
   });
 
+  it("reads `wisp help all` as the help with every command", () => {
+    expect(withImplicitUse(argv("help", "all"), commands)).toEqual(argv("--help"));
+  });
+
   it("reads bare `wisp --json` as `wisp status --json`", () => {
     expect(withImplicitUse(argv("--json"), commands)).toEqual(argv("status", "--json"));
     expect(withImplicitUse(argv("list", "--json"), commands)).toEqual(argv("list", "--json"));
@@ -37,6 +42,26 @@ describe("withImplicitUse", () => {
     expect(withImplicitUse(argv("list"), commands)).toEqual(argv("list"));
     expect(withImplicitUse(argv("--help"), commands)).toEqual(argv("--help"));
     expect(withImplicitUse(argv(), commands)).toEqual(argv());
+  });
+});
+
+describe("wisp --help", () => {
+  const help = (showAll: boolean) => {
+    const program = new Command("wisp");
+    for (const command of COMMANDS) register(program, command, showAll);
+    return program.helpInformation();
+  };
+
+  it("keeps the setup commands out of the everyday help", () => {
+    expect(help(false)).toContain("history");
+    expect(help(false)).not.toContain("open-with");
+    expect(help(false)).not.toContain("Setup:");
+  });
+
+  it("lists them under Setup with `wisp help all`", () => {
+    expect(help(true)).toContain("Setup:");
+    expect(help(true)).toContain("open-with");
+    expect(help(true)).toContain("completion");
   });
 });
 

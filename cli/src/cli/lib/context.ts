@@ -6,7 +6,7 @@ import { expandHome } from "../../core/paths.js";
 import { PROJECT_FILE, findProjectFile, readProjectFile } from "../../core/project/index.js";
 import { matchPipeline } from "../../core/run/index.js";
 import type { WorkspaceRead } from "../../core/types.js";
-import { discoverWorkspaces, matchWorkspace, resolveWorkspace, slugify, pipelineSlug } from "../../core/workspaces.js";
+import { closePipelines, discoverWorkspaces, matchWorkspace, resolveWorkspace, slugify, pipelineSlug } from "../../core/workspaces.js";
 
 /**
  * Every workspace Wisp knows, plus the project you are standing in if it is not known
@@ -102,8 +102,7 @@ async function noPipelineHere(word: string, here: WorkspaceRead | undefined): Pr
   const workspace = matchWorkspace(word, others).match;
   const elsewhere = pipelinesEverywhere(word, others);
 
-  const typed = slugify(word);
-  const close = typed ? (here?.workspace.bolts ?? []).filter((entry) => pipelineSlug(entry).split("-").some((part) => part.startsWith(typed))) : [];
+  const close = closePipelines(here?.workspace.bolts ?? [], word);
 
   const said = here
     ? `${here.workspace.name} has no pipeline called "${word}".`

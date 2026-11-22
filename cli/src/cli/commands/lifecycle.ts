@@ -108,6 +108,14 @@ export const history: CommandDef<{ all?: boolean; log?: string; clear?: boolean;
 
     const here = options.all ? undefined : await maybeProject();
     const entries = await currentNames(await listHistory({ ...(here ? { workspace: here.workspace.file } : {}), ...(query ? { bolt: query } : {}) }));
+
+    if (entries.length === 0 && query && !(await isPipelineName(query, here))) {
+      throw new WispError(
+        `No run or pipeline called "${query}"`,
+        "NOT_FOUND",
+        "A run is the id `wisp history` lists, like 3f2a1b. A step's output is `wisp history <run> --log <step>`.",
+      );
+    }
     if (options.json) return emitJson(entries.map(publicRun));
 
     if (entries.length === 0) {
@@ -178,6 +186,11 @@ async function clearHistory(query: string | undefined, options: { all?: boolean;
   const what = one ? `run ${one.id}` : bolt ? `the runs of "${bolt}"` : here ? `${here.workspace.name}'s runs` : "every run";
   console.log(removed.length > 0 ? `${green("✓")} cleared ${plural(removed.length, "run")} ${dim(`(${what})`)}` : dim(`Nothing to clear (${what}).`));
   if (running.length > 0) console.log(dim(`  kept ${plural(running.length, "run")} still going`));
+}
+
+async function isPipelineName(query: string, here: WorkspaceRead | undefined): Promise<boolean> {
+  const reads = here ? [here] : await everything().catch(() => []);
+  return reads.some((read) => matchPipeline(read.workspace, query).candidates.length > 0 || read.workspace.bolts.some((bolt) => bolt.label.toLowerCase().includes(query.trim().toLowerCase())));
 }
 
 async function currentNames(entries: HistoryEntry[]): Promise<HistoryEntry[]> {

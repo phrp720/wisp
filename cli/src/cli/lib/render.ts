@@ -1,7 +1,7 @@
 import { dirname } from "node:path";
 import { tildify } from "../../core/paths.js";
 import type { RunStatus } from "../../core/system/processes.js";
-import { pipelineStatus, collectPipelineTargets, collectDownTargets, stagesOfTargets } from "../../core/run/index.js";
+import { pipelineStatus, collectPipelineTargets, collectDownTargets } from "../../core/run/index.js";
 import type { Pipeline, Diagnostic, SwitchTarget, Withheld, Workspace, WorkspaceRead } from "../../core/types.js";
 import { hasWords, slugify, pipelineSlug } from "../../core/workspaces.js";
 import { bold, cyan, dim, green, kindLabel, plural, red, yellow } from "./format.js";
@@ -57,9 +57,8 @@ export function printPipelines(workspace: Workspace, expand = false, withheld: W
     console.log(`  ${upMark(workspace, bolt, runs)}${bold(bolt.label)} ${cyan(pipelineSlug(bolt))} ${size}${asks}${note}`);
     if (bolt.notes) console.log(`    ${dim(bolt.notes)}`);
     if (!expand) continue;
-    const stages = stagesOfTargets(steps);
     steps.forEach((step, at) => {
-      console.log(`  ${dim(String(stages[at]).padStart(3))} ${dim(kindLabel(step.kind))} ${step.label}${step.after ? dim(` · after ${step.after.join(", ")}`) : ""}`);
+      console.log(`  ${dim(String(at + 1).padStart(3))} ${dim(kindLabel(step.kind))} ${step.label}${step.after ? dim(` · after ${step.after.join(", ")}`) : ""}`);
     });
     for (const item of waiting) console.log(`    ${dim(kindLabel(item.kind))} ${dim(item.label)} ${yellow("(not trusted)")}`);
     const down = collectDownTargets(workspace, bolt);

@@ -23,13 +23,13 @@ export interface CommandDef<Options = Record<string, never>> {
    * Where `wisp --help` lists it. Everyday commands come first and alone, so the help
    * answers "what do I type" before it answers "what else is there".
    */
-  group?: "everyday" | "more";
+  group?: "everyday" | "more" | "setup";
   run: (args: string[], options: Options) => Promise<void>;
 }
 
-export function register<Options>(program: Command, def: CommandDef<Options>): Command {
+export function register<Options>(program: Command, def: CommandDef<Options>, showAll = false): Command {
   const command = new Command(def.name).description(def.summary);
-  command.helpGroup(def.group === "everyday" ? "Everyday:" : "More:");
+  command.helpGroup(def.group === "everyday" ? "Everyday:" : def.group === "setup" ? "Setup:" : "More:");
 
   for (const alias of def.aliases ?? []) command.alias(alias);
   for (const [name, description] of def.args ?? []) command.argument(name, description);
@@ -58,7 +58,7 @@ export function register<Options>(program: Command, def: CommandDef<Options>): C
     }
   });
 
-  program.addCommand(command);
+  program.addCommand(command, { hidden: def.group === "setup" && !showAll });
   return command;
 }
 

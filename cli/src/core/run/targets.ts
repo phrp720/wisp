@@ -2,7 +2,7 @@ import { basename } from "node:path";
 
 import { WispError } from "../errors.js";
 import { describeWait } from "../system/wait.js";
-import { hasWords, slugify, pipelineSlug } from "../workspaces.js";
+import { closePipelines, hasWords, slugify, pipelineSlug } from "../workspaces.js";
 import type { AssetBase, Pipeline, PipelineStep, SwitchTarget, TargetKind, Workspace } from "../types.js";
 
 /**
@@ -81,9 +81,13 @@ export function resolvePipeline(workspace: Workspace, ref: string): Pipeline {
 
   if (workspace.bolts.length === 0) throw new WispError(`${workspace.name} has no pipelines yet`, "NOT_FOUND");
 
+  const close = closePipelines(workspace.bolts, ref);
   throw new WispError(
-    `${workspace.name} has no pipeline called "${ref}" — it has ${workspace.bolts.map((match) => match.label).join(", ")}`,
+    close.length > 0
+      ? `${workspace.name} has no pipeline called "${ref}". Did you mean ${close.map((match) => `"${match.label}"`).join(", ")}?`
+      : `${workspace.name} has no pipeline called "${ref}" — it has ${workspace.bolts.map((match) => match.label).join(", ")}`,
     "NOT_FOUND",
+    close.length > 0 ? "" : undefined,
   );
 }
 

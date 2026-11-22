@@ -5,7 +5,7 @@ import { securePrivateFolders } from "../core/paths.js";
 import { status } from "./commands/status.js";
 import { dim } from "./lib/format.js";
 import { withImplicitUse } from "./lib/argv.js";
-import { COMMANDS, verbs } from "./lib/commands.js";
+import { COMMANDS, setupCommands, verbs } from "./lib/commands.js";
 import { fail, register, reportUsageErrorsAsJson } from "./lib/define.js";
 import { quietOnClosedPipe } from "./lib/pipes.js";
 import { VERSION } from "./version.js";
@@ -40,7 +40,8 @@ function interactive(): boolean {
   return Boolean(process.stdin.isTTY && process.stdout.isTTY);
 }
 
-for (const command of COMMANDS) register(program, command);
+const helpAll = process.argv[2] === "help" && process.argv[3] === "all";
+for (const command of COMMANDS) register(program, command, helpAll);
 
 // The plain-text view the TUI replaces, for when you want it at a terminal anyway.
 program
@@ -64,7 +65,7 @@ ${dim("  wisp            open the dashboard: every workspace, its pipelines, ⏎
 ${dim("  wisp api        run its api pipeline")}
 ${dim("  wisp init       give a project a .wisp.json")}
 
-${dim("AI agents: run `wisp help agents` for the full reference. Most commands take --json.")}
+${helpAll ? "" : `${dim(`More commands: \`wisp help all\` adds ${setupCommands().join(", ")}.`)}\n`}${dim("AI agents: run `wisp help agents` for the full reference. Most commands take --json.")}
 
 ${dim("Wisp, as in will-o'-the-wisp: the little light that leads the way.")}
 `,

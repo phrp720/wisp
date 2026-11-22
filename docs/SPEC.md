@@ -213,7 +213,7 @@ under "Runs code" and ask them to approve it.**
 | `wisp <pipeline>` | run a pipeline of this project, and only this project, by its label, slug or a whole word of it. Not a pipeline here: exit 1, `NO_PIPELINE`, and the message names what to type. Ambiguous: exit 1, `AMBIGUOUS` |
 | `wisp <workspace> <pipeline>` | run a pipeline of any known workspace, from any folder |
 | `wisp use <file> <pipeline>` | run a pipeline of a workspace file by path, for cron and scripts. `use` is implied above; say it for a pipeline named like a command (`wisp use list`) |
-| `wisp pick [workspace]` | at a terminal, choose a pipeline from a list and run it; without one (or with `--json`) it asks nothing and prints what `wisp show` would |
+| `wisp pick [workspace]` | at a terminal, choose a pipeline from a list and run it; without one it asks nothing, prints what `wisp show` would and exits 1 because nothing ran; with `--json` it prints that list as JSON and exits 0 |
 | `wisp init [--print] [--yes] [--only <pipelines>] [--empty] [--name <name>]` | write a `.wisp.json` from what the project has, at its root and one folder down: package.json and Deno; Python (Django, FastAPI, Flask, pytest, ruff, uv, poetry); Gradle and Maven (Spring Boot); Go; Rust; Rails; PHP and Laravel; .NET; Elixir and Phoenix; docker compose, Makefile, justfile, mise, Taskfile, Procfile. `--only "Check,Work on api"` keeps just those of the suggested pipelines |
 | `wisp init --personal --name <name> [--json]` | create an empty personal workspace, for what belongs to no repository; prints its file |
 | `wisp check [path] [--json]` | validate a file, or the one in a folder: errors, warnings, what would run |
@@ -231,6 +231,7 @@ under "Runs code" and ask them to approve it.**
 | `wisp doctor [--json]` | what works here, and where files live |
 | `wisp completion [zsh\|bash\|fish] [--install]` | tab completion for workspaces, pipelines and commands (for the user to set up) |
 | `wisp help agents` · `wisp spec` | this reference |
+| `wisp help all` | the help with every command, the setup ones included |
 
 Run flags: `--dry-run` (show what would happen and where, change nothing), `--inline`
 (run commands attached, output here), `--detach` (run commands in the background),

@@ -69,6 +69,12 @@ describe("one word", () => {
     await expect(refused).rejects.toThrow("Wisp has no pipeline called \"doc\". Did you mean `wisp documentation`, `wisp document`?");
   });
 
+  it("suggests a pipeline for a typo, or for the start of its slug", async () => {
+    standIn(wisp);
+    await expect(resolveRun("documantation", undefined, undefined)).rejects.toThrow("Did you mean `wisp documentation`?");
+    await expect(resolveRun("work-on-th", undefined, undefined)).rejects.toThrow("Did you mean `wisp work-on-the-cli`?");
+  });
+
   it("never runs another project's pipeline, and says how to", async () => {
     standIn(wisp);
     const refused = resolveRun("deploy", undefined, undefined);
@@ -114,6 +120,15 @@ describe("wisp pick without a terminal", () => {
       ["documentation", ""],
       ["document", ""],
     ]);
+  });
+
+  it("says nothing ran, and exits 1, when it is not asked for JSON", async () => {
+    standIn(outside);
+    const said = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    await pick.run(["wisp"], {});
+    expect(printed.join("\n")).toContain("work-on-the-cli");
+    expect(said.mock.calls.flat().join(" ")).toContain("Nothing ran: choosing needs a terminal");
+    expect(process.exitCode).toBe(1);
   });
 
   it("lists the workspaces when it is not in one and none was named", async () => {

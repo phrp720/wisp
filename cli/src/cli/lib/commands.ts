@@ -29,21 +29,25 @@ export const COMMANDS: CommandDef<never>[] = [
   restart,
   history,
   show,
-  rename,
   check,
-  hook,
   ps,
   logs,
   stop,
-  scan,
-  openWith,
-  notify,
-  doctor,
-  completion,
-  spec,
+  { ...rename, group: "setup" },
+  { ...hook, group: "setup" },
+  { ...scan, group: "setup" },
+  { ...openWith, group: "setup" },
+  { ...notify, group: "setup" },
+  { ...doctor, group: "setup" },
+  { ...completion, group: "setup" },
+  { ...spec, group: "setup" },
 ] as CommandDef<never>[];
 
 /** Every word that means a command, aliases included — what `wisp <word>` must not shadow. */
+export function setupCommands(commands: CommandDef<never>[] = COMMANDS): string[] {
+  return commands.filter((command) => command.group === "setup").map((command) => command.name);
+}
+
 export function verbs(commands: CommandDef<never>[] = COMMANDS): Set<string> {
   const names = new Set<string>(["help", "status"]);
   for (const command of commands) {

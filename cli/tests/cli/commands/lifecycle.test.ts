@@ -65,6 +65,20 @@ describe("wisp history", () => {
   });
 });
 
+describe("wisp history <word>", () => {
+  it("refuses a word that is neither a run nor a pipeline, and says what a run is", async () => {
+    vi.spyOn(process, "cwd").mockReturnValue(dir);
+    await expect(history.run(["1"], {})).rejects.toMatchObject({ code: "NOT_FOUND", message: 'No run or pipeline called "1"' });
+  });
+
+  it("says a pipeline has not run yet", async () => {
+    await writeFile(file, JSON.stringify({ name: "Shop", pipelines: [{ label: "Check", steps: [] }, { label: "Deploy", steps: [] }] }));
+    vi.spyOn(process, "cwd").mockReturnValue(dir);
+    await history.run(["deploy"], {});
+    expect(printed.join("\n")).toContain('No runs of "deploy" yet.');
+  });
+});
+
 describe("wisp history --clear", () => {
   it("clears one pipeline's finished runs in this project, and keeps the one still going", async () => {
     vi.spyOn(process, "cwd").mockReturnValue(dir);

@@ -45,6 +45,23 @@ function recorder(): Platform & { calls: string[] } {
 const desktop: Environment = { os: "darwin", gui: true, ssh: false };
 const server: Environment = { os: "linux", gui: false, ssh: true };
 
+describe("resolvePipeline, for a name it does not know", () => {
+  const ws = workspace({ name: "Shop", pipelines: [{ label: "Check everything", steps: [] }, { label: "Deploy", steps: [] }] });
+
+  it("suggests the pipeline a name starts", () => {
+    expect(() => resolvePipeline(ws, "check-every")).toThrow('Shop has no pipeline called "check-every". Did you mean "Check everything"?');
+  });
+
+  it("suggests the pipeline a typo was meant to be", () => {
+    expect(() => resolvePipeline(ws, "chek")).toThrow('Did you mean "Check everything"?');
+    expect(() => resolvePipeline(ws, "dpeloy")).toThrow('Did you mean "Deploy"?');
+  });
+
+  it("lists them all when nothing is close", () => {
+    expect(() => resolvePipeline(ws, "zebra")).toThrow("it has Check everything, Deploy");
+  });
+});
+
 describe("matchPipeline", () => {
   const ws = workspace({
     pipelines: [{ label: "Work on core" }, { label: "Work on the app" }, { label: "Work on the CLI" }],

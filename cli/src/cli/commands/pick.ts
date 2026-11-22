@@ -34,8 +34,13 @@ export const pick: CommandDef<PickOptions> = {
     const terminal = Boolean(process.stdin.isTTY && process.stdout.isTTY) && !options.json;
 
     if (!terminal) {
-      if (read) return show.run([read.workspace.file], { json: options.json ?? false });
-      return list.run([], { json: options.json ?? false });
+      if (read) await show.run([read.workspace.file], { json: options.json ?? false });
+      else await list.run([], { json: options.json ?? false });
+      if (!options.json) {
+        console.error(dim(read ? "Nothing ran: choosing needs a terminal. Run one with `wisp <pipeline>`." : "Nothing ran: choosing needs a terminal. Run one with `wisp <workspace> <pipeline>`."));
+        process.exitCode = 1;
+      }
+      return;
     }
 
     if (!read) {

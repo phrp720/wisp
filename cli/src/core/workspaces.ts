@@ -142,6 +142,39 @@ export function hasWords(name: string, needle: string): boolean {
   return false;
 }
 
+export function closePipelines<T extends { label: string; slug?: string | undefined }>(bolts: T[], word: string): T[] {
+  const typed = slugify(word);
+  if (!typed) return [];
+  const allowed = typed.length <= 3 ? 0 : typed.length <= 6 ? 1 : 2;
+  const startsLike = (bolt: T) => {
+    const parts = pipelineSlug(bolt).split("-");
+    return parts.some((_, at) => parts.slice(at).join("-").startsWith(typed));
+  };
+  const spelledLike = (bolt: T) => {
+    const slug = pipelineSlug(bolt);
+    return allowed > 0 && [slug, ...slug.split("-")].some((part) => typoDistance(part, typed) <= allowed);
+  };
+  const started = bolts.filter(startsLike);
+  return started.length > 0 ? started : bolts.filter(spelledLike);
+}
+
+function typoDistance(a: string, b: string): number {
+  if (Math.abs(a.length - b.length) > 2) return Number.POSITIVE_INFINITY;
+  const rows = Array.from({ length: a.length + 1 }, (_, i) => Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)));
+  for (let i = 1; i <= a.length; i += 1) {
+    for (let j = 1; j <= b.length; j += 1) {
+      const row = rows[i] as number[];
+      const up = rows[i - 1] as number[];
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      row[j] = Math.min((up[j] as number) + 1, (row[j - 1] as number) + 1, (up[j - 1] as number) + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+        row[j] = Math.min(row[j] as number, ((rows[i - 2] as number[])[j - 2] as number) + 1);
+      }
+    }
+  }
+  return (rows[a.length] as number[])[b.length] as number;
+}
+
 export const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export function pipelineSlug(bolt: { label: string; slug?: string | undefined }): string {
