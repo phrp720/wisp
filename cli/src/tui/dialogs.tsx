@@ -23,7 +23,7 @@ export function TrustPanel({ read, then, glyphs, height, onAnswer }: { read: Wor
       <Text>{`It would be allowed to run ${read.withheld.length} thing${read.withheld.length === 1 ? "" : "s"}:`}</Text>
       {windowed(read.withheld, 0, height - 12).items.map((item) => (
         <Text key={item.id} wrap="truncate-end">
-          <Text dimColor>{`  ${KIND[item.kind].padEnd(6)} `}</Text>
+          <Text dimColor>{`  ${KIND[item.kind].padEnd(8)} `}</Text>
           <Text color="cyan">{tildify(item.value)}</Text>
           {item.cwd && item.cwd !== read.workspace.file.replace(/\/[^/]+$/, "") ? <Text dimColor>{` in ${tildify(item.cwd)}`}</Text> : null}
           {item.reason ? <Text dimColor>{` (${item.reason})`}</Text> : null}
@@ -142,7 +142,7 @@ export function SetupPanel({ suggestion, glyphs, height, onAnswer }: { suggestio
       <Text dimColor>It's saved as .wisp.json in this folder, and you can change all of it afterwards with e.</Text>
       <Box>
         <Box ref={button}>
-          <Text color={count > 0 ? "black" : undefined} backgroundColor={count > 0 ? TONE.accent : undefined} bold dimColor={count === 0}>{count > 0 ? ` ▸ ${count === 1 ? (suggestion.bolts.length === 1 ? "Set up this bolt" : "Set up 1 bolt") : count === suggestion.bolts.length ? `Set up all ${count} bolts` : `Set up ${count} bolts`} ` : " Tick at least one "}</Text>
+          <Text color={count > 0 ? "black" : undefined} backgroundColor={count > 0 ? TONE.accent : undefined} bold dimColor={count === 0}>{count > 0 ? ` ▸ ${count === 1 ? (suggestion.bolts.length === 1 ? "Set up this pipeline" : "Set up 1 pipeline") : count === suggestion.bolts.length ? `Set up all ${count} pipelines` : `Set up ${count} pipelines`} ` : " Tick at least one "}</Text>
         </Box>
         <Box ref={later} marginLeft={1}>
           <Text dimColor>{" [ Not now ] "}</Text>

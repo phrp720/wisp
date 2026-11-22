@@ -59,7 +59,7 @@ interface Options {
 
 export const completion: CommandDef<Options> = {
   name: "completion",
-  summary: "Tab completion for your shell: commands, workspaces and bolts",
+  summary: "Tab completion for your shell: commands, workspaces and pipelines",
   args: [["[shell]", "zsh, bash or fish; omitted, the one you are using"]],
   options: [["--install", "set it up in your shell's config, once"]],
   examples: ["wisp completion --install     # then open a new terminal", "wisp completion zsh           # print the script, to set it up yourself"],

@@ -16,19 +16,19 @@ import { named, resultLine } from "../lib/render.js";
 /** The bolt a lifecycle command means, by the same rules as running one. */
 async function target(first: string | undefined, second: string | undefined): Promise<{ read: WorkspaceRead; bolt: Bolt }> {
   const { read, bolt } = await resolveRun(first, second, undefined);
-  if (!bolt) throw new WispError("Name the bolt: `wisp down api`", "NO_BOLT");
+  if (!bolt) throw new WispError("Name the pipeline: `wisp down api`", "NO_PIPELINE");
   return { read, bolt: resolveBolt(read.workspace, bolt) };
 }
 
 export const down: CommandDef<{ deps?: boolean; dryRun?: boolean; json?: boolean }> = {
   name: "down",
-  summary: "Stop what a bolt started, then run its `down` steps",
+  summary: "Stop what a pipeline started, then run its `down` steps",
   args: [
     ["[workspace]", "workspace name or file; omitted uses this directory's project"],
-    ["[bolt]", "which bolt"],
+    ["[pipeline]", "which pipeline"],
   ],
   options: [
-    ["--deps", "take the bolts it depends on down too"],
+    ["--deps", "take the pipelines it depends on down too"],
     ["-n, --dry-run", "show what would stop, and stop nothing"],
     ["--json", "print the result as JSON"],
   ],
@@ -56,14 +56,14 @@ export const down: CommandDef<{ deps?: boolean; dryRun?: boolean; json?: boolean
 
 export const restart: CommandDef<{ deps?: boolean; yes?: boolean; input?: string[] }> = {
   name: "restart",
-  summary: "Take a bolt down and run it again",
+  summary: "Take a pipeline down and run it again",
   args: [
     ["[workspace]", "workspace name or file; omitted uses this directory's project"],
-    ["[bolt]", "which bolt"],
+    ["[pipeline]", "which pipeline"],
   ],
   options: [
-    ["--deps", "restart the bolts it depends on too"],
-    ["--input <name=value>", "a value the bolt asks for, like --input env=staging; once for each", []],
+    ["--deps", "restart the pipelines it depends on too"],
+    ["--input <name=value>", "a value the pipeline asks for, like --input env=staging; once for each", []],
     ["-y, --yes", "don't ask: answer yes, and take each input's default"],
   ],
   examples: ["wisp restart api"],
@@ -91,11 +91,11 @@ export const restart: CommandDef<{ deps?: boolean; yes?: boolean; input?: string
 export const history: CommandDef<{ all?: boolean; log?: string; clear?: boolean; json?: boolean }> = {
   name: "history",
   summary: "Past runs: what ran, how long it took, what passed — and what each step printed",
-  args: [["[run]", "a run's id for its details, or a bolt name to list its runs"]],
+  args: [["[run]", "a run's id for its details, or a pipeline name to list its runs"]],
   options: [
     ["-a, --all", "every workspace, not only this directory's project"],
     ["--log <step>", "print what one step printed (its number in the details)"],
-    ["--clear", "delete that run, that bolt's runs, or this project's (every project's with --all)"],
+    ["--clear", "delete that run, that pipeline's runs, or this project's (every project's with --all)"],
     ["--json", "print it as JSON"],
   ],
   examples: ["wisp history", "wisp history check", "wisp history 3f2a1b", "wisp history 3f2a1b --log 2", "wisp history check --clear"],
@@ -107,7 +107,7 @@ export const history: CommandDef<{ all?: boolean; log?: string; clear?: boolean;
 
     const here = options.all ? undefined : await maybeProject();
     const entries = await currentNames(await listHistory({ ...(here ? { workspace: here.workspace.file } : {}), ...(query ? { bolt: query } : {}) }));
-    if (options.json) return emitJson(entries);
+    if (options.json) return emitJson(entries.map(publicRun));
 
     if (entries.length === 0) {
       console.log(dim(query ? `No runs of "${query}" yet.` : "Nothing has run yet."));
@@ -134,7 +134,7 @@ async function showEntry(entry: HistoryEntry, options: { log?: string; json?: bo
     process.stdout.write(await readFile(step.log, "utf8").catch(() => ""));
     return;
   }
-  if (options.json) return emitJson(entry);
+  if (options.json) return emitJson(publicRun(entry));
 
   const mark = entry.running ? cyan("running") : entry.interrupted ? yellow("interrupted") : entry.ok ? green("passed") : red("failed");
   const context = [TRIGGERS[entry.trigger ?? ""] ? `from ${TRIGGERS[entry.trigger ?? ""]}` : "", entry.git ? `${entry.git.branch} @ ${entry.git.commit}` : ""].filter(Boolean).join(" · ");
@@ -197,10 +197,10 @@ const MARKER = "# Added by wisp";
 
 export const hook: CommandDef<{ remove?: boolean; list?: boolean; force?: boolean }> = {
   name: "hook",
-  summary: "Run a bolt from a git hook — the checks before every push, say",
+  summary: "Run a pipeline from a git hook — the checks before every push, say",
   args: [
     ["[hook]", `which hook: ${HOOKS.join(", ")}`],
-    ["[bolt]", "the bolt it runs"],
+    ["[pipeline]", "the pipeline it runs"],
   ],
   options: [
     ["--list", "show the hooks Wisp has installed here"],
@@ -238,7 +238,7 @@ export const hook: CommandDef<{ remove?: boolean; list?: boolean; force?: boolea
       return;
     }
 
-    if (!boltRef) throw new WispError(`Say which bolt ${name} runs: \`wisp hook ${name} check\``, "NO_BOLT");
+    if (!boltRef) throw new WispError(`Say which pipeline ${name} runs: \`wisp hook ${name} check\``, "NO_PIPELINE");
     if (existing && !existing.includes(MARKER) && !options.force) {
       throw new WispError(`There is already a ${name} hook, not written by Wisp. --force replaces it`, "HOOK_EXISTS");
     }
@@ -278,4 +278,10 @@ function hooksDir(): string {
     throw new WispError("This is not inside a git repository", "NO_REPOSITORY");
   }
   return isAbsolute(output) ? output : resolve(output);
+}
+
+function publicRun(entry: HistoryEntry): Record<string, unknown> {
+  const { bolt, steps, pending, ...rest } = entry;
+  const step = ({ bolt: group, ...other }: HistoryEntry["steps"][number]) => ({ ...other, ...(group ? { pipeline: group } : {}) });
+  return { ...rest, pipeline: bolt, steps: steps.map(step), ...(pending ? { pending: pending.map(step) } : {}) };
 }

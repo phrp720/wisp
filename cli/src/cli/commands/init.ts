@@ -16,7 +16,7 @@ export const init: CommandDef<{ force?: boolean; yes?: boolean; print?: boolean;
     ["-f, --force", "replace an existing project file"],
     ["-y, --yes", "write it without showing it first"],
     ["--print", "print the draft to stdout and write nothing"],
-    ["--only <bolts>", 'only these of the suggested bolts, comma separated: "Check,Services"'],
+    ["--only <pipelines>", 'only these of the suggested pipelines, comma separated: "Check,Services"'],
   ],
   examples: ["wisp init", "wisp init --print", 'wisp init --only "Check,Work on api"', "wisp init --force"],
 
@@ -52,7 +52,7 @@ export const init: CommandDef<{ force?: boolean; yes?: boolean; print?: boolean;
       const prompt = new Prompter();
       let wanted = true;
       try {
-        wanted = await prompt.confirm("Suggest bolts from what Wisp found?", true);
+        wanted = await prompt.confirm("Suggest pipelines from what Wisp found?", true);
       } catch {
         console.log(dim("Nothing written."));
         return;
@@ -61,7 +61,7 @@ export const init: CommandDef<{ force?: boolean; yes?: boolean; print?: boolean;
       }
       const chosen = wanted
         ? await checklist(
-            "Which bolts should Wisp set up?",
+            "Which pipelines should Wisp set up?",
             suggestion.bolts.map((bolt) => ({ label: bolt.label, hint: bolt.steps.join(", then ") })),
           )
         : [];
@@ -74,10 +74,10 @@ export const init: CommandDef<{ force?: boolean; yes?: boolean; print?: boolean;
       const where = cyan(relative(process.cwd(), draft.file) || draft.file);
       if (chosen.length > 0) {
         console.log(`${green("✓")} wrote ${where} ${dim(`· ${chosen.join(", ")}`)}`);
-        console.log(dim("Next: `wisp trust` to allow its commands, then `wisp` or `wisp <bolt>`. Commit it: your team gets it too."));
+        console.log(dim("Next: `wisp trust` to allow its commands, then `wisp` or `wisp <pipeline>`. Commit it: your team gets it too."));
       } else {
-        console.log(`${green("✓")} wrote ${where} ${dim("· no bolts yet")}`);
-        console.log(dim("Next: open `wisp` and press a to add your first bolt."));
+        console.log(`${green("✓")} wrote ${where} ${dim("· no pipelines yet")}`);
+        console.log(dim("Next: open `wisp` and press a to add your first pipeline."));
       }
       return;
     }

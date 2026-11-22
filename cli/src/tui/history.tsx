@@ -219,7 +219,7 @@ export function HistoryScreen(props: HistoryScreenProps) {
         ? `${forget.detail} · ${ASK_KEYS}`
         : typing
           ? "type to search · ⏎ keep it · esc clear"
-          : [focus === "runs" ? "⏎ open" : "→ runs", "← bolts", "/ search", run && !run.ok && !run.running ? "r retry" : "", "R run again", focus === "runs" ? "D delete" : "D clear", "? keys", "esc"].filter(Boolean).join(" · ");
+          : [focus === "runs" ? "⏎ open" : "→ runs", "← pipelines", "/ search", run && !run.ok && !run.running ? "r retry" : "", "R run again", focus === "runs" ? "D delete" : "D clear", "? keys", "esc"].filter(Boolean).join(" · ");
   useEffect(() => {
     if (help) onHint?.("any key to go back");
     else if (!opened) onHint?.(listHint);
@@ -263,7 +263,7 @@ export function HistoryScreen(props: HistoryScreenProps) {
           History
         </Text>
         <Text> </Text>
-        <Text>Nothing has run yet. Every run of a bolt shows up here — whether it worked, how long each step took, and what it printed — the way a CI shows its runs.</Text>
+        <Text>Nothing has run yet. Every run of a pipeline shows up here — whether it worked, how long each step took, and what it printed — the way a CI shows its runs.</Text>
       </Box>
     );
   }
@@ -275,7 +275,7 @@ export function HistoryScreen(props: HistoryScreenProps) {
     <Box height={height}>
       <Box flexDirection="column" width={sideWidth} flexShrink={0} borderStyle={glyphs.border} borderColor={focus === "bolts" ? TONE.accent : "gray"} paddingX={1} overflow="hidden">
         <Text bold>
-          Bolts
+          Pipelines
         </Text>
         {filterLines(filters, filterIndex, height).map((line) => {
           if (line.kind === "heading") return <Text key={line.key} dimColor wrap="truncate-end">{clip(line.text, sideWidth - 4)}</Text>;
@@ -285,7 +285,7 @@ export function HistoryScreen(props: HistoryScreenProps) {
             <Box key={entry.key}>
               <Box flexGrow={1} minWidth={0}>
                 <Text wrap="truncate-end" inverse={selected && focus === "bolts"} bold={selected}>
-                  {selected ? glyphs.pointer : " "} {clip(entry.bolt ?? "All bolts", sideWidth - 8 - String(entry.count).length)}
+                  {selected ? glyphs.pointer : " "} {clip(entry.bolt ?? "All pipelines", sideWidth - 8 - String(entry.count).length)}
                 </Text>
               </Box>
               <Text dimColor>{`  ${entry.count}`}</Text>
@@ -922,7 +922,7 @@ function noOutput(step: HistoryStep): string {
         : "No output was kept for it — it ran in a window of its own, or before History kept what background commands print. While it runs, Running (p) shows it live.";
     case "wait":
       return step.ok ? `It was ready after ${formatDuration(step.durationMs) || "a moment"}.` : (step.error ?? "It gave up waiting.");
-    case "bolt":
+    case "pipeline":
       return "Its steps are listed above.";
     case "compose":
       return "Docker started the containers — Running (p) shows their logs.";

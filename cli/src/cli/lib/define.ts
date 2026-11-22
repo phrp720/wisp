@@ -82,7 +82,7 @@ export function fail(error: unknown): never {
 /** What to try next, for the failures that have an obvious next thing to try. */
 const HINTS: Record<string, string> = {
   NOT_FOUND: "Run `wisp list` to see what's available.",
-  NO_BOLT: "`wisp show [workspace]` lists the bolts, `wisp pick [workspace]` chooses one.",
+  NO_PIPELINE: "`wisp show [workspace]` lists the pipelines, `wisp pick [workspace]` chooses one.",
   NOT_TRUSTED: "Read what it would run with `wisp check`, then allow it with `wisp trust` (at a terminal). --skip-untrusted runs only the allowed part.",
   CONFIRM_NEEDED: "Ask the person first; then run it again with --yes.",
   AMBIGUOUS: "Name it more precisely.",

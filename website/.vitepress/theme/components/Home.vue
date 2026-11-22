@@ -1,18 +1,16 @@
 <script setup lang="ts">
-import { ComputerTerminal01Icon, ContainerIcon, Copy01Icon, FlashIcon, LaptopIcon, Notification01Icon, ReloadIcon, Tick02Icon } from "@hugeicons/core-free-icons";
+import { AlarmClockIcon, ContainerIcon, Copy01Icon, DashboardSquare01Icon, FlashIcon, Folder01Icon, LaptopIcon, Layers01Icon, ReloadIcon, RoboticIcon, Rocket01Icon, SecurityCheckIcon, ServerStack01Icon, TaskDone01Icon, Tick02Icon, Time04Icon, WorkflowSquare01Icon } from "@hugeicons/core-free-icons";
 import { onMounted, onBeforeUnmount, ref } from "vue";
 
-/** The demo at the top: `wisp api` typed, then each step of the bolt coming up in turn. */
-const command = "wisp api";
+const command = "wisp acme dev";
 const typed = ref("");
 const shown = ref(0);
 const steps = [
-  { mark: "✓", kind: "run", what: "docker compose up db", note: "in the background" },
-  { mark: "✓", kind: "wait", what: "port 5432", note: "ready in 1.4s" },
-  { mark: "✓", kind: "folder", what: "apps/api", note: "opened in your editor" },
-  { mark: "✓", kind: "run", what: "pnpm dev", note: "in the background" },
-  { mark: "✓", kind: "wait", what: "http://localhost:3000", note: "answered in 2.1s" },
-  { mark: "✓", kind: "link", what: "http://localhost:3000", note: "focused its open tab" },
+  { kind: "docker", what: "db", note: "healthy in 1.4s" },
+  { kind: "run", what: "web  pnpm dev", note: "in the background" },
+  { kind: "run", what: "api  pnpm dev", note: "after db, in the background" },
+  { kind: "wait", what: "localhost:3000", note: "answered in 2.1s" },
+  { kind: "link", what: "localhost:5173", note: "after the api and web" },
 ];
 let timers: ReturnType<typeof setTimeout>[] = [];
 function play() {
@@ -28,10 +26,8 @@ function play() {
 onMounted(play);
 onBeforeUnmount(() => timers.forEach(clearTimeout));
 
-/** The ways to install, as tabs: the one that needs nothing first. */
 const installs = [
   { tab: "macOS & Linux", command: "curl -fsSL https://willowisp.dev/install.sh | sh" },
-  // Windows has no one-line installer: it says, in words, the two ways there are.
   { tab: "Windows", command: "" },
   { tab: "npm", command: "npm install -g @squaredasher/wisp" },
 ];
@@ -43,122 +39,201 @@ async function copy(command: string) {
     copied.value = command;
     setTimeout(() => (copied.value = ""), 1600);
   } catch {
-    // No clipboard here: the command is on screen to select by hand.
+    copied.value = "";
   }
 }
 
-/**
- * The features' icons, from Hugeicons (MIT): each one a list of SVG elements, drawn here
- * with their attributes turned from camelCase to the names SVG uses.
- */
 type IconData = readonly (readonly [string, Record<string, unknown>])[];
 const icons: Record<string, IconData> = {
-  needs: FlashIcon as IconData,
+  flow: WorkflowSquare01Icon as IconData,
+  folder: Folder01Icon as IconData,
+  watch: DashboardSquare01Icon as IconData,
+  history: Time04Icon as IconData,
+  nested: FlashIcon as IconData,
   docker: ContainerIcon as IconData,
   restart: ReloadIcon as IconData,
-  notify: Notification01Icon as IconData,
+  asks: SecurityCheckIcon as IconData,
   laptop: LaptopIcon as IconData,
-  tmux: ComputerTerminal01Icon as IconData,
+  agents: RoboticIcon as IconData,
+  stack: Layers01Icon as IconData,
+  checks: TaskDone01Icon as IconData,
+  deploy: Rocket01Icon as IconData,
+  server: ServerStack01Icon as IconData,
+  clock: AlarmClockIcon as IconData,
 };
+
+const kinds = [
+  { kind: "run", label: "command" },
+  { kind: "docker", label: "Docker" },
+  { kind: "wait", label: "wait" },
+  { kind: "link", label: "open" },
+  { kind: "pipeline", label: "another pipeline" },
+];
 function svgAttrs(attrs: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(attrs).filter(([name]) => name !== "key").map(([name, value]) => [name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`), value]));
 }
 
-const more = [
-  { icon: "needs", title: "Bolts in bolts", text: "Your API needs the database? Run the Database bolt as a step: it starts once, however many bolts run it." },
-  { icon: "docker", title: "Docker, without the waiting", text: "Starts your compose services and waits until they're healthy before the next step." },
-  { icon: "restart", title: "Servers that come back", text: "Your dev server crashed? It restarts on its own, and you see that it did." },
-  { icon: "notify", title: "Told when it fails", text: "The nightly backup broke? A notification on your screen, or a message in Slack, Discord or ntfy." },
-  { icon: "laptop", title: "Same file, every laptop", text: "Your teammate on Windows types the same <code>wisp api</code> you do." },
-  { icon: "tmux", title: "On your servers too", text: "SSH in, type <code>wisp restart shop</code>, done. No hunting for where the app lives." },
+const pillars = [
+  { icon: "flow", title: "In parallel, or in order", text: "Steps start together unless they wait for others, like the API for a healthy database." },
+  { icon: "folder", title: "From any folder", text: "<code>wisp acme dev</code> from wherever you are. No <code>cd</code> first." },
+  { icon: "watch", title: "Knows what it started", text: "Servers never start twice, each keeps its log, and <code>wisp down</code> stops it all." },
+  { icon: "history", title: "History of every run", text: "Each run kept like CI, with its commit and output. Retry only what failed." },
 ];
 
+const uses = [
+  { icon: "stack", title: "Bring up a dev stack", flow: [["db:docker"], ["api:run"], ["page:link"]], text: "The database, the API once it's healthy, the web app beside them, then the page. One command stops it all.", link: "/docs/use-cases#bring-up-a-dev-stack" },
+  { icon: "checks", title: "Check before you push", flow: [["lint:run", "types:run", "test:run"], ["build:run"]], text: "Lint, types and tests side by side, then the build. As a git hook, a failure stops the push.", link: "/docs/use-cases#check-before-you-push" },
+  { icon: "deploy", title: "Release and deploy", flow: [["checks:pipeline"], ["deploy:run"], ["health:wait"]], text: "The checks first, then it asks where and asks before it goes. Every deploy's log is kept.", link: "/docs/use-cases#release-and-deploy" },
+  { icon: "server", title: "Run a server", flow: [["pull:run"], ["install:run"], ["restart:run"]], text: "Pull, install, migrate and restart the app, the same way for whoever SSHs in, from whatever folder they land in.", link: "/docs/use-cases#run-a-server" },
+  { icon: "clock", title: "Scheduled jobs", flow: [["dump:run"], ["prune:run"]], text: "Backups and cleanups from cron, stopped if they hang, with a message to Slack or ntfy if they fail.", link: "/docs/use-cases#scheduled-jobs" },
+  { icon: "laptop", title: "Your own machine", flow: [["tunnel:run"], ["port 5433:wait"]], text: "Pipelines outside any repo: an SSH tunnel kept open and ready, the day's tabs and apps.", link: "/docs/use-cases#your-own-machine" },
+];
+
+const more = [
+  { icon: "nested", title: "Shared steps, started once", text: "Run one pipeline inside others. The database starts once, however many need it." },
+  { icon: "docker", title: "Docker, without the waiting", text: "Starts your compose services and moves on once they're healthy." },
+  { icon: "restart", title: "Servers that come back", text: "A crashed server restarts on its own, and you see that it did." },
+  { icon: "asks", title: "Asks when it matters", text: "A deploy can ask where to, and ask before it goes." },
+  { icon: "laptop", title: "Same file, every machine", text: "Works the same on macOS, Linux and Windows, laptop or server." },
+  { icon: "agents", title: "Ready for agents", text: "Every command takes <code>--json</code>, and agents can't approve their own commands." },
+];
 </script>
 
 <template>
   <div class="home">
-    <!-- The demo -->
     <section class="wrap demo-wrap">
-      <div class="terminal" aria-label="A terminal running wisp api">
-        <div class="bar"><span /><span /><span /><em>from any folder</em></div>
-        <pre><span class="dim">$ </span>{{ typed }}<span v-if="shown === 0" class="caret">▍</span>
-<template v-if="shown > 0"><span class="dim">running</span> 🏢 Acme · <b>Work on api</b>
-</template><template v-for="(step, at) in steps.slice(0, shown)" :key="at"><span class="ok">  {{ step.mark }}</span> <span class="dim">{{ step.kind.padEnd(6) }}</span> {{ step.what }} <span class="dim">· {{ step.note }}</span>
-</template><template v-if="shown === steps.length"><span class="accent">everything is up</span></template></pre>
+      <div class="terminal" aria-label="A terminal in the home folder running wisp acme dev">
+        <div class="bar"><span /><span /><span /><em>~ (any folder)</em></div>
+        <pre><span class="dim">~ $ </span>{{ typed }}<span v-if="shown === 0" class="caret">▍</span>
+<template v-if="shown > 0"><span class="dim">running</span> 🏢 Acme · <b>Dev</b>
+</template><template v-for="(step, at) in steps.slice(0, shown)" :key="at"><span class="ok">  ✓</span> <span class="dim">{{ step.kind.padEnd(6) }}</span> {{ step.what.padEnd(15) }} <span class="dim">· {{ step.note }}</span>
+</template><template v-if="shown === steps.length"><span class="accent">everything is up</span><span class="dim"> · wisp down dev stops it all</span></template></pre>
       </div>
     </section>
 
-    <!-- The difference -->
     <section class="wrap">
-      <h2 class="center">One word, from anywhere, instead of all this.</h2>
-      <div class="compare">
-        <div>
-          <p class="eyebrow">Before</p>
-          <pre class="code"><span class="dim">$</span> cd ~/dev/acme               <span class="dim"># where was it again?</span>
-<span class="dim">$</span> docker compose up -d db
-<span class="dim">#   …wait until it's ready</span>
-<span class="dim">$</span> mise run dev                <span class="dim"># or pnpm dev? make up?</span>
-<span class="dim">$</span> open http://localhost:3000
-<span class="dim">#   …and keep this terminal open</span></pre>
-        </div>
-        <div>
-          <p class="eyebrow">With Wisp</p>
-          <pre class="code"><span class="dim">$</span> wisp api</pre>
-          <p class="note">From any folder. Every time. For the whole team.</p>
-        </div>
-      </div>
+      <ul class="grid pillars">
+        <li v-for="item in pillars" :key="item.title">
+          <span class="icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none">
+              <component :is="tag" v-for="([tag, attrs], at) in icons[item.icon]" :key="at" v-bind="svgAttrs(attrs)" />
+            </svg>
+          </span>
+          <div>
+            <p class="title">{{ item.title }}</p>
+            <p class="text" v-html="item.text" />
+          </div>
+        </li>
+      </ul>
     </section>
 
-    <!-- Write it once -->
-    <section class="wrap split">
+    <section class="wrap split wide-right">
       <div>
         <p class="eyebrow">One file</p>
-        <h2>Write it once.<br />Or let Wisp write it.</h2>
-        <p class="lead">A <b>bolt</b> lists the steps of one task, in order. <code>wisp init</code> drafts bolts from what your project already has. Keep them wherever they're useful:</p>
+        <h2>Write the pipeline once.</h2>
+        <p class="lead">A pipeline is a list of steps that start together unless they say what they wait for, with <code>after</code>. It lives in a <code>.wisp.json</code> next to your code, or in a workspace of your own. <code>wisp init</code> drafts pipelines from what your project already has, and the dashboard edits them through forms.</p>
         <ul class="places">
-          <li><b>In the repo</b>, as <code>.wisp.json</code>: your whole team gets the same bolts.</li>
-          <li><b>On your machine</b>, just for you: your own workspaces, like your morning links or side scripts.</li>
-          <li><b>On a server</b>: start, stop and restart what runs there, from wherever you SSH in.</li>
+          <li><b>Commands</b> that keep running, like a server, or finish, like a test.</li>
+          <li><b>Docker services</b>, ready when they're healthy.</li>
+          <li><b>Waits</b> for a port, a website or a few seconds.</li>
+          <li><b>Other pipelines</b>, and links, folders, files and apps to open.</li>
         </ul>
         <a class="more" href="/docs/file">The file, step by step →</a>
       </div>
-      <pre class="code"><span class="dim">{</span>
-  <span class="key">"bolts"</span>: [{
-    <span class="key">"label"</span>: <span class="str">"Work on api"</span>,
-    <span class="key">"targets"</span>: [
-      { <span class="key">"bolt"</span>: <span class="str">"Database"</span>, <span class="key">"label"</span>: <span class="str">"db"</span> },
-      { <span class="key">"folder"</span>: <span class="str">"apps/api"</span> },
-      { <span class="key">"run"</span>: <span class="str">"pnpm dev"</span>, <span class="key">"label"</span>: <span class="str">"api"</span>, <span class="key">"after"</span>: <span class="str">"db"</span> },
-      { <span class="key">"wait"</span>: <span class="str">":3000"</span>, <span class="key">"label"</span>: <span class="str">"up"</span>, <span class="key">"after"</span>: <span class="str">"api"</span> },
-      { <span class="key">"url"</span>: <span class="str">"localhost:3000"</span>, <span class="key">"after"</span>: <span class="str">"up"</span> }
-    ]
-  }]
-<span class="dim">}</span></pre>
+      <div class="pipeline">
+        <svg class="graph" viewBox="0 0 600 150" role="img" aria-label="The Dev pipeline: db and web start together; api waits for db; a wait for port 3000 waits for api; the page opens once both up and web are done">
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" class="arrow" />
+            </marker>
+          </defs>
+          <path class="edge" d="M110,36 H146" marker-end="url(#arrow)" />
+          <path class="edge" d="M250,36 H286" marker-end="url(#arrow)" />
+          <path class="edge" d="M400,36 C425,36 422,76 446,76" marker-end="url(#arrow)" />
+          <path class="edge" d="M110,116 H400 C425,116 422,76 446,76" marker-end="url(#arrow)" />
+          <g v-for="node in [
+            { x: 10, y: 16, w: 100, kind: 'docker', label: 'db' },
+            { x: 150, y: 16, w: 100, kind: 'run', label: 'api' },
+            { x: 290, y: 16, w: 110, kind: 'wait', label: ':3000' },
+            { x: 10, y: 96, w: 100, kind: 'run', label: 'web' },
+            { x: 450, y: 56, w: 140, kind: 'link', label: 'localhost:5173' },
+          ]" :key="node.label">
+            <rect class="node" :x="node.x" :y="node.y" :width="node.w" height="40" rx="9" />
+            <text class="kind" :x="node.x + 12" :y="node.y + 15">{{ node.kind }}</text>
+            <text class="label" :x="node.x + 12" :y="node.y + 32">{{ node.label }}</text>
+          </g>
+        </svg>
+        <p class="graph-note">db and web start together · api waits for db · the page waits for both</p>
+        <pre class="code"><span class="dim">{</span> <span class="key">"label"</span>: <span class="str">"Dev"</span>, <span class="key">"steps"</span>: [
+  { <span class="key">"compose"</span>: <span class="str">"compose.yaml"</span>, <span class="key">"label"</span>: <span class="str">"db"</span> },
+  { <span class="key">"run"</span>: <span class="str">"pnpm dev"</span>, <span class="key">"cwd"</span>: <span class="str">"api"</span>, <span class="key">"label"</span>: <span class="str">"api"</span>, <span class="key">"after"</span>: <span class="str">"db"</span> },
+  { <span class="key">"run"</span>: <span class="str">"pnpm dev"</span>, <span class="key">"cwd"</span>: <span class="str">"web"</span>, <span class="key">"label"</span>: <span class="str">"web"</span> },
+  { <span class="key">"wait"</span>: <span class="str">":3000"</span>, <span class="key">"label"</span>: <span class="str">"up"</span>, <span class="key">"after"</span>: <span class="str">"api"</span> },
+  { <span class="key">"url"</span>: <span class="str">"localhost:5173"</span>, <span class="key">"after"</span>: [<span class="str">"up"</span>, <span class="str">"web"</span>] }
+] <span class="dim">}</span></pre>
+      </div>
     </section>
 
-    <!-- The dashboard: a recording of real Wisp -->
+    <section class="wrap">
+      <h2 class="center">Use cases</h2>
+      <p class="lead center-lead">Each is a pipeline you write once, or let <code>wisp init</code> draft, and name as you like. Then you run it from whatever folder you're in as <code>wisp &lt;workspace&gt; &lt;pipeline&gt;</code>: <code>wisp shop deploy</code> runs the Deploy pipeline of your Shop project.</p>
+      <p class="legend" aria-hidden="true">
+        <span v-for="entry in kinds" :key="entry.kind" class="legend-item" :class="`k-${entry.kind}`">{{ entry.label }}</span>
+      </p>
+      <ul class="places-grid">
+        <li v-for="use in uses" :key="use.title">
+          <div class="use-head">
+            <span class="icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none">
+                <component :is="tag" v-for="([tag, attrs], at) in icons[use.icon]" :key="at" v-bind="svgAttrs(attrs)" />
+              </svg>
+            </span>
+            <p class="title">{{ use.title }}</p>
+          </div>
+          <div class="flow" aria-hidden="true">
+            <template v-for="(stage, at) in use.flow" :key="at">
+              <span v-if="at > 0" class="flow-arrow" />
+              <span class="flow-stage" :class="{ joined: stage.length > 1 && at < use.flow.length - 1 }">
+                <span v-for="step in stage" :key="step" class="flow-step" :class="`k-${step.split(':')[1]}`">{{ step.split(":")[0] }}</span>
+              </span>
+            </template>
+          </div>
+          <p class="text">{{ use.text }}</p>
+          <a class="more" :href="use.link">See how →</a>
+        </li>
+      </ul>
+    </section>
+
     <section class="wrap showcase">
       <div class="showcase-text">
         <p class="eyebrow">The dashboard</p>
         <h2>Everything you started, on one screen.</h2>
-        <p class="lead">Type <code>wisp</code>: live output, health, and a heads-up when something crashes. Edit bolts without touching JSON.</p>
+        <p class="lead">Type <code>wisp</code>: every workspace and its pipelines, what's running with its live output, and every past run. Run a pipeline with <code>⏎</code> and watch each step tick off. Edit them through forms, without touching JSON. The same over SSH and in tmux.</p>
         <a class="more" href="/docs/dashboard">Tour the dashboard →</a>
       </div>
-      <img class="recording" src="/demo/dashboard.gif" width="1400" height="760" loading="lazy" alt="Wisp's dashboard: running the Work on api bolt, its server's live output on the Running tab, then the History tab" />
+      <img class="recording" src="/demo/dashboard.gif" width="1400" height="760" loading="lazy" alt="Wisp's dashboard: running a pipeline in its box, its server's live output on the Running tab, then the History tab" />
     </section>
 
-    <!-- History: a recording of real Wisp -->
     <section class="wrap showcase">
       <div class="showcase-text">
-        <p class="eyebrow">Checks, builds, deploys</p>
-        <h2>A small CI, on your laptop.</h2>
-        <p class="lead">Steps run in order and stop at the first failure; checks can run side by side. A deploy can ask where to, and ask before it goes. Run one before every <code>git push</code>, or every night. Every run is kept with its output, and a retry runs only what failed.</p>
-        <a class="more" href="/docs/recipes">Recipes →</a>
+        <p class="eyebrow">History</p>
+        <h2>Every run, kept like CI.</h2>
+        <p class="lead">Each run is numbered, with its commit and each step's output and time. The first failure stops the run, a retry runs only what failed, and a timeout stops a step that hangs. Run a pipeline before every <code>git push</code>, or every night from cron.</p>
+        <a class="more" href="/docs/runs">Runs and history →</a>
       </div>
-      <img class="recording" src="/demo/jobs.gif" width="1400" height="760" loading="lazy" alt="A Check bolt fails at its test; History shows the run like CI, with the test's output; after the fix, --retry runs only the test, and it passes" />
+      <img class="recording" src="/demo/jobs.gif" width="1400" height="760" loading="lazy" alt="A Check pipeline fails at its test; History shows the run like CI, with the test's output; after the fix, --retry runs only the test, and it passes" />
     </section>
 
-    <!-- Safe by default -->
+    <section class="wrap showcase side">
+      <div class="showcase-text">
+        <p class="eyebrow">On a server</p>
+        <h2>Your server's runbook, runnable.</h2>
+        <p class="lead">Deploys that ask where and ask before they go. Updates that pull, migrate and restart. Backups that tell you when they fail. From wherever you SSH in, with no folder to find: <code>wisp shop deploy</code>, <code>wisp ps</code>, <code>wisp logs shop -f</code>.</p>
+        <a class="more" href="/docs/use-cases#run-a-server">Server use cases →</a>
+      </div>
+      <img class="recording" src="/demo/server.gif" width="960" height="820" loading="lazy" alt="wisp shop deploy, from the home folder: it asks where, asks before it goes, then builds and ships" />
+    </section>
+
     <section class="band">
       <div class="wrap split">
         <div>
@@ -166,13 +241,12 @@ const more = [
           <h2>Nothing runs<br />until you say so.</h2>
         </div>
         <div>
-          <p class="lead">A cloned project's commands wait until you've read and allowed them. Any change asks again.</p>
+          <p class="lead">A cloned project's commands wait until you've read and allowed them. Any change, a <code>git pull</code> included, asks again.</p>
           <a class="more" href="/docs/trust">How trust works →</a>
         </div>
       </div>
     </section>
 
-    <!-- Also -->
     <section class="wrap">
       <h2 class="center">Also in Wisp</h2>
       <ul class="grid">
@@ -184,14 +258,12 @@ const more = [
           </span>
           <div>
             <p class="title">{{ item.title }}</p>
-            <!-- Our own text, with a <code> or two: never user input. -->
             <p class="text" v-html="item.text" />
           </div>
         </li>
       </ul>
     </section>
 
-    <!-- Install -->
     <section class="wrap narrow cta">
       <h2>Free, open source, yours.</h2>
       <p class="lead">No account, no telemetry.</p>
@@ -249,9 +321,12 @@ pre { margin: 0; font-family: var(--vp-font-family-mono); font-size: 13px; line-
 .code { padding: 22px 24px; }
 .demo-wrap { padding-top: 8px; padding-bottom: 72px; border-top: 0 !important; }
 .terminal { max-width: 760px; margin: 0 auto; overflow: hidden; }
-.terminal pre { padding: 20px 24px 24px; min-height: 270px; font-size: 14px; }
+.terminal pre { padding: 20px 24px 24px; height: calc(8 * 1.6em + 44px); font-size: 14px; overflow-y: hidden; }
 .bar { display: flex; gap: 8px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--wisp-divider); }
 .bar span { width: 12px; height: 12px; border-radius: 50%; background: var(--wisp-dots); }
+.bar span:nth-child(1) { background: #ff5f57; }
+.bar span:nth-child(2) { background: #febc2e; }
+.bar span:nth-child(3) { background: #28c840; }
 .bar em { margin-left: auto; font-style: normal; font-size: 12px; color: var(--wisp-dim); font-family: var(--vp-font-family-mono); }
 .dim { color: var(--wisp-dim); }
 .ok { color: var(--wisp-ok); }
@@ -262,7 +337,10 @@ pre { margin: 0; font-family: var(--vp-font-family-mono); font-size: 13px; line-
 .caret { animation: blink 1s steps(1) infinite; color: var(--wisp-accent); }
 @keyframes blink { 50% { opacity: 0; } }
 
-.band { background: var(--wisp-band-bg); color: var(--wisp-band-text); border: 0 !important; }
+.band { width: calc(100% - 48px); max-width: 1104px; margin: 24px auto; padding-top: 56px; padding-bottom: 56px; border-radius: 22px; border: 1px solid var(--wisp-line) !important; color: var(--wisp-band-text); background: radial-gradient(90% 140% at 0% 0%, var(--vp-c-brand-soft), transparent 60%), var(--wisp-band-bg); box-shadow: var(--wisp-shadow); }
+.band .wrap { padding-left: 48px; padding-right: 48px; }
+.band + section { border-top: 0; }
+@media (max-width: 640px) { .band .wrap { padding-left: 24px; padding-right: 24px; } }
 .band h2 { color: var(--wisp-band-title); }
 .band .lead { color: var(--wisp-band-text); }
 .band code { background: var(--wisp-band-code-bg); color: var(--wisp-band-code); }
@@ -274,7 +352,6 @@ pre { margin: 0; font-family: var(--vp-font-family-mono); font-size: 13px; line-
 .text { margin: 0; color: var(--vp-c-text-2); line-height: 1.55; font-size: 15px; }
 .text :deep(code) { font-family: var(--vp-font-family-mono); font-size: 13px; padding: 1px 6px; border-radius: 4px; background: var(--vp-c-default-soft); color: var(--vp-c-text-1); white-space: nowrap; }
 
-.center-text { text-align: center; }
 .cta { text-align: center; }
 .installer { max-width: 560px; margin: 28px auto 18px; text-align: left; border: 1px solid var(--wisp-line); border-radius: 14px; background: var(--wisp-terminal-bg); box-shadow: var(--wisp-shadow); overflow: hidden; }
 .tabs { display: flex; gap: 4px; padding: 6px 6px 0; border-bottom: 1px solid var(--wisp-divider); }
@@ -296,11 +373,60 @@ pre { margin: 0; font-family: var(--vp-font-family-mono); font-size: 13px; line-
 .places li { position: relative; padding-left: 18px; color: var(--vp-c-text-2); font-size: 16px; line-height: 1.55; }
 .places li::before { content: ""; position: absolute; left: 2px; top: 0.65em; width: 6px; height: 6px; border-radius: 50%; background: var(--vp-c-brand-1); }
 .places b { color: var(--vp-c-text-1); }
-.compare { display: grid; gap: 24px; align-items: start; max-width: 880px; margin: 0 auto; }
-@media (min-width: 760px) { .compare { grid-template-columns: 1.4fr 1fr; } }
-.compare .eyebrow { margin-bottom: 8px; }
-.compare .note { margin: 12px 0 0; color: var(--vp-c-text-2); font-size: 15px; }
 .showcase { display: grid; gap: 32px; }
+@media (min-width: 960px) {
+  .showcase.side { grid-template-columns: 0.75fr 1.25fr; align-items: center; gap: 48px; }
+}
+.places-grid { list-style: none; padding: 0; margin: 0; display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.places-grid li { margin: 0; padding: 22px; border: 1px solid var(--wisp-line); border-radius: 14px; background: var(--vp-c-bg-soft); display: flex; flex-direction: column; gap: 12px; }
+.places-grid .title { margin: 0; font-size: 17px; }
+.places-grid .more { margin-top: auto; font-size: 14px; }
+.center-lead { max-width: 720px; margin: -24px auto 18px; text-align: center; }
+.legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; margin: 0 0 28px; font-size: 13px; color: var(--vp-c-text-2); }
+.legend-item { display: inline-flex; align-items: center; gap: 7px; }
+.legend-item::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--k); flex-shrink: 0; }
+.k-run { --k: #7c3aed; }
+.k-docker { --k: #2563eb; }
+.k-wait { --k: #b45309; }
+.k-link { --k: #047857; }
+.k-pipeline { --k: #be185d; }
+:global(.dark) .k-run { --k: #a78bfa; }
+:global(.dark) .k-docker { --k: #60a5fa; }
+:global(.dark) .k-wait { --k: #fbbf24; }
+:global(.dark) .k-link { --k: #34d399; }
+:global(.dark) .k-pipeline { --k: #f472b6; }
+.use-head { display: flex; align-items: center; gap: 12px; }
+.use-head .icon { width: 36px; height: 36px; border-radius: 9px; }
+.center-lead code, .places-grid code { font-family: var(--vp-font-family-mono); font-size: 14px; }
+.places-grid li { transition: border-color 0.2s, box-shadow 0.2s; }
+.places-grid li:hover { border-color: color-mix(in srgb, var(--vp-c-brand-1) 55%, transparent); box-shadow: var(--wisp-shadow); }
+.places-grid .more { text-decoration: none; }
+.places-grid .more:hover { text-decoration: underline; }
+.flow { container-type: inline-size; display: flex; align-items: center; justify-content: center; height: 108px; padding: 0 10px; border-radius: 12px; border: 1px solid var(--wisp-line); background-color: var(--wisp-terminal-bg); background-image: radial-gradient(circle, var(--wisp-divider) 1px, transparent 1.3px); background-size: 14px 14px; overflow: hidden; }
+.flow-stage { position: relative; display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
+.flow-stage.joined { padding-right: 14px; }
+.flow-stage.joined::after { content: ""; position: absolute; right: 0; top: 12px; bottom: 12px; width: 9px; border: 1.5px solid var(--wisp-dim); border-left: 0; border-radius: 0 7px 7px 0; }
+.flow-step { display: inline-flex; align-items: center; justify-content: center; font-family: var(--vp-font-family-mono); font-size: 12.5px; line-height: 1.5; white-space: nowrap; padding: 2px 11px; border-radius: 999px; color: var(--wisp-terminal-fg); background: color-mix(in srgb, var(--k) 13%, transparent); border: 1px solid color-mix(in srgb, var(--k) 50%, transparent); }
+.flow-arrow { position: relative; flex-shrink: 0; width: 18px; height: 1.5px; margin: 0 7px 0 5px; background: var(--wisp-dim); }
+@container (max-width: 270px) {
+  .flow-step { font-size: 11.5px; padding: 2px 8px; }
+  .flow-arrow { width: 12px; margin: 0 6px 0 3px; }
+  .flow-stage.joined { padding-right: 11px; }
+}
+.flow-arrow::after { content: ""; position: absolute; right: -2px; top: -3.25px; border-top: 4px solid transparent; border-bottom: 4px solid transparent; border-left: 6px solid var(--wisp-dim); }
 .showcase-text { max-width: 640px; }
 .recording { display: block; width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--wisp-line); box-shadow: var(--wisp-shadow); background: #1e1e2e; }
+.pillars { grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+@media (min-width: 960px) {
+  .wrap.split.wide-right { grid-template-columns: 0.85fr 1.15fr; }
+}
+.pipeline { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.pipeline .code { font-size: 12.5px; padding: 18px 20px; }
+.graph { width: 100%; height: auto; padding: 14px; border-radius: 14px; border: 1px solid var(--wisp-line); background: var(--wisp-terminal-bg); box-shadow: var(--wisp-shadow); }
+.graph .edge { fill: none; stroke: var(--wisp-dim); stroke-width: 1.5; }
+.graph .arrow { fill: var(--wisp-dim); }
+.graph .node { fill: var(--vp-c-bg-soft); stroke: var(--vp-c-brand-1); stroke-opacity: 0.55; }
+.graph .kind { fill: var(--wisp-dim); font-family: var(--vp-font-family-mono); font-size: 10px; }
+.graph .label { fill: var(--wisp-terminal-fg); font-family: var(--vp-font-family-mono); font-size: 13px; }
+.graph-note { margin: 0; text-align: center; font-size: 13px; color: var(--vp-c-text-2); }
 </style>

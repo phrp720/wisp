@@ -40,7 +40,7 @@ beforeEach(async () => {
   dir = await realpath(await mkdtemp(join(tmpdir(), "wisp-edit-")));
   process.env["WISP_HOME"] = join(dir, "home");
   file = join(dir, PROJECT_FILE);
-  await writeFile(file, JSON.stringify({ name: "Shop", bolts: [{ label: "Work on api", color: "#4a9dff", targets: [{ folder: "apps/api" }] }] }));
+  await writeFile(file, JSON.stringify({ name: "Shop", pipelines: [{ label: "Work on api", color: "#4a9dff", steps: [{ folder: "apps/api" }] }] }));
 });
 
 afterEach(async () => {
@@ -49,14 +49,14 @@ afterEach(async () => {
 });
 
 describe("editing a workspace without writing JSON", () => {
-  it("adds bolts and steps, and writes a file a person can read", async () => {
+  it("adds pipelines and steps, and writes a file a person can read", async () => {
     await addBolt(file, "Check");
     const { step } = buildStep("run", { run: "pnpm test", finishes: "finishes", label: "", cwd: "" });
     await addStep(file, "check", step!);
     await addStep(file, "Work on api", buildStep("wait", { wait: "http://localhost:3000" }).step!);
 
     const text = await readFile(file, "utf8");
-    expect(text).toMatch(/"label": "Check",\n {6}"color": "#[0-9a-f]{6}",\n {6}"targets": \[\n {8}\{ "run": "pnpm test", "finishes": true \}\n {6}\]/);
+    expect(text).toMatch(/"label": "Check",\n {6}"color": "#[0-9a-f]{6}",\n {6}"steps": \[\n {8}\{ "run": "pnpm test", "finishes": true \}\n {6}\]/);
     const read = await readProjectFile(file);
     expect(read.diagnostics.filter((entry) => entry.level === "error")).toEqual([]);
     expect(read.workspace.bolts.map((bolt) => [bolt.label, bolt.steps.length])).toEqual([
@@ -65,10 +65,10 @@ describe("editing a workspace without writing JSON", () => {
     ]);
   });
 
-  it("gives each new bolt a colour none of the others has", async () => {
+  it("gives each new pipeline a colour none of the others has", async () => {
     for (const name of ["One", "Two", "Three", "Four"]) await addBolt(file, name);
-    const raw = JSON.parse(await readFile(file, "utf8")) as { bolts: { color?: string }[] };
-    const colors = raw.bolts.map((bolt) => bolt.color);
+    const raw = JSON.parse(await readFile(file, "utf8")) as { pipelines: { color?: string }[] };
+    const colors = raw.pipelines.map((bolt) => bolt.color);
     expect(new Set(colors).size).toBe(colors.length);
   });
 
@@ -85,24 +85,24 @@ describe("editing a workspace without writing JSON", () => {
     expect(buildStep("run", { run: "pnpm dev", label: "api", cwd: "apps/api" }).step).toEqual({ run: "pnpm dev", cwd: "apps/api", label: "api" });
   });
 
-  it("renames a bolt and every step that runs it", async () => {
+  it("renames a pipeline and every step that runs it", async () => {
     await writeFile(
       file,
       JSON.stringify({
         name: "Acme",
-        bolts: [
-          { label: "Services", targets: [{ compose: "compose.yaml" }] },
-          { label: "Dev", targets: [{ bolt: "services", label: "db" }, { run: "pnpm dev", after: "db" }], down: [{ bolt: "Services" }] },
-          { label: "Web", targets: [{ folder: "web" }] },
+        pipelines: [
+          { label: "Services", steps: [{ compose: "compose.yaml" }] },
+          { label: "Dev", steps: [{ pipeline: "services", label: "db" }, { run: "pnpm dev", after: "db" }], down: [{ pipeline: "Services" }] },
+          { label: "Web", steps: [{ folder: "web" }] },
         ],
       }),
     );
     await renameBolt(file, "Services", "Database");
-    const bolts = JSON.parse(await readFile(file, "utf8")).bolts;
+    const bolts = JSON.parse(await readFile(file, "utf8")).pipelines;
     expect(bolts.map((bolt: { label: string }) => bolt.label)).toEqual(["Database", "Dev", "Web"]);
-    expect(bolts[1].targets[0]).toEqual({ bolt: "Database", label: "db" });
-    expect(bolts[1].down).toEqual([{ bolt: "Database" }]);
-    expect(bolts[2]).toEqual({ label: "Web", targets: [{ folder: "web" }] });
+    expect(bolts[1].steps[0]).toEqual({ pipeline: "Database", label: "db" });
+    expect(bolts[1].down).toEqual([{ pipeline: "Database" }]);
+    expect(bolts[2]).toEqual({ label: "Web", steps: [{ folder: "web" }] });
   });
 
   it("writes a timeout only on a command that finishes, as it was typed", () => {
@@ -149,9 +149,9 @@ describe("editing a workspace without writing JSON", () => {
     expect(stepValues({ run: "pnpm dev --turbo", cwd: "apps/api" })).toEqual({ run: "pnpm dev --turbo", cwd: "apps/api", finishes: "running" });
   });
 
-  it("renames, reorders, makes keep going after a failure and deletes bolts — refusing a duplicate name", async () => {
+  it("renames, reorders, makes keep going after a failure and deletes pipelines — refusing a duplicate name", async () => {
     await addBolt(file, "Check");
-    await expect(addBolt(file, "check")).rejects.toThrow(/already a bolt/);
+    await expect(addBolt(file, "check")).rejects.toThrow(/already a pipeline/);
     await renameBolt(file, "Check", "Run the tests");
     await setKeepGoing(file, "Run the tests", true);
     await moveBolt(file, "Run the tests", -1);
@@ -166,7 +166,7 @@ describe("editing a workspace without writing JSON", () => {
   });
 
   it("sets what a step waits for, labelling the steps it waits for, and keeps that right through renames, moves and removals", async () => {
-    const written = async () => JSON.parse(await readFile(file, "utf8")).bolts[0].targets as Record<string, unknown>[];
+    const written = async () => JSON.parse(await readFile(file, "utf8")).pipelines[0].steps as Record<string, unknown>[];
     await removeStep(file, "Work on api", 0);
     for (const run of ["pnpm install", "pnpm lint", "pnpm test", "pnpm build"]) await addStep(file, "Work on api", { run, finishes: true });
     await setAfter(file, "Work on api", 1, [0]);
@@ -199,16 +199,16 @@ describe("editing a workspace without writing JSON", () => {
     await setInput(file, "Work on api", undefined, "env", { ask: "Deploy where?", choices: ["staging", "production"] });
     await setInput(file, "Work on api", undefined, "tag", { default: "latest" });
     await setInput(file, "Work on api", "env", "target", { ask: "Deploy where?", choices: ["staging", "production"], default: "staging" });
-    const written = JSON.parse(await readFile(file, "utf8")).bolts[0];
-    expect(Object.keys(written)).toEqual(["label", "color", "confirm", "inputs", "targets"]);
+    const written = JSON.parse(await readFile(file, "utf8")).pipelines[0];
+    expect(Object.keys(written)).toEqual(["label", "color", "confirm", "inputs", "steps"]);
     expect(Object.keys(written.inputs)).toEqual(["target", "tag"]);
-    expect(written.targets[0].run).toBe("./deploy.sh {{target}}");
+    expect(written.steps[0].run).toBe("./deploy.sh {{target}}");
     expect(written.confirm).toBe("Deploy to {{target}}?");
     expect((await readProjectFile(file)).diagnostics.filter((entry) => entry.message.includes("{{"))).toEqual([]);
 
     await removeInput(file, "Work on api", "target");
     await removeInput(file, "Work on api", "tag");
-    expect(JSON.parse(await readFile(file, "utf8")).bolts[0]).not.toHaveProperty("inputs");
+    expect(JSON.parse(await readFile(file, "utf8")).pipelines[0]).not.toHaveProperty("inputs");
   });
 
   it("builds an input from a form, and says what is wrong with one", () => {
@@ -218,24 +218,24 @@ describe("editing a workspace without writing JSON", () => {
     expect(inputValues("env", { choices: ["a", 2], default: 2 })).toEqual({ name: "env", ask: "", choices: "a, 2", default: "2" });
   });
 
-  it("writes whether a bolt asks first, and its question, and drops both when it doesn't", async () => {
+  it("writes whether a pipeline asks first, and its question, and drops both when it doesn't", async () => {
     await setConfirm(file, "Work on api", "  Start the shared API?  ");
     expect((await readProjectFile(file)).workspace.bolts[0]?.confirm).toBe("Start the shared API?");
     await setConfirm(file, "Work on api", true);
-    expect(JSON.parse(await readFile(file, "utf8")).bolts[0].confirm).toBe(true);
+    expect(JSON.parse(await readFile(file, "utf8")).pipelines[0].confirm).toBe(true);
     expect((await readProjectFile(file)).workspace.bolts[0]?.confirm).toBe('Run "Work on api"?');
     await setConfirm(file, "Work on api", false);
-    expect(JSON.parse(await readFile(file, "utf8")).bolts[0]).not.toHaveProperty("confirm");
+    expect(JSON.parse(await readFile(file, "utf8")).pipelines[0]).not.toHaveProperty("confirm");
     await setConfirm(file, "Work on api", " ");
-    expect(JSON.parse(await readFile(file, "utf8")).bolts[0]).not.toHaveProperty("confirm");
+    expect(JSON.parse(await readFile(file, "utf8")).pipelines[0]).not.toHaveProperty("confirm");
   });
 
-  it("writes a bolt's notes right after its label, and drops them when cleared", async () => {
+  it("writes a pipeline's notes right after its label, and drops them when cleared", async () => {
     await setBoltNotes(file, "Work on api", "  The API with its database  ");
-    expect(Object.keys(JSON.parse(await readFile(file, "utf8")).bolts[0])).toEqual(["label", "notes", "color", "targets"]);
+    expect(Object.keys(JSON.parse(await readFile(file, "utf8")).pipelines[0])).toEqual(["label", "notes", "color", "steps"]);
     expect((await readProjectFile(file)).workspace.bolts[0]?.notes).toBe("The API with its database");
     await setBoltNotes(file, "Work on api", "");
-    expect(JSON.parse(await readFile(file, "utf8")).bolts[0]).not.toHaveProperty("notes");
+    expect(JSON.parse(await readFile(file, "utf8")).pipelines[0]).not.toHaveProperty("notes");
     expect((await readProjectFile(file)).workspace.bolts[0]?.notes).toBeUndefined();
   });
 
@@ -255,7 +255,7 @@ describe("editing a workspace without writing JSON", () => {
   });
 
   it("leaves a name taken from the folder alone when it did not change", async () => {
-    await writeFile(file, JSON.stringify({ bolts: [] }));
+    await writeFile(file, JSON.stringify({ pipelines: [] }));
     const named = (await readProjectFile(file)).workspace.name;
     await setWorkspaceDetails(file, { name: named, icon: "", notes: "Mine" });
     expect(JSON.parse(await readFile(file, "utf8"))).not.toHaveProperty("name");
@@ -287,14 +287,14 @@ describe("editing a workspace without writing JSON", () => {
     expect((await readProjectFile(file)).trust).toBe("untrusted");
   });
 
-  it("edits a bolt where it is written — the local override, when it lives there", async () => {
-    await writeFile(join(dir, LOCAL_FILE), JSON.stringify({ bolts: [{ label: "Mine", targets: [] }] }));
+  it("edits a pipeline where it is written — the local override, when it lives there", async () => {
+    await writeFile(join(dir, LOCAL_FILE), JSON.stringify({ pipelines: [{ label: "Mine", steps: [] }] }));
     await addStep(file, "mine", { url: "linear.app" });
-    expect(JSON.parse(await readFile(join(dir, LOCAL_FILE), "utf8")).bolts[0].targets).toEqual([{ url: "linear.app" }]);
-    expect(JSON.parse(await readFile(file, "utf8")).bolts).toHaveLength(1);
+    expect(JSON.parse(await readFile(join(dir, LOCAL_FILE), "utf8")).pipelines[0].steps).toEqual([{ url: "linear.app" }]);
+    expect(JSON.parse(await readFile(file, "utf8")).pipelines).toHaveLength(1);
   });
 
-  it("makes an empty personal workspace, with no placeholder bolt", async () => {
+  it("makes an empty personal workspace, with no placeholder pipeline", async () => {
     const created = await createPersonalWorkspace("Morning");
     const read = await readProjectFile(created);
     expect(read.workspace).toMatchObject({ name: "Morning", personal: true, trusted: true });
@@ -308,6 +308,6 @@ describe("editing a workspace without writing JSON", () => {
     await removePersonalWorkspace(created);
     await expect(readFile(created, "utf8")).rejects.toThrow();
     await expect(removePersonalWorkspace(file)).rejects.toThrow(/Only your own workspaces/);
-    expect(await readFile(file, "utf8")).toContain("bolts");
+    expect(await readFile(file, "utf8")).toContain("pipelines");
   });
 });

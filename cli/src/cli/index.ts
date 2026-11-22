@@ -55,8 +55,8 @@ program.addHelpText(
   "after",
   `
 ${dim("In a project with a .wisp.json:")}
-${dim("  wisp            open the dashboard: every workspace, its bolts, ⏎ to run")}
-${dim("  wisp api        run its api bolt")}
+${dim("  wisp            open the dashboard: every workspace, its pipelines, ⏎ to run")}
+${dim("  wisp api        run its api pipeline")}
 ${dim("  wisp init       give a project a .wisp.json")}
 
 ${dim("AI agents: run `wisp help agents` for the full reference. Most commands take --json.")}

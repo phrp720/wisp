@@ -44,7 +44,7 @@ export function title(workspace: Workspace): string {
 }
 
 export function counts(workspace: Workspace): string {
-  return dim(workspace.bolts.length > 0 ? plural(workspace.bolts.length, "bolt") : "no bolts yet");
+  return dim(workspace.bolts.length > 0 ? plural(workspace.bolts.length, "pipeline") : "no pipelines yet");
 }
 
 export function plural(count: number, noun: string): string {
@@ -53,14 +53,14 @@ export function plural(count: number, noun: string): string {
 
 export function kindLabel(kind: StepKind): string {
   return {
-    app: "app   ",
-    command: "run   ",
-    folder: "folder",
-    file: "file  ",
-    link: "link  ",
-    wait: "wait  ",
-    bolt: "needs ",
-    compose: "docker",
+    app: "app     ",
+    command: "run     ",
+    folder: "folder  ",
+    file: "file    ",
+    link: "link    ",
+    wait: "wait    ",
+    pipeline: "pipeline",
+    compose: "docker  ",
   }[kind];
 }
 

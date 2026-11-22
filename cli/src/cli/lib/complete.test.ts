@@ -4,8 +4,8 @@ import { interpret } from "../../core/project.js";
 import { type CompletionSources, complete } from "./complete.js";
 
 const read = (file: string, main: Record<string, unknown>) => interpret({ main }, { file, personal: false, trust: "trusted", os: "darwin" });
-const acme = read("/dev/acme/.wisp.json", { name: "Acme", bolts: [{ label: "Work on api", targets: [] }, { label: "Check", targets: [] }] });
-const payments = read("/dev/payments/.wisp.json", { name: "Payments Service", bolts: [{ label: "Services", targets: [] }, { label: "Test", targets: [] }] });
+const acme = read("/dev/acme/.wisp.json", { name: "Acme", pipelines: [{ label: "Work on api", steps: [] }, { label: "Check", steps: [] }] });
+const payments = read("/dev/payments/.wisp.json", { name: "Payments Service", pipelines: [{ label: "Services", steps: [] }, { label: "Test", steps: [] }] });
 
 const sources = (here = acme): CompletionSources => ({
   here: async () => here,
@@ -17,7 +17,7 @@ const sources = (here = acme): CompletionSources => ({
 const values = async (words: string[], from = sources()) => (await complete(words, from)).map((candidate) => candidate.value);
 
 describe("tab completion", () => {
-  it("offers commands, this project's bolts and every workspace first", async () => {
+  it("offers commands, this project's pipelines and every workspace first", async () => {
     const first = await values([""]);
     expect(first).toEqual(expect.arrayContaining(["init", "list", "completion", "work-on-api", "check", "acme", "payments-service"]));
   });
@@ -27,7 +27,7 @@ describe("tab completion", () => {
     expect(await values(["work"])).toEqual(["work-on-api"]);
   });
 
-  it("offers a workspace's bolts after its name, and nothing after a bolt of this project", async () => {
+  it("offers a workspace's pipelines after its name, and nothing after a pipeline of this project", async () => {
     expect(await values(["payments-service", ""])).toEqual(["services", "test"]);
     expect(await values(["payments", "se"])).toEqual(["services"]);
     expect(await values(["pay", "se"])).toEqual([]);
@@ -45,7 +45,7 @@ describe("tab completion", () => {
     expect(await values(["help", "a"])).toEqual(["agents"]);
   });
 
-  it("offers a command's options, and running a bolt's when the command is implied", async () => {
+  it("offers a command's options, and running a pipeline's when the command is implied", async () => {
     expect(await values(["init", "--o"])).toEqual(["--only"]);
     expect(await values(["work-on-api", "--re"])).toEqual(["--retry"]);
   });

@@ -50,7 +50,7 @@ describe("shellInvocation", () => {
     });
     expect(invocation).toEqual({
       file: "/bin/zsh",
-      args: ["-ilc", "export PORT=3000 && export NAME='it'\\''s' && cd '/a b' && pnpm dev"],
+      args: ["+m", "-ilc", "export PORT=3000 && export NAME='it'\\''s' && cd '/a b' && pnpm dev"],
     });
   });
 
@@ -61,7 +61,12 @@ describe("shellInvocation", () => {
   it("falls back to /bin/sh with no $SHELL", () => {
     expect(loginShell({})).toEqual({ file: "/bin/sh", args: ["-lc"] });
     expect(loginShell({ SHELL: "/bin/bash" })).toEqual({ file: "/bin/bash", args: ["-lc"] });
-    expect(loginShell({ SHELL: "/opt/homebrew/bin/fish" })).toEqual({ file: "/opt/homebrew/bin/fish", args: ["-ilc"] });
+    expect(loginShell({ SHELL: "/opt/homebrew/bin/fish" })).toEqual({ file: "/opt/homebrew/bin/fish", args: ["-lc"] });
+  });
+
+  it("starts zsh interactive but without job control, so it never takes the terminal from Wisp", () => {
+    expect(loginShell({ SHELL: "/bin/zsh" })).toEqual({ file: "/bin/zsh", args: ["+m", "-ilc"] });
+    expect(loginShell({ SHELL: "/bin/tcsh" })).toEqual({ file: "/bin/tcsh", args: ["-c"] });
   });
 
   it("quotes for POSIX and Windows command lines", () => {

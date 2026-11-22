@@ -67,7 +67,7 @@ export const check: CommandDef<{ json?: boolean }> = {
 
     if (read.workspace.bolts.length > 0) {
       console.log();
-      console.log(bold("Bolts"));
+      console.log(bold("Pipelines"));
       printBolts(read.workspace, true, read.withheld);
     }
 

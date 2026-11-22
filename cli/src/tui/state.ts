@@ -165,7 +165,7 @@ export const KIND: Record<StepKind, string> = {
   file: "file",
   link: "link",
   wait: "wait",
-  bolt: "needs",
+  pipeline: "pipeline",
   compose: "docker",
 };
 
@@ -214,7 +214,7 @@ export function stepLabel(target: SwitchTarget): string {
 export function counts(read: WorkspaceRead): string {
   const { workspace } = read;
   const bolts = workspace.bolts.length;
-  return `${bolts} bolt${bolts === 1 ? "" : "s"}`;
+  return `${bolts} pipeline${bolts === 1 ? "" : "s"}`;
 }
 
 export function needsTrust(read: WorkspaceRead): boolean {

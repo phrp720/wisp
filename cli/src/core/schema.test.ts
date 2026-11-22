@@ -39,13 +39,13 @@ describe("the published schema", async () => {
       name: "Acme",
       icon: "🏢",
       color: "#6d4aff",
-      bolts: [
-        { label: "Database", keepGoing: true, targets: [{ run: "docker compose up -d", label: "up", finishes: true }, { wait: "5432", after: "up" }], down: [{ run: "docker compose stop" }] },
+      pipelines: [
+        { label: "Database", keepGoing: true, steps: [{ run: "docker compose up -d", label: "up", finishes: true }, { wait: "5432", after: "up" }], down: [{ run: "docker compose stop" }] },
         {
           label: "Work on api",
           color: "#4a9dff",
-          targets: [
-            { bolt: "Database", label: "db" },
+          steps: [
+            { pipeline: "Database", label: "db" },
             { folder: "apps/api", after: "db" },
             { compose: "deployments/development/docker-compose.yml", services: ["postgres"] },
             { folder: "apps/api" },
@@ -68,45 +68,45 @@ describe("the published schema", async () => {
           label: "Deploy",
           confirm: "Deploy {{tag}} to {{env}}?",
           inputs: { env: { ask: "Deploy where?", choices: ["staging", "production"], default: "staging" }, tag: {} },
-          targets: [{ run: "./deploy.sh {{env}} {{tag}}", finishes: true }, { wait: "https://{{env}}.acme.com/health" }, { url: "https://{{env}}.acme.com" }],
+          steps: [{ run: "./deploy.sh {{env}} {{tag}}", finishes: true }, { wait: "https://{{env}}.acme.com/health" }, { url: "https://{{env}}.acme.com" }],
         },
-        { label: "Restore", confirm: true, targets: [{ run: "./restore.sh", finishes: true }] },
-        { label: "Check", targets: [{ run: "pnpm lint", label: "lint", finishes: true }, { run: "pnpm test", label: "test", finishes: true }, { wait: "localhost:5432" }, { run: "pnpm build", after: ["lint", "test"], finishes: true }] },
+        { label: "Restore", confirm: true, steps: [{ run: "./restore.sh", finishes: true }] },
+        { label: "Check", steps: [{ run: "pnpm lint", label: "lint", finishes: true }, { run: "pnpm test", label: "test", finishes: true }, { wait: "localhost:5432" }, { run: "pnpm build", after: ["lint", "test"], finishes: true }] },
       ],
     };
 
     expect(valid(file)).toBe(true);
     const read = interpret({ main: file }, { file: "/w/.wisp.json", personal: false, trust: "trusted", os: "darwin" });
     expect(read.diagnostics.filter((entry) => entry.level === "error")).toEqual([]);
-    expect(read.diagnostics.filter((entry) => entry.at.startsWith("bolts[2]") || entry.at.startsWith("bolts[3]") || entry.at.startsWith("bolts[4]"))).toEqual([]);
+    expect(read.diagnostics.filter((entry) => entry.at.startsWith("pipelines[2]") || entry.at.startsWith("pipelines[3]") || entry.at.startsWith("pipelines[4]"))).toEqual([]);
   });
 
   it("has no shared sections, and no steps written as a name", () => {
-    expect(valid({ links: [{ label: "Repository", url: "https://github.com/acme/acme" }], bolts: [] })).not.toBe(true);
-    expect(valid({ bolts: [{ label: "Open", targets: ["Repository"] }] })).not.toBe(true);
-    const read = interpret({ main: { bolts: [{ label: "Open", targets: ["Repository", { url: "acme.com" }] }] } }, { file: "/w/.wisp.json", personal: false, trust: "trusted", os: "darwin" });
+    expect(valid({ links: [{ label: "Repository", url: "https://github.com/acme/acme" }], pipelines: [] })).not.toBe(true);
+    expect(valid({ pipelines: [{ label: "Open", steps: ["Repository"] }] })).not.toBe(true);
+    const read = interpret({ main: { pipelines: [{ label: "Open", steps: ["Repository", { url: "acme.com" }] }] } }, { file: "/w/.wisp.json", personal: false, trust: "trusted", os: "darwin" });
     expect(read.diagnostics.filter((entry) => entry.level === "error").map((entry) => entry.message)).toEqual(['dropped: a step is an object, like { "run": "pnpm dev" } or { "url": "localhost:3000" }']);
     expect(read.workspace.bolts[0]?.steps).toHaveLength(1);
   });
 
   it("flags what the reader would warn about", () => {
     expect(valid({ nmae: "typo" })).not.toBe(true);
-    expect(valid({ bolts: [{ label: "x", targets: [{ run: "a", finishes: true, timeout: "soon" }] }] })).not.toBe(true);
+    expect(valid({ pipelines: [{ label: "x", steps: [{ run: "a", finishes: true, timeout: "soon" }] }] })).not.toBe(true);
     expect(valid({ apps: [{ app: { beos: "x" } }] })).not.toBe(true);
     expect(valid({ commands: [{ run: "x", shell: "fish" }] })).not.toBe(true);
-    expect(valid({ bolts: [{ label: "x", targets: [{ wait: "soon" }] }] })).not.toBe(true);
-    expect(valid({ bolts: [{ label: "x", targets: [{ folder: "a", run: "b" }] }] })).not.toBe(true);
-    expect(valid({ bolts: [{ label: "x", confirm: 3, targets: [] }] })).not.toBe(true);
-    expect(valid({ bolts: [{ label: "x", inputs: { "bad name": {} }, targets: [] }] })).not.toBe(true);
-    expect(valid({ bolts: [{ label: "x", inputs: { env: { ask: "Where?", options: ["a"] } }, targets: [] }] })).not.toBe(true);
-    expect(valid({ bolts: [{ label: "x", inputs: { env: { choices: ["eu;west"] } }, targets: [] }] })).not.toBe(true);
-    expect(valid({ bolts: [{ label: "x", inputs: { note: { default: "a --force" } }, targets: [] }] })).not.toBe(true);
-    expect(valid({ bolts: [{ label: "x", inputs: { tag: { default: "-rf" } }, targets: [] }] })).not.toBe(true);
-    expect(valid({ bolts: [{ label: "x", inputs: { city: { choices: ["München", 3, "eu west"] } }, targets: [] }] })).toBe(true);
-    expect(valid({ bolts: [{ label: "x", targets: [{ bolt: "Database", run: "a" }] }] })).not.toBe(true);
-    expect(valid({ bolts: [{ label: "x", targets: [{ run: "a", after: 3 }] }] })).not.toBe(true);
-    expect(valid({ bolts: [{ label: "x", needs: ["Database"], targets: [] }] })).not.toBe(true);
-    expect(valid({ bolts: [{ label: "x", targets: [{ bolt: "Database", workspace: "infra" }] }] })).not.toBe(true);
+    expect(valid({ pipelines: [{ label: "x", steps: [{ wait: "soon" }] }] })).not.toBe(true);
+    expect(valid({ pipelines: [{ label: "x", steps: [{ folder: "a", run: "b" }] }] })).not.toBe(true);
+    expect(valid({ pipelines: [{ label: "x", confirm: 3, steps: [] }] })).not.toBe(true);
+    expect(valid({ pipelines: [{ label: "x", inputs: { "bad name": {} }, steps: [] }] })).not.toBe(true);
+    expect(valid({ pipelines: [{ label: "x", inputs: { env: { ask: "Where?", options: ["a"] } }, steps: [] }] })).not.toBe(true);
+    expect(valid({ pipelines: [{ label: "x", inputs: { env: { choices: ["eu;west"] } }, steps: [] }] })).not.toBe(true);
+    expect(valid({ pipelines: [{ label: "x", inputs: { note: { default: "a --force" } }, steps: [] }] })).not.toBe(true);
+    expect(valid({ pipelines: [{ label: "x", inputs: { tag: { default: "-rf" } }, steps: [] }] })).not.toBe(true);
+    expect(valid({ pipelines: [{ label: "x", inputs: { city: { choices: ["München", 3, "eu west"] } }, steps: [] }] })).toBe(true);
+    expect(valid({ pipelines: [{ label: "x", steps: [{ pipeline: "Database", run: "a" }] }] })).not.toBe(true);
+    expect(valid({ pipelines: [{ label: "x", steps: [{ run: "a", after: 3 }] }] })).not.toBe(true);
+    expect(valid({ pipelines: [{ label: "x", needs: ["Database"], steps: [] }] })).not.toBe(true);
+    expect(valid({ pipelines: [{ label: "x", steps: [{ pipeline: "Database", workspace: "infra" }] }] })).not.toBe(true);
   });
 
   it("validates Wisp's own project file", async () => {

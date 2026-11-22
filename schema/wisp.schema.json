@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/phrp720/wisp/main/schema/wisp.schema.json",
   "title": "Wisp workspace file",
-  "description": "A .wisp.json: the bolts that start a project's working context (its links, folders, files, apps and commands) with one word. Committed next to the code, so the repository carries its own context.",
+  "description": "A .wisp.json: a project's pipelines (its dev stack, checks, deploys, backups), each a list of steps that run side by side or wait for each other. Committed next to the code, so the whole team runs them the same way.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -34,11 +34,11 @@
       "type": "string",
       "description": "A line about what this project is for."
     },
-    "bolts": {
+    "pipelines": {
       "type": "array",
-      "description": "What you run: 'Work on api', 'Incident response'. A bolt lists what to start, in order: inline, or by naming a shared asset.",
+      "description": "What you run: 'Dev', 'Verify', 'Deploy'. Each pipeline is a list of steps, run with `wisp <workspace> <pipeline>` from any folder.",
       "items": {
-        "$ref": "#/$defs/bolt"
+        "$ref": "#/$defs/pipeline"
       }
     }
   },
@@ -54,7 +54,7 @@
     "label": {
       "type": "string",
       "minLength": 1,
-      "description": "How a bolt names this, and what is shown for it. Unique within its kind."
+      "description": "How a pipeline names this, and what is shown for it. Unique within its kind."
     },
     "osName": {
       "type": "string",
@@ -305,7 +305,7 @@
       ]
     },
     "step": {
-      "description": "One step of a bolt: something to open or run, a wait, Docker services, or another bolt. Steps start right away unless they say what they wait for with \"after\".",
+      "description": "One step of a pipeline: something to open or run, a wait, Docker services, or another pipeline. Steps start right away unless they say what they wait for with \"after\".",
       "oneOf": [
         {
           "type": "object",
@@ -442,11 +442,11 @@
           "type": "object",
           "additionalProperties": false,
           "required": [
-            "bolt"
+            "pipeline"
           ],
-          "description": "Runs another bolt of this file as a step: it starts when what this step waits for is done, and steps that wait for it wait for all of it. Each bolt runs once per run, however many steps run it.",
+          "description": "Runs another pipeline of this file as a step: it starts when what this step waits for is done, and steps that wait for it wait for all of it. Each pipeline runs once per run, however many steps run it.",
           "properties": {
-            "bolt": {
+            "pipeline": {
               "type": "string",
               "minLength": 1
             },
@@ -478,7 +478,7 @@
         }
       ]
     },
-    "bolt": {
+    "pipeline": {
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -496,7 +496,7 @@
         },
         "notes": {
           "type": "string",
-          "description": "A line on what this bolt does, shown beside it in `wisp show`, `wisp pick`, tab completion and the TUI.",
+          "description": "A line on what this pipeline does, shown beside it in `wisp show`, `wisp pick`, tab completion and the TUI.",
           "examples": [
             "Builds the website and deploys it to production"
           ]
@@ -510,7 +510,7 @@
           "description": "Carry on after a step fails: report it, and run the steps after it anyway. Without it, a failed step stops the rest."
         },
         "confirm": {
-          "description": "Ask before it runs, for a bolt with consequences: a deploy, a restore. The question to ask, or true for \"Run <label>?\". Bolts that run it ask too. Without a terminal, it runs only with --yes.",
+          "description": "Ask before it runs, for a pipeline with consequences: a deploy, a restore. The question to ask, or true for \"Run <label>?\". Pipelines that run it ask too. Without a terminal, it runs only with --yes.",
           "oneOf": [
             {
               "type": "string",
@@ -581,16 +581,16 @@
             }
           ]
         },
-        "targets": {
+        "steps": {
           "type": "array",
-          "description": "What this bolt starts, in the order it starts it.",
+          "description": "What this pipeline does: steps that start together unless they say what they wait for, with \"after\".",
           "items": {
             "$ref": "#/$defs/step"
           }
         },
         "down": {
           "type": "array",
-          "description": "Run by `wisp down` after it has stopped what this bolt started: teardown that is not a process, like `docker compose stop`.",
+          "description": "Run by `wisp down` after it has stopped what this pipeline started: teardown that is not a process, like `docker compose stop`.",
           "items": {
             "$ref": "#/$defs/step"
           }
@@ -598,7 +598,7 @@
       }
     },
     "after": {
-      "description": "The labels of the steps of this bolt this one waits for; it starts once they have all finished. Left out, it starts right away.",
+      "description": "The labels of the steps of this pipeline this one waits for; it starts once they have all finished. Left out, it starts right away.",
       "oneOf": [
         {
           "type": "string",

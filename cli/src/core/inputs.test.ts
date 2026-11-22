@@ -61,7 +61,7 @@ describe("values given on the command line", () => {
     expect(parseGiven(["env=production", "tag=v1=rc"], specs, "Deploy")).toEqual({ env: "production", tag: "v1=rc" });
   });
 
-  it("refuses a name the bolt doesn't have, a value not among the choices, an empty one and one that isn't plain words", () => {
+  it("refuses a name the pipeline doesn't have, a value not among the choices, an empty one and one that isn't plain words", () => {
     expect(() => parseGiven(["region=eu"], specs, "Deploy")).toThrow('"Deploy" has no input called region; it has env, tag');
     expect(() => parseGiven(["env=prod"], specs, "Deploy")).toThrow('env is one of staging, production, not "prod"');
     expect(() => parseGiven(["tag=v1; reboot"], specs, "Deploy")).toThrow(/takes plain words/);

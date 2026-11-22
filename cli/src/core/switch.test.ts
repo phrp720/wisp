@@ -47,7 +47,7 @@ const server: Environment = { os: "linux", gui: false, ssh: true };
 
 describe("matchBolt", () => {
   const ws = workspace({
-    bolts: [{ label: "Work on core" }, { label: "Work on the app" }, { label: "Work on the CLI" }],
+    pipelines: [{ label: "Work on core" }, { label: "Work on the app" }, { label: "Work on the CLI" }],
   });
 
   it("matches any distinctive part of a label", () => {
@@ -56,11 +56,11 @@ describe("matchBolt", () => {
   });
 
   it("says when a word is ambiguous", () => {
-    expect(() => resolveBolt(ws, "work")).toThrow(/several bolts/);
+    expect(() => resolveBolt(ws, "work")).toThrow(/several pipelines/);
   });
 
   it("takes only whole words, or a run of them, never part of one", () => {
-    const docs = workspace({ bolts: [{ label: "Documentation" }, { label: "Document" }, { label: "Work on the CLI" }] });
+    const docs = workspace({ pipelines: [{ label: "Documentation" }, { label: "Document" }, { label: "Work on the CLI" }] });
     expect(matchBolt(docs, "doc").bolt).toBeUndefined();
     expect(matchBolt(docs, "doc").candidates).toEqual([]);
     expect(matchBolt(docs, "ation").bolt).toBeUndefined();
@@ -72,12 +72,12 @@ describe("matchBolt", () => {
 });
 
 describe("planBolt", () => {
-  it("plans a bolt step's steps where it is, once each, and has each step wait for what it says", async () => {
+  it("plans a pipeline step's steps where it is, once each, and has each step wait for what it says", async () => {
     const ws = workspace({
-      bolts: [
-        { label: "db", targets: [{ run: "postgres", label: "postgres" }, { wait: "5432", label: "ready", after: "postgres" }] },
-        { label: "api", targets: [{ bolt: "db", label: "db" }, { run: "pnpm dev", after: "db" }] },
-        { label: "all", targets: [{ bolt: "db", label: "db" }, { bolt: "api", label: "api" }, { url: "localhost:3000", after: ["db", "api"] }] },
+      pipelines: [
+        { label: "db", steps: [{ run: "postgres", label: "postgres" }, { wait: "5432", label: "ready", after: "postgres" }] },
+        { label: "api", steps: [{ pipeline: "db", label: "db" }, { run: "pnpm dev", after: "db" }] },
+        { label: "all", steps: [{ pipeline: "db", label: "db" }, { pipeline: "api", label: "api" }, { url: "localhost:3000", after: ["db", "api"] }] },
       ],
     });
     const plan = await planBolt(ws, resolveBolt(ws, "all"));
@@ -87,25 +87,25 @@ describe("planBolt", () => {
   });
 
   it("refuses a cycle before anything runs", async () => {
-    const ws = workspace({ bolts: [{ label: "a", targets: [{ bolt: "b" }] }, { label: "b", targets: [{ bolt: "a" }] }] });
-    await expect(planBolt(ws, resolveBolt(ws, "a"))).rejects.toThrow("These bolts need each other: a → b → a");
+    const ws = workspace({ pipelines: [{ label: "a", steps: [{ pipeline: "b" }] }, { label: "b", steps: [{ pipeline: "a" }] }] });
+    await expect(planBolt(ws, resolveBolt(ws, "a"))).rejects.toThrow("These pipelines need each other: a → b → a");
   });
 
   it("leaves out what is withheld", async () => {
-    const ws = workspace({ bolts: [{ label: "x", targets: [{ run: "make" }, { folder: "src" }] }] }, undefined, false);
+    const ws = workspace({ pipelines: [{ label: "x", steps: [{ run: "make" }, { folder: "src" }] }] }, undefined, false);
     const plan = await planBolt(ws, resolveBolt(ws, "x"));
     expect(plan.map((step) => step.target.kind)).toEqual(["folder"]);
   });
 });
 
 describe("questionsFor", () => {
-  it("asks the bolt's question and those of the bolts it runs, each once", async () => {
+  it("asks the pipeline's question and those of the pipelines it runs, each once", async () => {
     const ws = workspace({
-      bolts: [
-        { label: "Database", confirm: "Touch the shared database?", targets: [{ run: "db" }] },
-        { label: "Migrate", targets: [{ bolt: "Database" }, { run: "migrate", finishes: true }] },
-        { label: "Deploy", confirm: "Deploy to production?", targets: [{ bolt: "Migrate" }, { bolt: "Database" }, { run: "deploy", finishes: true }] },
-        { label: "Dev", targets: [{ run: "pnpm dev" }] },
+      pipelines: [
+        { label: "Database", confirm: "Touch the shared database?", steps: [{ run: "db" }] },
+        { label: "Migrate", steps: [{ pipeline: "Database" }, { run: "migrate", finishes: true }] },
+        { label: "Deploy", confirm: "Deploy to production?", steps: [{ pipeline: "Migrate" }, { pipeline: "Database" }, { run: "deploy", finishes: true }] },
+        { label: "Dev", steps: [{ run: "pnpm dev" }] },
       ],
     });
     expect(await questionsFor(ws, resolveBolt(ws, "Deploy"))).toEqual(["Deploy to production?", "Touch the shared database?"]);
@@ -113,17 +113,17 @@ describe("questionsFor", () => {
   });
 
   it("puts the run's values in the question", async () => {
-    const ws = workspace({ bolts: [{ label: "Deploy", inputs: { env: {} }, confirm: "Deploy to {{env}}?", targets: [{ run: "deploy {{env}}" }] }] });
+    const ws = workspace({ pipelines: [{ label: "Deploy", inputs: { env: {} }, confirm: "Deploy to {{env}}?", steps: [{ run: "deploy {{env}}" }] }] });
     expect(await questionsFor(ws, resolveBolt(ws, "Deploy"), { env: "production" })).toEqual(["Deploy to production?"]);
   });
 });
 
 describe("inputsFor", () => {
-  it("asks each name once, the bolt's own first, then those of the bolts it runs", async () => {
+  it("asks each name once, the pipeline's own first, then those of the pipelines it runs", async () => {
     const ws = workspace({
-      bolts: [
-        { label: "Push", inputs: { env: { ask: "Push where?" }, tag: { default: "latest" } }, targets: [{ run: "push {{env}} {{tag}}" }] },
-        { label: "Release", inputs: { env: { ask: "Release where?", choices: ["staging", "production"] } }, targets: [{ bolt: "Push" }] },
+      pipelines: [
+        { label: "Push", inputs: { env: { ask: "Push where?" }, tag: { default: "latest" } }, steps: [{ run: "push {{env}} {{tag}}" }] },
+        { label: "Release", inputs: { env: { ask: "Release where?", choices: ["staging", "production"] } }, steps: [{ pipeline: "Push" }] },
       ],
     });
     expect(await inputsFor(ws, resolveBolt(ws, "Release"))).toEqual([
@@ -180,11 +180,11 @@ describe("routeFor", () => {
 });
 
 describe("switchToWorkspace", () => {
-  it("opens a bolt's steps in order through the platform", async () => {
+  it("opens a pipeline's steps in order through the platform", async () => {
     await writeFile(join(dir, "notes.md"), "");
     const ws = workspace(
       {
-        bolts: [{ label: "go", targets: [{ app: "Slack" }, { folder: "." }, { file: "notes.md" }, { url: "acme.com" }, { run: "pnpm dev" }] }],
+        pipelines: [{ label: "go", steps: [{ app: "Slack" }, { folder: "." }, { file: "notes.md" }, { url: "acme.com" }, { run: "pnpm dev" }] }],
       },
       join(dir, ".wisp.json"),
     );
@@ -203,7 +203,7 @@ describe("switchToWorkspace", () => {
   });
 
   it("prints links and skips windows when there is no display", async () => {
-    const ws = workspace({ bolts: [{ label: "go", targets: [{ url: "acme.com" }, { app: "Slack" }] }] });
+    const ws = workspace({ pipelines: [{ label: "go", steps: [{ url: "acme.com" }, { app: "Slack" }] }] });
     const platform = recorder();
     const result = await switchToWorkspace(ws, { bolt: "go" }, { platform, environment: server, defaults: {} });
 
@@ -216,7 +216,7 @@ describe("switchToWorkspace", () => {
 
   it("stops after a wait that gives up, and says what it did not reach", async () => {
     const ws = workspace({
-      bolts: [{ label: "go", targets: [{ wait: { port: 1, timeout: 0.3 }, label: "ready" }, { url: "acme.com", after: "ready" }] }],
+      pipelines: [{ label: "go", steps: [{ wait: { port: 1, timeout: 0.3 }, label: "ready" }, { url: "acme.com", after: "ready" }] }],
     });
     const platform = recorder();
     const result = await switchToWorkspace(ws, { bolt: "go" }, { platform, environment: desktop, defaults: {} });
@@ -227,7 +227,7 @@ describe("switchToWorkspace", () => {
   });
 
   it("runs a command inline through the caller, with its environment folded in", async () => {
-    const ws = workspace({ bolts: [{ label: "go", targets: [{ run: "echo $X", env: { X: "1" }, cwd: "api" }] }] });
+    const ws = workspace({ pipelines: [{ label: "go", steps: [{ run: "echo $X", env: { X: "1" }, cwd: "api" }] }] });
     const seen: string[] = [];
     const result = await switchToWorkspace(
       ws,
@@ -248,7 +248,7 @@ describe("switchToWorkspace", () => {
   it("refuses to open an executable from an untrusted workspace", async () => {
     await writeFile(join(dir, "go"), "#!/bin/sh\n");
     await chmod(join(dir, "go"), 0o755);
-    const ws = workspace({ bolts: [{ label: "x", targets: [{ file: "go" }] }] }, join(dir, ".wisp.json"), false);
+    const ws = workspace({ pipelines: [{ label: "x", steps: [{ file: "go" }] }] }, join(dir, ".wisp.json"), false);
     const platform = recorder();
     const result = await switchToWorkspace(ws, { bolt: "x" }, { platform, environment: desktop, defaults: {} });
 
@@ -257,7 +257,7 @@ describe("switchToWorkspace", () => {
   });
 
   it("does nothing at all on a dry run", async () => {
-    const ws = workspace({ bolts: [{ label: "x", targets: [{ run: "rm -rf /" }, { url: "acme.com" }] }] });
+    const ws = workspace({ pipelines: [{ label: "x", steps: [{ run: "rm -rf /" }, { url: "acme.com" }] }] });
     const platform = recorder();
     const result = await switchToWorkspace(ws, { bolt: "x", dryRun: true }, { platform, environment: desktop, defaults: {} });
     expect(platform.calls).toEqual([]);

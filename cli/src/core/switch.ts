@@ -386,12 +386,12 @@ export async function planBolt(workspace: Workspace, bolt: Bolt): Promise<Planne
   const expand = async (owner: Workspace, current: Bolt, stack: string[], startAfter: string[]): Promise<string[]> => {
     const key = `${owner.file}#${current.id}`;
     if (stack.includes(key)) {
-      const names = [...stack.slice(stack.indexOf(key)), key].map((entry) => entry.split("#bolt:")[1] ?? entry);
-      throw new WispError(`These bolts need each other: ${names.join(" → ")}`, "CYCLE");
+      const names = [...stack.slice(stack.indexOf(key)), key].map((entry) => entry.split("#pipeline:")[1] ?? entry);
+      throw new WispError(`These pipelines need each other: ${names.join(" → ")}`, "CYCLE");
     }
     const known = finished.get(key);
     if (known) return known;
-    if (current.broken) throw new WispError(current.broken, "BROKEN_BOLT");
+    if (current.broken) throw new WispError(current.broken, "BROKEN_PIPELINE");
 
     const byId = new Map(collectTargets(owner).map((target) => [target.id, target]));
     const byName = new Map<string, number>();
@@ -404,14 +404,14 @@ export async function planBolt(workspace: Workspace, bolt: Bolt): Promise<Planne
 
     while (left.size > 0) {
       const at = [...left].find((index) => (current.steps[index]?.after ?? []).every((name) => !left.has(byName.get(name) ?? -1)));
-      if (at === undefined) throw new WispError(`"${current.label}" can't run: its steps wait for each other`, "BROKEN_BOLT");
+      if (at === undefined) throw new WispError(`"${current.label}" can't run: its steps wait for each other`, "BROKEN_PIPELINE");
       left.delete(at);
       const step = current.steps[at] as BoltStep;
       const after = step.after ?? [];
       const waitsFor = after.length > 0 ? [...new Set(after.flatMap((name) => doneBy.get(byName.get(name) ?? -1) ?? []))] : startAfter;
       const stepKey = `${key}#${at}`;
 
-      if (step.kind === "bolt") {
+      if (step.kind === "pipeline") {
         const keys = await expand(owner, resolveBolt(owner, step.bolt), [...stack, key], waitsFor);
         doneBy.set(at, keys.length > 0 ? keys : waitsFor);
         all.push(...keys);
@@ -915,7 +915,7 @@ export async function downBolt(
 ): Promise<DownResult> {
   const plan = options.deps
     ? await planBolt(workspace, bolt)
-    : await planBolt(workspace, { ...bolt, steps: bolt.steps.filter((step) => step.kind !== "bolt") });
+    : await planBolt(workspace, { ...bolt, steps: bolt.steps.filter((step) => step.kind !== "pipeline") });
 
   const commands = plan.filter((step) => step.target.kind === "command");
   const runs = (await listRuns()).filter((run) => run.alive);
@@ -934,7 +934,7 @@ export async function downBolt(
   for (const owner of owners) {
     const source = owner.workspace.bolts.find((entry) => entry.label === owner.bolt);
     if (!source?.down?.length) continue;
-    const steps = await planBolt(owner.workspace, { ...source, steps: source.down.filter((step) => step.kind !== "bolt"), keepGoing: false });
+    const steps = await planBolt(owner.workspace, { ...source, steps: source.down.filter((step) => step.kind !== "pipeline"), keepGoing: false });
     teardownSteps.push(
       ...steps.map((step) => ({
         ...step,
@@ -1093,15 +1093,15 @@ export function resolveBolt(workspace: Workspace, ref: string): Bolt {
 
   if (candidates.length > 1) {
     throw new WispError(
-      `"${ref}" matches several bolts: ${candidates.map((match) => match.label).join(", ")}`,
+      `"${ref}" matches several pipelines: ${candidates.map((match) => match.label).join(", ")}`,
       "AMBIGUOUS",
     );
   }
 
-  if (workspace.bolts.length === 0) throw new WispError(`${workspace.name} has no bolts yet`, "NOT_FOUND");
+  if (workspace.bolts.length === 0) throw new WispError(`${workspace.name} has no pipelines yet`, "NOT_FOUND");
 
   throw new WispError(
-    `${workspace.name} has no bolt called "${ref}" — it has ${workspace.bolts.map((match) => match.label).join(", ")}`,
+    `${workspace.name} has no pipeline called "${ref}" — it has ${workspace.bolts.map((match) => match.label).join(", ")}`,
     "NOT_FOUND",
   );
 }
@@ -1133,8 +1133,8 @@ function listStep(step: BoltStep, byId: Map<string, SwitchTarget>, workspace: Wo
     if (step.kind === "wait") {
       return [{ kind: "wait", id: "wait", label: describeWait(step.wait), value: describeWait(step.wait), wait: step.wait }];
     }
-    if (step.kind === "bolt") {
-      return [{ kind: "bolt", id: `bolt:${step.bolt.toLowerCase()}`, label: step.bolt, value: step.bolt }];
+    if (step.kind === "pipeline") {
+      return [{ kind: "pipeline", id: `pipeline:${step.bolt.toLowerCase()}`, label: step.bolt, value: step.bolt }];
     }
     if (step.kind === "compose") return workspace.trusted ? [composeTarget(step, "up")] : [];
     const target = byId.get(step.id);

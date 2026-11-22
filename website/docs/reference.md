@@ -12,15 +12,15 @@ Your editor autocompletes all of this once the file has its `$schema` line.
 | `icon` | an emoji shown beside the name, like `"🏢"` |
 | `color` | a hex colour, like `"#6d4aff"` |
 | `notes` | a line about what the project is for |
-| `bolts` | the [bolts](#bolts) |
+| `pipelines` | the [pipelines](#pipelines) |
 
-## Bolts
+## Pipelines
 
 | Field | |
 |---|---|
 | `label` | its name, and what you type: its slug or any whole word of it runs it. Keep it short: "Deploy", "Work on api" |
 | `notes` | a line on what it does, shown in `wisp show`, `wisp pick`, tab completion and the dashboard |
-| `targets` | its [steps](#steps), in order |
+| `steps` | its [steps](#steps), in order |
 | `keepGoing` | `true` reports a failed step and runs the rest anyway; without it, a failed step [stops the run](./runs#when-a-step-fails) |
 | `confirm` | a question to [ask before it runs](./file#asking-first), like `"Deploy to production?"`; `true` asks "Run "Deploy"?" |
 | `inputs` | [values it asks for](./file#inputs) each time it runs, used in its steps as `{{name}}`: `{ "env": { "ask": "Deploy where?", "choices": ["staging", "production"], "default": "staging" } }` |
@@ -60,14 +60,14 @@ Runs only once the file is [trusted](./trust).
 Starts the services and waits until they're healthy. Leave out `services` for all of them.
 `wisp down` stops them.
 
-### Another bolt
+### Another pipeline
 
 ```json
-{ "bolt": "Database" }
+{ "pipeline": "Database" }
 ```
 
-Runs a bolt of the same file as one step: done when all its steps are. It runs once per
-run, however many steps run it. See [bolts in bolts](./file#bolts-in-bolts).
+Runs a pipeline of the same file as one step: done when all its steps are. It runs once per
+run, however many steps run it. See [pipelines in pipelines](./file#pipelines-in-pipelines).
 
 ### Wait
 
@@ -113,13 +113,13 @@ A name, a macOS bundle id (`com.tinyspeck.slackmacgap`), or a command on PATH.
 
 ### After
 
-Any step can say which steps of its bolt it waits for, by their `label`:
+Any step can say which steps of its pipeline it waits for, by their `label`:
 
 ```json
 { "run": "pnpm build", "after": ["lint", "test"], "finishes": true }
 ```
 
-Left out, it starts right away, with the bolt. See [order](./file#order).
+Left out, it starts right away, with the pipeline. See [order](./file#order).
 
 In your [personal workspaces](./file#personal-workspaces), a folder or file step can also say
 `"openWith": "WebStorm"`. A project's file can't: everyone chooses their own editor.
@@ -137,7 +137,7 @@ for another OS is skipped quietly.
 
 ## Beside the file
 
-- **`.wisp.local.json`** next to it is merged in: your own bolts and assets, kept out of git.
-  A bolt with the same label replaces the project's.
+- **`.wisp.local.json`** next to it is merged in: your own pipelines and assets, kept out of git.
+  A pipeline with the same label replaces the project's.
 - **Personal workspaces** are the same format, in Wisp's `workspaces` folder (`wisp doctor`
   shows where).

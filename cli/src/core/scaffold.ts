@@ -97,7 +97,20 @@ export function chooseBolts(all: DraftBolt[], only?: string[]): DraftBolt[] {
   const wanted = new Set(only.map((name) => name.trim().toLowerCase()));
   const kept = all.filter((bolt) => wanted.has(bolt.label.toLowerCase()));
   const names = new Set(kept.map((bolt) => bolt.label));
-  return kept.map((bolt) => ({ ...bolt, targets: bolt.targets.filter((step) => typeof step["bolt"] !== "string" || names.has(step["bolt"])) }));
+  const left = (step: Step) => typeof step["pipeline"] === "string" && !names.has(step["pipeline"]);
+  return kept.map((bolt) => {
+    const gone = new Set(bolt.steps.filter(left).flatMap((step) => [step["label"], step["pipeline"]].filter((name) => typeof name === "string").map((name) => (name as string).toLowerCase())));
+    return { ...bolt, steps: bolt.steps.filter((step) => !left(step)).map((step) => withoutAfter(step, gone)) };
+  });
+}
+
+function withoutAfter(step: Step, gone: Set<string>): Step {
+  const after = step["after"];
+  if (after === undefined || gone.size === 0) return step;
+  const still = (Array.isArray(after) ? after : [after]).filter((name) => !gone.has(String(name).toLowerCase()));
+  const { after: _dropped, ...rest } = step;
+  if (still.length === 0) return rest;
+  return { ...rest, after: still.length === 1 ? still[0] : still };
 }
 
 /**
@@ -190,7 +203,7 @@ export async function detect(root: string): Promise<Detected> {
   for (const check of eco.checks) {
     if (!checks.some((known) => known.run === check.run && (known.cwd ?? "") === (check.cwd ?? ""))) checks.push(check);
   }
-  // Task runners by name and count: "4 Makefile targets", "2 mise tasks".
+  // Task runners by name and count: "4 Makefile steps", "2 mise tasks".
   const runners = new Map<string, number>();
   for (const task of [...tasks, ...eco.tasks]) runners.set(task.source, (runners.get(task.source) ?? 0) + 1);
   for (const [source, many] of runners) sources.push(`${many} ${source} ${RUNNER_NOUN[source]?.[many === 1 ? 0 : 1] ?? (many === 1 ? "task" : "tasks")}`);
@@ -525,7 +538,7 @@ type Step = Record<string, unknown>;
 export interface DraftBolt {
   label: string;
   color?: string;
-  targets: Step[];
+  steps: Step[];
   down?: Step[];
 }
 
@@ -537,9 +550,9 @@ export function bolts(detected: Detected, random: () => number = Math.random): D
   if (services.length > 0) {
     // A compose step rather than a `docker compose up` command: Wisp then waits for the
     // services to be healthy, shows each container, and stops them again on `down`.
-    out.push({ label: "Services", targets: [{ compose: detected.compose?.file ?? composeFileName(detected) }] });
+    out.push({ label: "Services", steps: [{ compose: detected.compose?.file ?? composeFileName(detected) }] });
   }
-  const servicesStep = services.length > 0 ? [{ bolt: "Services", label: "services" }] : [];
+  const servicesStep = services.length > 0 ? [{ pipeline: "Services", label: "services" }] : [];
   const afterServices = services.length > 0 ? { after: "services" } : {};
 
   for (const app of detected.apps) {
@@ -547,7 +560,7 @@ export function bolts(detected: Detected, random: () => number = Math.random): D
     const server = `${app.name} ${app.command.split(" ").pop()}`;
     out.push({
       label: `Work on ${app.name}`,
-      targets: [
+      steps: [
         ...servicesStep,
         ...(app.dir ? [{ folder: app.dir }] : []),
         { run: app.command, ...(app.dir ? { cwd: app.dir } : {}), label: server, ...afterServices },
@@ -559,12 +572,12 @@ export function bolts(detected: Detected, random: () => number = Math.random): D
   if (detected.everything) {
     out.push({
       label: detected.everything.label,
-      targets: [...servicesStep, ...detected.everything.steps.map((step) => ({ run: step.run, label: step.label, ...afterServices }))],
+      steps: [...servicesStep, ...detected.everything.steps.map((step) => ({ run: step.run, label: step.label, ...afterServices }))],
     });
   }
 
   if (detected.checks.length > 0) {
-    out.push({ label: "Check", targets: detected.checks.map((check) => ({ run: check.run, ...(check.cwd ? { cwd: check.cwd } : {}), label: check.cwd ? `${check.label} (${check.cwd})` : check.label, finishes: true })) });
+    out.push({ label: "Check", steps: detected.checks.map((check) => ({ run: check.run, ...(check.cwd ? { cwd: check.cwd } : {}), label: check.cwd ? `${check.label} (${check.cwd})` : check.label, finishes: true })) });
   }
 
   // Nothing to run at all: the old, plain draft — a bolt per area, opening it with the repo.
@@ -572,20 +585,20 @@ export function bolts(detected: Detected, random: () => number = Math.random): D
   if (out.length === 0) {
     const repo = links[0];
     if (detected.folders.length === 0) {
-      out.push({ label: `Open ${detected.name}`, targets: links });
+      out.push({ label: `Open ${detected.name}`, steps: links });
     } else {
       for (const folder of detected.folders) {
-        out.push({ label: `Work on ${folder.label}`, targets: [{ folder: folder.path }, ...(repo ? [repo] : [])] });
+        out.push({ label: `Work on ${folder.label}`, steps: [{ folder: folder.path }, ...(repo ? [repo] : [])] });
       }
     }
   } else if (links.length > 0) {
-    out.push({ label: "Open the repo", targets: links });
+    out.push({ label: "Open the repo", steps: links });
   }
 
   // A colour each, none the same, so the list reads at a glance.
-  const kept = out.filter((bolt) => bolt.targets.length > 0);
+  const kept = out.filter((bolt) => bolt.steps.length > 0);
   const colors = pickColors(kept.length, [], random);
-  return kept.map((bolt, at) => ({ label: bolt.label, color: colors[at] as string, targets: bolt.targets, ...(bolt.down ? { down: bolt.down } : {}) }));
+  return kept.map((bolt, at) => ({ label: bolt.label, color: colors[at] as string, steps: bolt.steps, ...(bolt.down ? { down: bolt.down } : {}) }));
 }
 
 function composeFileName(detected: Detected): string {
@@ -598,7 +611,7 @@ function format(detected: Detected, only?: string[]): string {
     // in any editor that reads JSON Schema.
     ["$schema", PROJECT_SCHEMA_URL],
     ["name", detected.name],
-    ["bolts", chooseBolts(bolts(detected), only)],
+    ["pipelines", chooseBolts(bolts(detected), only)],
   ]);
 }
 
@@ -625,7 +638,7 @@ export function formatProjectFile(sections: [key: string, value: unknown][]): st
     if (Array.isArray(value)) {
       if (value.length === 0) continue;
       flush();
-      const body = key === "bolts" ? (value as (DraftBolt & Record<string, unknown>)[]).map(boltBlock).join(",\n") : rows(value as Record<string, unknown>[]);
+      const body = key === "pipelines" ? (value as (DraftBolt & Record<string, unknown>)[]).map(boltBlock).join(",\n") : rows(value as Record<string, unknown>[]);
       groups.push([`  ${JSON.stringify(key)}: [\n${body}\n  ]`]);
       continue;
     }
@@ -642,12 +655,12 @@ export function formatProjectFile(sections: [key: string, value: unknown][]): st
  * is kept, in the order written — the file may hold what a person added by hand.
  */
 function boltBlock(bolt: DraftBolt & Record<string, unknown>): string {
-  const keys = ["label", ...Object.keys(bolt).filter((key) => key !== "label" && key !== "targets" && key !== "down"), "targets", ...("down" in bolt ? ["down"] : [])];
+  const keys = ["label", ...Object.keys(bolt).filter((key) => key !== "label" && key !== "steps" && key !== "down"), "steps", ...("down" in bolt ? ["down"] : [])];
   const lines = keys.map((key) => {
     const value = bolt[key];
-    if (key === "targets") {
+    if (key === "steps") {
       const steps = (Array.isArray(value) ? value : []) as unknown[];
-      return steps.length === 0 ? `      "targets": []` : `      "targets": [\n${steps.map((step) => `        ${inline(step)}`).join(",\n")}\n      ]`;
+      return steps.length === 0 ? `      "steps": []` : `      "steps": [\n${steps.map((step) => `        ${inline(step)}`).join(",\n")}\n      ]`;
     }
     if (key === "down") return `      "down": [${((value as unknown[]) ?? []).map(inline).join(", ")}]`;
     return `      ${JSON.stringify(key)}: ${inline(value)}`;

@@ -6,24 +6,22 @@ Each command says which it is. That decides whether Wisp **waits for it**.
 
 | | Keeps running (the default) | Finishes (`"finishes": true`) |
 |---|---|---|
-| **For** | dev servers, databases, watchers | tests, lint, builds, backups, deploys |
-| **Wisp** | starts it in the background, checks it didn't fail at once, then moves on | waits for it, with its output on screen |
-| **Afterwards** | it keeps running: watch it on Running, stop it with `x` or `wisp down` | it's over, ✓ or ✗, with its output kept in History |
-| **Already running** | left alone, not started twice | runs again, every time |
+| **For** | dev servers, databases, watchers, tunnels | tests, lint, builds, backups, deploys |
+| **Wisp** | starts it in the background, checks it didn't fail at once, moves on | waits for it, with its output on screen |
+| **Afterwards** | it keeps running: [watch it](./running), stop it with `wisp down` | ✓ or ✗, with its output kept in History |
+| **Run again** | left alone if it's already up | runs again, every time |
 
-One bolt can mix both. This one starts the database, then the API; meanwhile it builds the
-UI, then serves it, and opens the page once both are up:
+One pipeline can mix both: build the UI, then serve it, while the API starts beside it.
 
 ```json
 {
   "label": "Dev",
-  "targets": [
+  "steps": [
     { "compose": "compose.yaml", "label": "db" },
     { "run": "npm run dev", "cwd": "api", "label": "api", "after": "db" },
     { "run": "npm run build", "cwd": "ui", "label": "build", "finishes": true },
     { "run": "npm run start", "cwd": "ui", "label": "ui", "after": "build" },
-    { "wait": "localhost:3000", "label": "up", "after": "ui" },
-    { "url": "http://localhost:3000", "after": ["up", "api"] }
+    { "url": "http://localhost:3000", "after": ["ui", "api"] }
   ]
 }
 ```
@@ -39,74 +37,71 @@ nothing deploys:
 ```json
 {
   "label": "Release",
-  "targets": [
-    { "bolt": "Check", "label": "check" },
-    { "run": "pnpm build", "label": "build", "after": "check", "finishes": true },
+  "steps": [
+    { "pipeline": "Verify", "label": "verify" },
+    { "run": "pnpm build", "label": "build", "after": "verify", "finishes": true },
     { "run": "./deploy.sh", "after": "build", "finishes": true }
   ]
 }
 ```
 
-A bolt it runs that fails stops it too. To carry on anyway, give the bolt
-`"keepGoing": true`: a failure is reported, and the rest still runs. In the dashboard, press
-`e` on the bolt and change its **On failure** row.
+To carry on anyway, give the pipeline `"keepGoing": true`: a failure is reported and the rest
+still runs. In the dashboard, it's the pipeline's **On failure** row.
 
 ## When a step hangs
 
-A command that should finish can hang instead: a test stuck on the network, a backup
-waiting on a lock. Give it a `"timeout"`:
+A test stuck on the network, a backup waiting on a lock: give a command that should finish a
+`"timeout"`.
 
 ```json
 { "run": "pnpm test", "finishes": true, "timeout": "10m" }
 ```
 
-If it takes longer, Wisp stops it and everything it started, and the step fails like any
-other: the run stops, and you're [told](./settings#notifications). Without a timeout, Wisp
-waits as long as it takes. In the dashboard, it's the command's **Timeout** row.
+Past it, Wisp stops the command and everything it started, and the step fails like any
+other: the run stops, and you're [told](./settings#notifications). Without one, Wisp waits as
+long as it takes.
 
 ## History
 
-Every run is kept, the way a CI keeps them: numbered per bolt, with the branch and commit
-it ran on, what started it, the [values it was given](./file#inputs), and each step's time
-and output. A run shows up as soon as it
-starts and fills in as it goes: the steps done, the one it's on (with its output so far, for
-a command that finishes), and the ones still to come. Running shows the same for the bolt.
-One whose Wisp was closed or killed before it finished is marked interrupted, with the steps
-it never reached. Rename a workspace and its past runs show the new name; one you've
-removed keeps the name it had.
+Every run is kept, the way a CI keeps them: numbered per pipeline, with the branch and commit it
+ran on, what started it, the [values it was given](./file#inputs), and each step's time and
+output. A run shows up as soon as it starts and fills in as it goes.
 
-![A Check bolt fails at its test; History shows the run like CI, with the test's output; after the fix, --retry runs only the test, and it passes](/demo/jobs.gif)
+![A Check pipeline fails at its test; History shows the run like CI, with the test's output; after the fix, --retry runs only the test, and it passes](/demo/jobs.gif)
 
-From the command line: `wisp history` lists the runs, `wisp history <id>` shows one, and
-`wisp history <id> --log 3` prints what step 3 printed. `--clear` deletes runs:
-`wisp history <id> --clear` one run, `wisp history check --clear` a bolt's,
-`wisp history --clear` this project's, and with `--all` every project's. Runs still going are
-kept.
+```bash
+wisp history                 # this project's runs; --all for every project
+wisp history <id>            # one run, step by step
+wisp history <id> --log 3    # what step 3 printed
+wisp history verify --clear  # delete a pipeline's runs (runs still going are kept)
+```
 
-In the dashboard, the History tab (`3`) shows the same: bolts on the left to filter by, the runs on
-the right, and each run's page with a summary, the bolts it went through, and every step's
-output. On a run's page, `/` filters every step's output at once: each step says how many
-lines matched, and the matching lines show under it with their numbers. Type `FAIL` or
-`error` to go straight to what broke. `D` deletes the selected run, or, on the bolts on the
-left, clears that bolt's runs (all of them on "All bolts"), after asking.
+In the dashboard, it's the History tab (`3`): pipelines on the left, their runs on the right,
+and each run's page with every step's output. `/` filters all of a run's output at once:
+type `FAIL` or `error` to go straight to what broke. `D` deletes a run, or a pipeline's runs.
+
+Wisp keeps the last 200 runs and deletes older ones as new ones come in.
 
 ## Retry only what failed
 
-`wisp Check --retry` (or `r` in the dashboard) runs the failed step and everything after it, not
-the steps that already passed, with the same input values.
+`wisp verify --retry` (or `r` in the dashboard) runs the failed step and what comes after it,
+not the steps that already passed, with the same input values.
 
 ## From git hooks and cron
 
-Run your checks before every push. The push is blocked if they fail:
+Run your checks before every push. A failure stops the push:
 
 ```bash
-wisp hook pre-push check
+wisp hook pre-push verify
 ```
 
-Its commands should finish: one that keeps running can't block a push, and Wisp says so.
+Its commands should finish: one that keeps running can't stop a push, and Wisp says so.
 
 Or on a schedule, with the cron you already have:
 
 ```
-0 3 * * * wisp use ~/dev/acme/.wisp.json Release
+0 3 * * * wisp use ~/dev/acme/.wisp.json Backup
 ```
+
+A run nobody watched that fails shows a notification, or posts to your
+[webhook](./settings#notifications).

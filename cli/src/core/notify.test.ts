@@ -44,7 +44,7 @@ describe("when to tell you", () => {
 });
 
 describe("what it says", () => {
-  it("names the bolt, the step that failed, the workspace and the run", () => {
+  it("names the pipeline, the step that failed, the workspace and the run", () => {
     expect(describeEnd(failed)).toEqual({ title: "✗ Backup failed", message: "at dump · Ops · wisp history abc123" });
   });
 
@@ -54,7 +54,7 @@ describe("what it says", () => {
     const ntfy = webhookRequest("https://ntfy.sh/acme-ops", failed, "web-1");
     expect(ntfy.url).toBe("https://ntfy.sh/");
     expect(JSON.parse(ntfy.body)).toMatchObject({ topic: "acme-ops", title: "✗ Backup failed on web-1", tags: ["x"] });
-    expect(JSON.parse(webhookRequest("https://example.com/hook", failed, "web-1").body)).toMatchObject({ ok: false, bolt: "Backup", failedStep: "dump", history: "abc123", host: "web-1" });
+    expect(JSON.parse(webhookRequest("https://example.com/hook", failed, "web-1").body)).toMatchObject({ ok: false, pipeline: "Backup", failedStep: "dump", history: "abc123", host: "web-1" });
   });
 });
 
@@ -91,7 +91,7 @@ describe("sending", () => {
     try {
       const webhook = `http://127.0.0.1:${port}/hook`;
       expect(await sendNotification(failed, { platform, environment: desktop, settings: { webhook } })).toEqual([]);
-      expect(JSON.parse(received[0] as string)).toMatchObject({ bolt: "Backup", ok: false });
+      expect(JSON.parse(received[0] as string)).toMatchObject({ pipeline: "Backup", ok: false });
       expect(shown).toEqual(["✗ Backup failed | at dump · Ops · wisp history abc123"]);
       expect(await sendNotification(failed, { platform, environment: { ...desktop, gui: false }, settings: { webhook } })).toEqual(["webhook: 500 Internal Server Error"]);
       expect(shown).toHaveLength(1);

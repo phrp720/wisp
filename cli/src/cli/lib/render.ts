@@ -78,24 +78,26 @@ export function upMark(workspace: Workspace, bolt: Workspace["bolts"][number], r
  * What to run, when a command needed a bolt and was not given one. Ends on a line that
  * can be pasted, naming the workspace whenever the workspace was named.
  */
-/**
- * The shortest thing that still names this bolt among the ones it sits with. The
- * suggestion is where the matching rule is taught, so it shows what is actually enough.
- */
-export function shortest(bolt: Bolt, among: Bolt[] = []): string {
-  const others = among.filter((candidate) => candidate.id !== bolt.id);
+export const COMMAND_WORDS: ReadonlySet<string> = new Set(["agents", "check", "completion", "doctor", "down", "help", "history", "hook", "init", "lint", "list", "logs", "ls", "notify", "open-with", "pick", "ps", "restart", "run", "scan", "show", "spec", "status", "stop", "trust", "use"]);
 
-  const words = slugify(bolt.label)
-    .split("-")
-    .filter(Boolean)
-    .sort((left, right) => left.length - right.length);
+const FILLER = new Set(["a", "an", "and", "at", "by", "for", "from", "in", "into", "it", "my", "of", "off", "on", "or", "our", "the", "to", "up", "with"]);
+
+/**
+ * A short word that still names this bolt among the ones it sits with: the last word that
+ * means something, since a label names its object last ("Work on storefront"). Typed on its
+ * own (`alone`), it never suggests a command's name, which `wisp <word>` would run instead.
+ */
+export function shortest(bolt: Bolt, among: Bolt[] = [], alone = false): string {
+  const others = among.filter((candidate) => candidate.id !== bolt.id);
+  const slug = slugify(bolt.label);
+  const words = slug.split("-").filter((word) => word && !FILLER.has(word)).reverse();
 
   for (const word of words) {
-    const clashes = others.some((other) => hasWords(other.label, word));
-    if (!clashes) return word;
+    if (alone && COMMAND_WORDS.has(word)) continue;
+    if (!others.some((other) => hasWords(other.label, word))) return word;
   }
 
-  return slugify(bolt.label);
+  return alone && COMMAND_WORDS.has(slug) ? `use ${slug}` : slug;
 }
 
 /** Everything a workspace file had to say about itself, worst first. */

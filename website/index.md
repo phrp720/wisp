@@ -1,12 +1,12 @@
 ---
 layout: home
 title: Wisp
-titleTemplate: Your everyday tasks, one word each
+titleTemplate: Pipelines for your own machines
 
 hero:
   name: Wisp
-  text: Your everyday tasks, one word each.
-  tagline: Start the dev stack, run the checks, back up the database, redeploy. Write the steps once, then run them from any terminal, on your laptop or a server.
+  text: Pipelines for your own machines.
+  tagline: Your dev stack, checks, deploys and backups, run by name from whatever folder you're in. Steps run side by side or in order, and Wisp keeps track of everything they start.
   actions:
     - theme: brand
       text: Get started

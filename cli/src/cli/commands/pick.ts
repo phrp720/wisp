@@ -16,7 +16,7 @@ type PickOptions = Pick<UseOptions, "dryRun" | "inline" | "detach" | "window" | 
 
 export const pick: CommandDef<PickOptions> = {
   name: "pick",
-  summary: "Choose a bolt from a list and run it",
+  summary: "Choose a pipeline from a list and run it",
   args: [["[workspace]", "workspace name; omitted uses this directory's project, or asks which"]],
   options: [
     ["-n, --dry-run", "show what would happen, and where each command would run"],
@@ -24,9 +24,9 @@ export const pick: CommandDef<PickOptions> = {
     ["-w, --window", "run commands in terminal windows (or tmux windows, inside tmux)"],
     ["-d, --detach", "run commands in the background, even if you chose a terminal"],
     ["--skip-untrusted", "run only what the file is allowed to, skipping what waits for `wisp trust`"],
-    ["--json", "print the bolts it would offer as JSON, and ask nothing"],
+    ["--json", "print the pipelines it would offer as JSON, and ask nothing"],
   ],
-  examples: ["wisp pick              # a bolt of this project", "wisp pick acme         # a bolt of another workspace", "wisp pick --detach     # and run its commands in the background"],
+  examples: ["wisp pick              # a pipeline of this project", "wisp pick acme         # a pipeline of another workspace", "wisp pick --detach     # and run its commands in the background"],
 
   async run([query], options) {
     const here = await maybeProject();
@@ -40,7 +40,7 @@ export const pick: CommandDef<PickOptions> = {
 
     if (!read) {
       const reads = (await discoverWorkspaces()).reads.filter((entry) => entry.workspace.bolts.length > 0);
-      if (reads.length === 0) throw new WispError("No workspace has bolts yet", "NOT_FOUND");
+      if (reads.length === 0) throw new WispError("No workspace has pipelines yet", "NOT_FOUND");
       const index = await choose(
         "Which workspace?",
         reads.map(({ workspace }) => ({
@@ -55,11 +55,11 @@ export const pick: CommandDef<PickOptions> = {
     }
 
     const { workspace } = read;
-    if (workspace.bolts.length === 0) throw new WispError(`${workspace.name} has no bolts yet`, "NO_BOLT");
+    if (workspace.bolts.length === 0) throw new WispError(`${workspace.name} has no pipelines yet`, "NO_PIPELINE");
 
     const runs = await listRuns();
     const index = await choose(
-      `Run which bolt of ${workspace.name}?`,
+      `Run which pipeline of ${workspace.name}?`,
       workspace.bolts.map((bolt) => ({
         label: bolt.label,
         ...(upMark(workspace, bolt, runs) ? { mark: upMark(workspace, bolt, runs) } : {}),

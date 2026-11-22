@@ -8,7 +8,7 @@ import { withImplicitUse } from "./lib/argv.js";
 import { COMMANDS, verbs } from "./lib/commands.js";
 import { fail } from "./lib/define.js";
 import { WispError } from "../core/errors.js";
-import { shortest } from "./lib/render.js";
+import { COMMAND_WORDS, shortest } from "./lib/render.js";
 import { SPEC } from "./spec.js";
 import { VERSION } from "./version.js";
 
@@ -17,7 +17,7 @@ const argv = (...args: string[]) => ["node", "wisp", ...args];
 describe("withImplicitUse", () => {
   const commands = verbs();
 
-  it("reads an unknown first word as a bolt", () => {
+  it("reads an unknown first word as a pipeline", () => {
     expect(withImplicitUse(argv("api"), commands)).toEqual(argv("use", "api"));
     expect(withImplicitUse(argv("api", "-n"), commands)).toEqual(argv("use", "api", "-n"));
   });
@@ -53,7 +53,10 @@ describe("commands", () => {
 });
 
 describe("shortest", () => {
-  it("suggests the shortest word that still names one bolt", () => {
+  it("suggests the last word that means something and still names one pipeline", () => {
+    const shop = ["Work on storefront", "Deploy", "Back up the database"].map((label) => ({ id: label, label, steps: [] }));
+    expect(shortest(shop[0]!, shop)).toBe("storefront");
+    expect(shortest(shop[2]!, shop)).toBe("database");
     const bolts = ["Work on core", "Work on the app", "Work on the CLI"].map((label) => ({ id: label, label, steps: [] }));
     expect(shortest(bolts[0]!, bolts)).toBe("core");
     expect(shortest(bolts[2]!, bolts)).toBe("cli");
@@ -63,6 +66,17 @@ describe("shortest", () => {
     const bolts = ["Documentation", "Docs", "Work on api", "Work on api again"].map((label) => ({ id: label, label, steps: [] }));
     expect(shortest(bolts[1]!, bolts)).toBe("docs");
     expect(shortest(bolts[2]!, bolts)).toBe("work-on-api");
+  });
+
+  it("never suggests a command's name to type on its own", () => {
+    const bolts = ["Check", "Run the checks", "Work on api"].map((label) => ({ id: label, label, steps: [] }));
+    expect(shortest(bolts[0]!, bolts, true)).toBe("use check");
+    expect(shortest(bolts[0]!, bolts)).toBe("check");
+    expect(shortest(bolts[1]!, bolts, true)).toBe("checks");
+  });
+
+  it("knows every word that names a command", () => {
+    expect([...COMMAND_WORDS].sort()).toEqual([...verbs()].sort());
   });
 });
 
@@ -97,10 +111,10 @@ describe("failing", () => {
     const before = process.argv;
     process.argv = ["node", "wisp", "nope", "--json"];
     try {
-      expect(() => fail(new WispError("No bolt called nope", "NO_BOLT"))).toThrow("exit 1");
+      expect(() => fail(new WispError("No pipeline called nope", "NO_PIPELINE"))).toThrow("exit 1");
       expect(JSON.parse(printed.join("\n"))).toEqual({
         ok: false,
-        error: { code: "NO_BOLT", message: "No bolt called nope", hint: "`wisp show [workspace]` lists the bolts, `wisp pick [workspace]` chooses one." },
+        error: { code: "NO_PIPELINE", message: "No pipeline called nope", hint: "`wisp show [workspace]` lists the pipelines, `wisp pick [workspace]` chooses one." },
       });
     } finally {
       process.argv = before;

@@ -1,79 +1,64 @@
 # What's running
 
-Wisp keeps track of every command it starts. So it knows which bolts are **up**, never
-starts a second copy of a server that's already running, and can take a bolt down again,
-child processes included. Nothing is left behind running without you knowing.
+Wisp keeps track of every command it starts. So it knows which pipelines are **up**, never starts
+a second copy of a server that's already running, and can take a pipeline down again, child
+processes included. Nothing keeps running without you knowing.
 
 ## Where commands run
 
-In the background, on your machine as if you'd typed them. Each shows up in the dashboard's
-Running tab with its live, coloured output. No extra windows. They keep running when you
-close Wisp, and they're there again when you reopen it.
-
-From the command line:
+In the background, as if you'd typed them, with their output kept. They keep running when
+you close Wisp or disconnect, and they're there again when you come back.
 
 ```bash
 wisp ps              # what's running: status, uptime, restarts
 wisp logs api -f     # follow one
-wisp stop api        # stop one
+wisp stop api        # stop one, and everything it started
 ```
 
-Prefer a window per command, or a tmux session? Choose it in [Settings](./settings) (`s`), or
-ask for it once with `--window`.
+Rather have a terminal window per command, or a tmux session? Choose it in
+[Settings](./settings), or ask for it once with `--window`.
 
-## In the Running tab
+## The Running tab
 
-The panel beside the list has tabs for the command you've selected. `[` and `]` switch
-between them, and the tab you pick stays as you move down the list:
+In the dashboard (`2`), each pipeline that's up shows what it started, with health and ports.
+Beside the list, the selected command has three tabs (`[` and `]` switch):
 
-- **Logs:** its live output. `f` shows it full screen: `↑↓` scroll it, `←→` go to the
-  command before or after, and `/` filters it. Only the lines with every word you type stay,
-  the words highlighted, with each line's number. The filter stays as you move to another
-  command, so you can look for the same error in each.
+- **Logs:** its live output. `f` shows it full screen and `/` filters it: only the lines with
+  every word you typed stay, with their line numbers.
+- **Info:** what it runs, in which folder, its `env` (values that look like secrets are
+  hidden), its restart policy and PID, and the `wisp logs` and `wisp stop` lines to reach it
+  from a shell.
+- **Runs:** the times it ran before, and how each ended. Handy when something keeps crashing.
 
-  A dev server that clears the screen for each message (Vite does) shows every message
-  here, one after another, without the screenful of blank lines it pads each clear with.
-- **Info:** what it runs and in which folder, its `env` (values that look like secrets are
-  hidden), its restart policy, its PID, and the `wisp logs` and `wisp stop` lines to reach
-  it from a shell.
-- **Runs:** the times it ran before, newest first, and how each ended. Handy when something
-  keeps crashing.
-
-A container has **Logs** and **Info**, with its image, ports, CPU and memory.
-
-## Commands that ask something
-
-A bolt is meant to run without you, so a command that stops to ask (*"Use port 3001
-instead? (Y/n)"*, *"Password:"*) can't be answered in the background. Wisp notices: the
-command shows as **waiting for an answer** on Running and in `wisp ps`, with the question.
-
-Then fix the step, one of three ways:
-
-| When | Do this |
-|---|---|
-| It has a flag to skip the question | add it to `run`: `--yes`, `-y`, `CI=1`, `--non-interactive`. Best: it never asks again |
-| It needs a secret, like a token | put it in `env`, in your own `.wisp.local.json` (kept out of git), not typed each time |
-| It needs you each time: a login, a 2FA code, sudo | run commands in a terminal window (Settings, `s`, or `--window`), where you can type |
-
-## Docker containers
-
-A bolt's `compose` services show up in the Running tab beside its commands: each container
-with its health, its ports, and its logs on the right (`]` for its CPU and memory). `wisp down`
-stops them.
+A pipeline's Docker containers show up beside its commands, with their health, ports, logs, CPU
+and memory.
 
 ## Up and down
 
 ```bash
-wisp down api          # stop what "api" started
-wisp down api --deps   # and the database it needed
+wisp down api          # stop what "api" started, then run its down steps
+wisp down api --deps   # and the pipelines it ran, like the database
 wisp restart api
 ```
 
-In the dashboard, `x` on a bolt asks whether to stop the bolts it needed too, and warns you if
-another running bolt still uses them.
+In the dashboard, `x` on a pipeline asks whether to stop the pipelines it ran too, and warns you if
+another running pipeline still uses them.
 
 ## When something crashes
 
-Wisp says so at the bottom of the screen, and the Running tab turns red with what needs you.
-A command with `"restart": "on-failure"` comes back by itself, with a growing pause between
-tries; the Running list shows how many times it was restarted.
+The Running tab turns red with what needs you, and Wisp says so at the bottom of the screen.
+A command with `"restart": "on-failure"` comes back by itself, waiting a little longer after
+each try, and the list shows how many times it restarted. That keeps working after Wisp is
+closed.
+
+## Commands that ask something
+
+A command that stops to ask (*"Use port 3001 instead? (Y/n)"*, *"Password:"*) can't be
+answered in the background. Wisp notices and shows it as **waiting for an answer**, with the
+question. Then fix the step:
+
+| When | Do this |
+|---|---|
+| It has a flag to skip the question | add it to `run`: `--yes`, `-y`, `CI=1`, `--non-interactive` |
+| It needs a secret, like a token | let the step [fetch it](./use-cases#use-a-secret), or put it in `env` in your own `.wisp.local.json` |
+| It needs you each time: a login, a 2FA code, sudo | run commands in a terminal window (Settings, or `--window`), where you can type |

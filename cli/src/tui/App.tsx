@@ -710,7 +710,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
             .catch((error: unknown) => setMessage(describe(error)));
           return;
         }
-        if (input === "x" || input === "r") return setMessage("These were not started by a bolt — stop them one by one");
+        if (input === "x" || input === "r") return setMessage("These were not started by a pipeline — stop them one by one");
       }
       // The run itself: open its steps, stop it, or retry what failed.
       if (item?.type === "current") {
@@ -883,7 +883,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
     }
     if ((key.return && focus === "bolts") || input === "c") {
       if (!bolt) {
-        if (input === "c") return setMessage("no bolts yet: a adds one");
+        if (input === "c") return setMessage("no pipelines yet: a adds one");
         return setView({ kind: "new-bolt", file: current.workspace.file, workspace: current.workspace.name });
       }
       void runBolt(current, bolt.label, input === "c");
@@ -1046,7 +1046,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
             }
             if (!chosen) {
               setView({ kind: "browse" });
-              setMessage("Not now — press a in a workspace to add bolts by hand, or run `wisp init` later");
+              setMessage("Not now — press a in a workspace to add pipelines by hand, or run `wisp init` later");
               return;
             }
             try {
@@ -1058,7 +1058,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
               // Its commands are its own until you say otherwise — straight to that question.
               if (read && needsTrust(read)) setView({ kind: "trust", read });
               else setView({ kind: "browse" });
-              notify(`Set up ${view.suggestion.name} — ⏎ runs the selected bolt`, "good");
+              notify(`Set up ${view.suggestion.name} — ⏎ runs the selected pipeline`, "good");
             } catch (error) {
               setView({ kind: "browse" });
               setMessage(describe(error));
@@ -1097,11 +1097,11 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse }: AppProp
         />
       ) : view.kind === "new-bolt" ? (
         <Form
-          title={`A new bolt in ${view.workspace}`}
-          intro="A bolt is one thing you do — 'Work on the API', 'Run the tests', 'Back up the database'. You'll add its steps next."
+          title={`A new pipeline in ${view.workspace}`}
+          intro="A pipeline is one thing you do — 'Work on the API', 'Run the tests', 'Back up the database'. You'll add its steps next."
           fields={[{ key: "label", label: "Name", hint: "short, since you type it: any whole word of it runs it, like wisp api", placeholder: "Work on the API", required: true }]}
           preview={(values) => (values["label"]?.trim() ? `make ⚡ ${values["label"].trim()}, then ask for its first step` : undefined)}
-          submitLabel="Create bolt"
+          submitLabel="Create pipeline"
           glyphs={glyphs}
           height={bodyHeight}
           onCancel={() => setView({ kind: "browse" })}

@@ -20,14 +20,14 @@ export interface Line {
 type Status = { text: string; color: string } | undefined;
 
 export function usedBy(read: WorkspaceRead, bolt: Bolt): string[] {
-  return read.workspace.bolts.filter((candidate) => candidate.steps.some((step) => step.kind === "bolt" && step.bolt.toLowerCase() === bolt.label.toLowerCase())).map((candidate) => candidate.label);
+  return read.workspace.bolts.filter((candidate) => candidate.steps.some((step) => step.kind === "pipeline" && step.bolt.toLowerCase() === bolt.label.toLowerCase())).map((candidate) => candidate.label);
 }
 
 /** The bolts in the order a run goes through them: the ones it runs, deepest first, then itself. */
 export function flow(read: WorkspaceRead, bolt: Bolt, seen = new Set<string>()): string[] {
   const order: string[] = [];
   for (const step of bolt.steps) {
-    if (step.kind !== "bolt") continue;
+    if (step.kind !== "pipeline") continue;
     const found = findBolt(read, step.bolt);
     if (!found || seen.has(found.label)) continue;
     seen.add(found.label);
@@ -63,7 +63,7 @@ export function stepLines(context: { read: WorkspaceRead; bolt: Bolt; reads: Wor
       const key = `${read.workspace.file}#${bolt.label}#${tag}${index}`;
       const shown = `${indent}${`${tag}${stages[index]}.`.padStart(3)} `;
       const after = target.after ? <Text dimColor>{`  after ${target.after.join(", ")}`}</Text> : null;
-      if (target.kind === "bolt") {
+      if (target.kind === "pipeline") {
         const found = findBolt(read, target.label);
         const twice = found ? done.has(`${read.workspace.file}#${found.label}`) : false;
         lines.push({
@@ -72,7 +72,7 @@ export function stepLines(context: { read: WorkspaceRead; bolt: Bolt; reads: Wor
             <Text wrap="truncate-end">
               <Text dimColor>{shown}</Text>
               <Text color={found?.color ?? TONE.accent} bold>{`${glyphs.bolt}${found?.label ?? target.label}`}</Text>
-              {!found ? <Text color="red">{`  ${glyphs.fail} no bolt by that name`}</Text> : twice ? <Text dimColor>  — already run above, not again</Text> : null}
+              {!found ? <Text color="red">{`  ${glyphs.fail} no pipeline by that name`}</Text> : twice ? <Text dimColor>  — already run above, not again</Text> : null}
               {after}
             </Text>
           ),

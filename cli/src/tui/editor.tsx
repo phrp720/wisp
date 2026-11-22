@@ -78,7 +78,7 @@ export function BoltEditor({ file, bolt, workspace, others, adding = false, edit
   );
   useEffect(() => void load(bolt), [load, bolt]);
 
-  const steps = raw?.targets ?? [];
+  const steps = raw?.steps ?? [];
 
   const inputs = Object.entries(raw?.inputs ?? {});
   const asking = raw?.confirm === true ? true : typeof raw?.confirm === "string" && raw.confirm.trim() ? raw.confirm.trim() : false;
@@ -134,7 +134,7 @@ export function BoltEditor({ file, bolt, workspace, others, adding = false, edit
       setNewStep({ at: steps.length });
       return setOpen(true);
     }
-    if (target.kind === "step" && !stepKindOf(steps[target.at] as RawBolt["targets"][number])) {
+    if (target.kind === "step" && !stepKindOf(steps[target.at] as RawBolt["steps"][number])) {
       return onMessage("Wisp can't edit this step here — change it in the file itself (E)");
     }
     setOpen(true);
@@ -220,15 +220,15 @@ export function BoltEditor({ file, bolt, workspace, others, adding = false, edit
   const stepForm = (kind: StepKindName, initial: Record<string, string>, at: number, replace: boolean, active: boolean, room: number) => {
     const entry = STEP_KINDS.find((candidate) => candidate.kind === kind);
     const otherSteps = steps.flatMap((other, position) => (replace && position === at ? [] : [{ value: String(position), label: `${position + 1} · ${describeRawStep(other)}` }]));
-    const picking = kind === "bolt" && others.length > 0;
-    const current = replace ? afterOf(steps[at] as RawBolt["targets"][number]) : [];
+    const picking = kind === "pipeline" && others.length > 0;
+    const current = replace ? afterOf(steps[at] as RawBolt["steps"][number]) : [];
     const waitsOn = replace
       ? steps.flatMap((other, position) => (typeof other["label"] === "string" && current.includes(other["label"]) ? [String(position)] : []))
       : at > 0
         ? [String(at - 1)]
         : [];
     const fields = [
-      ...(picking ? [{ key: "bolt", label: "Bolt", hint: "steps that depend on it wait for all of it", required: true, choices: others.map((name) => ({ value: name, label: name })) }, ...STEP_FIELDS.bolt.filter((field) => field.key === "label")] : STEP_FIELDS[kind]),
+      ...(picking ? [{ key: "pipeline", label: "Pipeline", hint: "steps that depend on it wait for all of it", required: true, choices: others.map((name) => ({ value: name, label: name })) }, ...STEP_FIELDS.pipeline.filter((field) => field.key === "label")] : STEP_FIELDS[kind]),
       ...(otherSteps.length > 0 ? [{ key: "__after", label: "Depends on", required: false, multi: true, choices: otherSteps }] : []),
     ];
     const start = { ...initial, __after: waitsOn.join(",") };
@@ -286,7 +286,7 @@ export function BoltEditor({ file, bolt, workspace, others, adding = false, edit
         <Picker
           key={`pick:${session}`}
           title={steps.length === 0 ? "The first step" : `New step ${newStep.at + 1}`}
-          intro={steps.length === 0 ? "What should happen first when it runs?" : newStep.at === steps.length ? "What should happen next?" : `What should happen after "${describeRawStep(steps[newStep.at - 1] as RawBolt["targets"][number])}"?`}
+          intro={steps.length === 0 ? "What should happen first when it runs?" : newStep.at === steps.length ? "What should happen next?" : `What should happen after "${describeRawStep(steps[newStep.at - 1] as RawBolt["steps"][number])}"?`}
           options={STEP_KINDS.map((entry) => ({ key: entry.kind, title: entry.title, detail: entry.example, group: entry.group, icon: entry.icon }))}
           glyphs={glyphs}
           height={room}
@@ -372,7 +372,7 @@ export function BoltEditor({ file, bolt, workspace, others, adding = false, edit
         <Form
           key={`confirm:${session}`}
           title="Ask first"
-          intro="Wisp asks before it runs this bolt, for one with consequences: a deploy, a restore. A script has to pass --yes."
+          intro="Wisp asks before it runs this pipeline, for one with consequences: a deploy, a restore. A script has to pass --yes."
           fields={[
             {
               key: "ask",
@@ -484,7 +484,7 @@ export function BoltEditor({ file, bolt, workspace, others, adding = false, edit
         />
       );
     }
-    const step = steps[row.at] as RawBolt["targets"][number];
+    const step = steps[row.at] as RawBolt["steps"][number];
     const kind = stepKindOf(step);
     if (!kind) {
       return (
@@ -575,7 +575,7 @@ export function BoltEditor({ file, bolt, workspace, others, adding = false, edit
           );
         }
         if (entry.kind !== "step") return null;
-        const step = steps[entry.at] as RawBolt["targets"][number];
+        const step = steps[entry.at] as RawBolt["steps"][number];
         return (
           <Box key={`s${entry.at}`} flexDirection="column">
             <Box ref={rowNodes.set(at)}>

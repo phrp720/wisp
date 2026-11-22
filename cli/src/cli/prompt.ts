@@ -132,7 +132,7 @@ export async function checklist(question: string, items: ChecklistItem[]): Promi
       lines.push(`${box}${shown}${hint}`);
     });
     const count = on.filter(Boolean).length;
-    lines.push(dim(fit(count === 0 ? "none ticked: ⏎ writes the file with no bolts · esc cancel" : keys, width)));
+    lines.push(dim(fit(count === 0 ? "none ticked: ⏎ writes the file with no pipelines · esc cancel" : keys, width)));
     stdout.write(`${lines.join("\n")}\n`);
     drawn = lines.length;
   };

@@ -78,10 +78,10 @@ const KNOWN_KEYS = new Set([
   "icon",
   "color",
   "notes",
-  "bolts",
+  "pipelines",
 ]);
 
-const BOLT_KEYS = new Set(["label", "notes", "color", "keepGoing", "confirm", "inputs", "targets", "down"]);
+const BOLT_KEYS = new Set(["label", "notes", "color", "keepGoing", "confirm", "inputs", "steps", "down"]);
 const INPUT_KEYS = new Set(["ask", "choices", "default"]);
 
 const SHELLS: readonly ShellKind[] = ["sh", "pwsh", "cmd"];
@@ -254,7 +254,7 @@ export function interpret(
   const scalar = (key: string) => optionalString(sources.local?.[key]) ?? optionalString(sources.main[key]);
   const section = (key: string) => sectionEntries(sources, key, ctx);
 
-  const boltEntries = section("bolts");
+  const boltEntries = section("pipelines");
   const inline = inlineEntries(boltEntries);
 
   const links = assets<Link>(inline.links, LINKS, ctx);
@@ -332,9 +332,9 @@ function tagBolts(found: Diagnostic[], boltEntries: Entry[]): Diagnostic[] {
     return label ? [{ at, label }] : [];
   });
   return found.map((entry) => {
-    if (entry.bolt) return entry;
+    if (entry.pipeline) return entry;
     const place = places.find(({ at }) => entry.at === at || entry.at.startsWith(`${at}.`));
-    return place ? { ...entry, bolt: place.label } : entry;
+    return place ? { ...entry, pipeline: place.label } : entry;
   });
 }
 
@@ -392,7 +392,7 @@ function inlineEntries(boltEntries: Entry[]): Record<InlineSection, Entry[]> {
   const found: Record<InlineSection, Entry[]> = { links: [], folders: [], files: [], apps: [], commands: [] };
   for (const { value: bolt, at } of boltEntries) {
     if (!isRecord(bolt)) continue;
-    for (const list of ["targets", "down"] as const) {
+    for (const list of ["steps", "down"] as const) {
       if (!Array.isArray(bolt[list])) continue;
       (bolt[list] as unknown[]).forEach((target, index) => {
         if (!isRecord(target)) return;
@@ -686,20 +686,20 @@ function bolts(entries: Entry[], ctx: Context): Bolt[] {
       continue;
     }
 
-    const id = `bolt:${label.toLowerCase()}`;
+    const id = `pipeline:${label.toLowerCase()}`;
     const existing = index.get(id);
     const fromLocal = at.startsWith("local ");
     if (existing !== undefined && !fromLocal) {
-      ctx.found.push({ level: "error", at: `${at}.label`, message: `dropped: a second bolt called "${label}"` });
+      ctx.found.push({ level: "error", at: `${at}.label`, message: `dropped: a second pipeline called "${label}"` });
       continue;
     }
 
-    const listed = Array.isArray(entry["targets"]) ? (entry["targets"] as unknown[]) : [];
-    if (!Array.isArray(entry["targets"])) {
-      ctx.found.push({ level: "warning", at: `${at}.targets`, message: `"${label}" names nothing to open` });
+    const listed = Array.isArray(entry["steps"]) ? (entry["steps"] as unknown[]) : [];
+    if (!Array.isArray(entry["steps"])) {
+      ctx.found.push({ level: "warning", at: `${at}.steps`, message: `"${label}" names nothing to open` });
     }
 
-    const { steps, skipped, broken } = parseSteps(listed, `${at}.targets`, ctx);
+    const { steps, skipped, broken } = parseSteps(listed, `${at}.steps`, ctx);
 
     if (steps.length === 0 && listed.length > 0 && skipped === 0) {
       ctx.found.push({ level: "error", at, message: `"${label}" resolved to nothing — running it would open nothing` });
@@ -717,7 +717,7 @@ function bolts(entries: Entry[], ctx: Context): Bolt[] {
 
     for (const key of Object.keys(entry)) {
       if (BOLT_KEYS.has(key)) continue;
-      ctx.found.push({ level: "warning", at: `${at}.${key}`, message: `"${key}" is not something a bolt can set — it is ignored`, hint: `Known keys: ${[...BOLT_KEYS].join(", ")}` });
+      ctx.found.push({ level: "warning", at: `${at}.${key}`, message: `"${key}" is not something a pipeline can set — it is ignored`, hint: `Known keys: ${[...BOLT_KEYS].join(", ")}` });
     }
 
     if (entry["confirm"] !== undefined) {
@@ -736,11 +736,11 @@ function bolts(entries: Entry[], ctx: Context): Bolt[] {
     const undeclared = (text: string, where: string) => {
       for (const name of new Set(placeholders(text))) {
         if (declared.has(name)) continue;
-        ctx.found.push({ level: "warning", at: where, message: `{{${name}}} is not one of "${label}"'s inputs — it is left as written`, hint: `Add it to the bolt: "inputs": { "${name}": { "ask": "…" } }` });
+        ctx.found.push({ level: "warning", at: where, message: `{{${name}}} is not one of "${label}"'s inputs — it is left as written`, hint: `Add it to the pipeline: "inputs": { "${name}": { "ask": "…" } }` });
       }
     };
     if (bolt.confirm) undeclared(bolt.confirm, `${at}.confirm`);
-    for (const key of ["targets", "down"]) {
+    for (const key of ["steps", "down"]) {
       const list = Array.isArray(entry[key]) ? (entry[key] as unknown[]) : [];
       list.forEach((step, position) => undeclared(JSON.stringify(step), `${at}.${key}[${position}]`));
     }
@@ -781,7 +781,7 @@ function bolts(entries: Entry[], ctx: Context): Bolt[] {
 function parseInputs(value: unknown, at: string, ctx: Context): InputSpec[] {
   const warn = (where: string, message: string) => ctx.found.push({ level: "warning", at: where, message });
   if (!isRecord(value)) {
-    warn(at, '"inputs" names each value the bolt asks for, like { "env": { "ask": "Deploy where?" } } — it is ignored');
+    warn(at, '"inputs" names each value the pipeline asks for, like { "env": { "ask": "Deploy where?" } } — it is ignored');
     return [];
   }
   const word = (item: unknown) => (typeof item === "string" || typeof item === "number" ? String(item).trim() : "");
@@ -819,7 +819,7 @@ function parseInputs(value: unknown, at: string, ctx: Context): InputSpec[] {
   return specs;
 }
 
-/** One list of steps: a bolt's `targets` or its `down`. */
+/** One list of steps: a bolt's `steps` or its `down`. */
 function parseSteps(listed: unknown[], at: string, ctx: Context): { steps: BoltStep[]; skipped: number; broken?: string } {
   const steps: BoltStep[] = [];
   let skipped = 0;
@@ -903,7 +903,7 @@ function checkAfter(steps: { name?: string; after: string[]; where: string }[], 
   return broken;
 }
 
-/** A target written as an object: `{ "wait": … }` or `{ "bolt": …, "workspace"?: … }`. */
+/** A step written as an object: `{ "wait": … }` or `{ "pipeline": … }`. */
 function specialStep(target: Record<string, unknown>, at: string, ctx: Context): BoltStep | undefined {
   if (target["wait"] !== undefined) {
     const wait = parseWait(target["wait"]);
@@ -934,23 +934,23 @@ function specialStep(target: Record<string, unknown>, at: string, ctx: Context):
     return { kind: "compose", file, ...(services.length > 0 ? { services } : {}) };
   }
 
-  const bolt = optionalString(target["bolt"]);
+  const bolt = optionalString(target["pipeline"]);
   if (bolt) {
     if (target["workspace"] !== undefined) {
       ctx.found.push({
         level: "error",
         at,
-        message: `dropped: a bolt step runs a bolt of this file. To run "${bolt}" from another project, run it as a command: { "run": "wisp use <its .wisp.json> ${bolt}", "finishes": true }`,
+        message: `dropped: a pipeline step runs a pipeline of this file. To run "${bolt}" from another project, run it as a command: { "run": "wisp use <its .wisp.json> ${bolt}", "finishes": true }`,
       });
       return undefined;
     }
-    return { kind: "bolt", bolt };
+    return { kind: "pipeline", bolt };
   }
 
   ctx.found.push({
     level: "error",
     at,
-    message: 'dropped: a step needs one of "url", "folder", "file", "app", "run", "compose", "wait" or "bolt"',
+    message: 'dropped: a step needs one of "url", "folder", "file", "app", "run", "compose", "wait" or "pipeline"',
   });
   return undefined;
 }
@@ -998,14 +998,14 @@ function checkDependencies(bolts: Bolt[], ctx: Context): void {
 
   for (const bolt of bolts) {
     for (const step of bolt.steps) {
-      if (step.kind !== "bolt") continue;
+      if (step.kind !== "pipeline") continue;
       if (!byLabel.has(step.bolt.toLowerCase())) {
         ctx.found.push({
           level: "error",
-          at: `bolts`,
-          bolt: bolt.label,
-          message: `"${bolt.label}" runs a bolt called "${step.bolt}", which this file does not declare`,
-          hint: `Pick one of this file's bolts in the step, or add a bolt called "${step.bolt}"`,
+          at: `pipelines`,
+          pipeline: bolt.label,
+          message: `"${bolt.label}" runs a pipeline called "${step.bolt}", which this file does not declare`,
+          hint: `Pick one of this file's pipelines, or add one called "${step.bolt}"`,
         });
       }
     }
@@ -1024,9 +1024,9 @@ function checkDependencies(bolts: Bolt[], ctx: Context): void {
         reported.add(key);
         ctx.found.push({
           level: "error",
-          at: "bolts",
-          bolt: cycle[0] as string,
-          message: `these bolts need each other: ${cycle.join(" → ")}`,
+          at: "pipelines",
+          pipeline: cycle[0] as string,
+          message: `these pipelines need each other: ${cycle.join(" → ")}`,
           hint: "Running any of them would be refused — remove one of the dependencies",
         });
       }
@@ -1034,7 +1034,7 @@ function checkDependencies(bolts: Bolt[], ctx: Context): void {
     }
     visiting.add(bolt.id);
     for (const step of bolt.steps) {
-      if (step.kind !== "bolt") continue;
+      if (step.kind !== "pipeline") continue;
       const next = byLabel.get(step.bolt.toLowerCase());
       if (next) visit(next, [...path, bolt.label]);
     }
@@ -1073,7 +1073,7 @@ export async function checkProject(file: string, options: ReadOptions = {}): Pro
     valueById: new Map(),
   };
 
-  const boltEntries = sectionEntries(sources, "bolts", scratch);
+  const boltEntries = sectionEntries(sources, "pipelines", scratch);
   const inline = inlineEntries(boltEntries);
   for (const [entries, kind] of [
     [inline.folders, "folder"],
@@ -1119,7 +1119,7 @@ export async function checkProject(file: string, options: ReadOptions = {}): Pro
 
   for (const link of read.workspace.links) {
     if (!isUrlish(link.url)) {
-      found.push({ level: "error", at: "bolts", message: `"${link.url}" is not a url Wisp can open` });
+      found.push({ level: "error", at: "pipelines", message: `"${link.url}" is not a url Wisp can open` });
     }
   }
 

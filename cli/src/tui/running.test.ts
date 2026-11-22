@@ -13,9 +13,9 @@ const shop = interpret(
   {
     main: {
       name: "Shop",
-      bolts: [
-        { label: "Services", targets: [{ compose: "compose.yaml", services: ["postgres"] }] },
-        { label: "Work on shop", targets: [{ bolt: "Services" }, { run: "pnpm dev", label: "web", restart: "on-failure", env: { PORT: 3000, STRIPE_SECRET: "sk_live_1", DATABASE_URL: "postgres://shop:hunter2@localhost/shop" } }] },
+      pipelines: [
+        { label: "Services", steps: [{ compose: "compose.yaml", services: ["postgres"] }] },
+        { label: "Work on shop", steps: [{ pipeline: "Services" }, { run: "pnpm dev", label: "web", restart: "on-failure", env: { PORT: 3000, STRIPE_SECRET: "sk_live_1", DATABASE_URL: "postgres://shop:hunter2@localhost/shop" } }] },
       ],
     },
   },
@@ -70,7 +70,7 @@ const titles = (items: PaneItem[]) =>
   );
 
 describe("the Running list", () => {
-  it("shows a bolt that another needed inside that run, not as a group of its own", () => {
+  it("shows a pipeline that another needed inside that run, not as a group of its own", () => {
     const items = groupPanes([], [web], [postgres], [shop], [workRun]);
     expect(titles(items)).toEqual(["group Work on shop", " step Services", "  container postgres", " run web"]);
   });
@@ -94,7 +94,7 @@ describe("the Running list", () => {
     expect(build?.type === "step" && build.step.log).toBe("/logs/2.log");
   });
 
-  it("keeps a needed bolt in its own group once it has been run on its own since", () => {
+  it("keeps a needed pipeline in its own group once it has been run on its own since", () => {
     const servicesRun = entry("Services", [{ kind: "compose", label: "postgres", value: "compose.yaml", ok: true, durationMs: 9000 }], "2026-11-18T11:00:00Z");
     const items = groupPanes([], [web], [postgres], [shop], [servicesRun, workRun]);
     expect(titles(items)).toContain("group Services");
@@ -106,7 +106,7 @@ describe("the panel's tabs", () => {
   const run: PaneItem = { type: "run", run: web, group: "g" };
   const container: PaneItem = { type: "container", container: postgres, group: "g" };
 
-  it("are logs, info and past runs for a command; logs and info for a container; none for a bolt", () => {
+  it("are logs, info and past runs for a command; logs and info for a container; none for a pipeline", () => {
     expect(tabsOf(run)).toEqual(["logs", "info", "runs"]);
     expect(tabsOf(container)).toEqual(["logs", "info"]);
     expect(tabsOf({ type: "group", group: { key: "g", workspaceName: "Shop", title: "Services" } })).toEqual([]);
@@ -178,12 +178,12 @@ describe("filtering the Running list", () => {
     expect(titles(filterPanes(items, "postgres"))).toEqual(["group Work on shop", " step Services", "  container postgres"]);
   });
 
-  it("keeps the bolt's run number when its steps are filtered out", () => {
+  it("keeps the pipeline's run number when its steps are filtered out", () => {
     const group = filterPanes(items, "web").find((item) => item.type === "group");
     expect(group?.type === "group" && group.group.number).toBe(4);
   });
 
-  it("keeps the run in progress when its bolt matches, and only then", () => {
+  it("keeps the run in progress when its pipeline matches, and only then", () => {
     const withCurrent: PaneItem[] = [{ type: "current" }, ...items];
     expect(filterPanes(withCurrent, "deploy", "Deploy").some((item) => item.type === "current")).toBe(true);
     expect(filterPanes(withCurrent, "postgres", "Deploy").some((item) => item.type === "current")).toBe(false);

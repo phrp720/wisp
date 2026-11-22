@@ -110,7 +110,7 @@ export type WaitSpec =
 export type BoltStep = (
   | { kind: "asset"; id: string }
   | { kind: "wait"; wait: WaitSpec }
-  | { kind: "bolt"; bolt: string }
+  | { kind: "pipeline"; bolt: string }
   /**
    * Services of a compose file: started with `up --wait`, so the step is done when they are
    * healthy; stopped by `wisp down`; shown with their state, health and logs.
@@ -251,11 +251,11 @@ export interface Diagnostic {
    * as written, but worth knowing — an asset declared only for another OS, for example.
    */
   level: "error" | "warning" | "note";
-  /** Where in the file, in the words the file uses: `bolts[1].targets`. */
+  /** Where in the file, in the words the file uses: `pipelines[1].steps`. */
   at: string;
   message: string;
   hint?: string;
-  bolt?: string;
+  pipeline?: string;
 }
 
 /** Something a file declares that would run code, and so waits for trust. */
@@ -289,7 +289,7 @@ export interface WorkspaceRead {
 export type TargetKind = "app" | "command" | "folder" | "file" | "link";
 
 /** A step a bolt can take: opening an asset, or waiting for something to be ready. */
-export type StepKind = TargetKind | "wait" | "bolt" | "compose";
+export type StepKind = TargetKind | "wait" | "pipeline" | "compose";
 
 /** One asset, flattened to what opening it needs. */
 export interface SwitchTarget {

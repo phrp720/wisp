@@ -23,7 +23,7 @@ export function waitingForTrust(read: WorkspaceRead, label?: string): Withheld[]
       const id = step.kind === "asset" ? step.id : step.kind === "compose" ? `compose:${step.file}` : undefined;
       const item = id ? held.get(id) : undefined;
       if (item) found.set(item.id, item);
-      if (step.kind === "bolt") visit(step.bolt);
+      if (step.kind === "pipeline") visit(step.bolt);
     }
   };
   visit(label);

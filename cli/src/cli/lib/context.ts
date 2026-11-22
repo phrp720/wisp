@@ -80,7 +80,7 @@ export async function resolveRun(
       if (match) return { read: here, bolt: first };
       if (candidates.length > 1) {
         throw new WispError(
-          `"${first}" matches several bolts: ${candidates.map((candidate) => `${candidate.label} (${slugify(candidate.label)})`).join(", ")}`,
+          `"${first}" matches several pipelines: ${candidates.map((candidate) => `${candidate.label} (${slugify(candidate.label)})`).join(", ")}`,
           "AMBIGUOUS",
         );
       }
@@ -105,12 +105,12 @@ async function noBoltHere(word: string, here: WorkspaceRead | undefined): Promis
   const close = typed ? (here?.workspace.bolts ?? []).filter((entry) => slugify(entry.label).split("-").some((part) => part.startsWith(typed))) : [];
 
   const said = here
-    ? `${here.workspace.name} has no bolt called "${word}".`
-    : `"${word}" is not a bolt here: this folder has no ${PROJECT_FILE}.`;
+    ? `${here.workspace.name} has no pipeline called "${word}".`
+    : `"${word}" is not a pipeline here: this folder has no ${PROJECT_FILE}.`;
   const next = [
     close.length > 0 ? `Did you mean ${close.map((entry) => `\`wisp ${slugify(entry.label)}\``).join(", ")}?` : "",
     workspace
-      ? `${workspace.workspace.name} is a workspace: \`wisp show ${slugify(workspace.workspace.name)}\` lists its bolts, \`wisp pick ${slugify(workspace.workspace.name)}\` picks one.`
+      ? `${workspace.workspace.name} is a workspace: \`wisp show ${slugify(workspace.workspace.name)}\` lists its pipelines, \`wisp pick ${slugify(workspace.workspace.name)}\` picks one.`
       : "",
     elsewhere.length > 0
       ? `Elsewhere: ${elsewhere.map((hit) => `\`wisp ${slugify(hit.read.workspace.name)} ${slugify(hit.label)}\``).join(", ")}.`
@@ -120,7 +120,7 @@ async function noBoltHere(word: string, here: WorkspaceRead | undefined): Promis
       : "",
     !workspace && elsewhere.length === 0 && !here ? "`wisp list` shows your workspaces." : "",
   ].filter(Boolean);
-  return new WispError([said, ...next].join(" "), "NO_BOLT");
+  return new WispError([said, ...next].join(" "), "NO_PIPELINE");
 }
 
 export function emitJson(value: unknown): void {

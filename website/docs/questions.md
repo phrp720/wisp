@@ -1,72 +1,70 @@
 # Questions
 
-Short answers, grouped by topic. Click a question to open it.
+Short answers. Click a question to open it.
+
+## Compared to…
+
+::: details make, just, npm scripts, Taskfile?
+They run a command. Wisp runs a pipeline: steps side by side or waiting for what they need,
+including the moment something is ready (a port, a website, healthy containers). It keeps
+track of what it started, so a server never starts twice and `wisp down` stops all of it,
+keeps every run with its output, and works from any folder. Your `make` targets and scripts
+make good steps: `wisp init` suggests them.
+:::
+
+::: details docker compose?
+Compose runs containers. Most projects also have things outside them: the dev server on your
+machine, a migration, a page to open. A pipeline starts your compose services, waits until
+they're healthy, then does the rest.
+:::
+
+::: details CI (GitHub Actions and the like)?
+CI runs on every push, on someone else's machine. Wisp runs the same checks on yours before
+you push, side by side, with each run kept like CI keeps it, and `--retry` for what failed.
+It's not a replacement for CI, it's what you run first. On a server, it's handy for what CI
+doesn't do: a backup, a cleanup, a restart.
+:::
+
+::: details pm2, systemd, supervisord?
+They keep services running on a server. Wisp can too (`"restart": "always"`, logs, `wisp ps`),
+which suits a small app or a dev machine. For a service that must survive anything, keep
+systemd, and let a Wisp pipeline restart it, update it and check it.
+:::
+
+::: details shell aliases and scripts?
+A script runs one line after another and forgets. A pipeline runs steps in parallel or in order,
+knows what it left running, waits for things to be ready, keeps each run's output, asks
+before it does something dangerous, and lives in the repo for the whole team.
+:::
 
 ## Getting going
 
 ::: details Do I have to write the `.wisp.json` myself?
 No. Run `wisp init` in the project, or just open `wisp` there: it reads what the project
-already has and suggests bolts. After that, `a` adds a bolt and `e` edits one, through forms.
+already has and suggests pipelines. After that, `a` adds a pipeline and `e` edits one, through forms.
 
 → [Getting started](./getting-started) · [The dashboard](./dashboard#no-json-needed)
 :::
 
 ::: details Something without a repository, like my morning links?
-Press `N` in the dashboard for a workspace of your own. It's the same format, kept in Wisp's
-own folder, and its commands run without asking: they're yours.
+Press `N` in the dashboard for a workspace of your own. Same format, kept in Wisp's own
+folder, and its commands run without asking: they're yours.
 
 → [Personal workspaces](./file#personal-workspaces)
 :::
 
-::: details How do I delete a workspace?
-Select it on the left in the dashboard and press `D`. One of your own is deleted. A
-project is only removed from your list: its `.wisp.json` stays in the repository.
-:::
-
 ::: details Is there tab completion?
-Yes, for zsh, bash and fish. Run this once, then open a new terminal:
-
-```bash
-wisp completion --install
-```
-
-`wisp ⇥` then offers commands, this project's bolts and every workspace.
-
-→ [Commands](./commands#setting-up)
+Yes, for zsh, bash and fish: `wisp completion --install`, then open a new terminal.
 :::
 
 ## Running things
 
-::: details What's the difference between `wisp <bolt>` and `wisp <workspace> <bolt>`?
-One word is a bolt of the project you're in: `wisp api` runs "Work on api". Two words are
-a workspace and its bolt, from any folder: `wisp payments-service services`.
-`wisp show payments-service` lists its bolts, and `wisp list` shows each workspace's short
-name.
+::: details How does Wisp read `wisp <name>`?
+One word is a pipeline of the project you're in: `wisp api` runs "Work on api". Two words are a
+workspace and its pipeline, from any folder: `wisp acme api`. A word has to be a whole word of the
+name or its slug, so `wisp doc` never runs "Documentation" by surprise.
 
 → [How Wisp reads a name](./commands#how-wisp-reads-wisp-name)
-:::
-
-::: details Can I run a bolt from any folder?
-Yes, name its project: `wisp acme api`. One word on its own only looks in the project you're
-in, so a bolt of another project never runs by surprise. `wisp pick` lets you choose the
-project and the bolt from a list. `wisp scan ~/dev` finds the rest.
-:::
-
-::: details Why doesn't `wisp doc` run "Documentation"?
-A word has to be a whole word of the name, or its slug: `wisp documentation`. Part of a word
-would stop working the day a "Docker" bolt shows up. Tab completion fills in the slug.
-:::
-
-::: details I opened `wisp pick` and changed my mind.
-Press `esc` or Ctrl+C. Nothing runs.
-:::
-
-::: details A command asks something (y/n, a password). What do I do?
-In the background nothing can answer it, so Wisp shows it as **waiting for an answer**. Give
-the command a flag that skips the question (`--yes`, `CI=1`), or, when it really needs you,
-run commands in a terminal window (`s`, Settings), where you can answer.
-
-→ [Commands that ask something](./running#commands-that-ask-something)
 :::
 
 ::: details Why didn't my command run?
@@ -76,80 +74,58 @@ change, a `git pull` included, asks again. `wisp check` shows what is waiting.
 → [Trust](./trust)
 :::
 
-::: details Where do my servers' logs go?
-The Running tab (`2`) shows each one live. From the command line: `wisp ps` lists them and
-`wisp logs <name> -f` follows one.
-
-→ [What's running](./running)
-:::
-
-::: details Do logs pile up on my disk?
-No. Wisp keeps the last 200 runs in History, each with its output, and deletes older ones as
-new runs come in. A log that passes 10 MB keeps only its last 5 MB, even while its server
-runs. Everything together stays under 500 MB: past that, the oldest output goes first, but
-never the log of something still running. Most setups use a few MB.
-
-`wisp ps --clear` deletes the output of finished commands straight away, and
-`wisp history --clear` deletes past runs (`D` in History).
-:::
-
-::: details How do I stop everything?
-`x` on a bolt in the dashboard, or `wisp down <bolt>`; add `--deps` for the database it needed
-too. `wisp stop --all` stops every command Wisp started.
-
-→ [Up and down](./running#up-and-down)
-:::
-
 ::: details Why does Wisp wait for some commands and not others?
 A command keeps running by default, like a server: Wisp starts it and moves on. One marked
-`"finishes": true`, like a test, a build or a backup, is waited for, in front of you, and ends
-with ✓ or ✗. If it finishes, mark it so.
+`"finishes": true`, like a test, a build or a backup, is waited for and ends with ✓ or ✗.
 
 → [Keeps running, or finishes?](./runs#keeps-running-or-finishes)
 :::
 
-::: details A check failed. Do I have to run it all again?
-No: `wisp Check --retry`, or `r` in the dashboard, runs from the step that failed.
+::: details A command asks something (y/n, a password). What do I do?
+Nothing can answer it in the background, so Wisp shows it as **waiting for an answer**. Give
+it a flag that skips the question (`--yes`, `CI=1`), or run commands in a terminal window
+(Settings), where you can answer.
 
-→ [Runs and history](./runs)
+→ [Commands that ask something](./running#commands-that-ask-something)
 :::
 
-## Your setup
-
-::: details Can folders open in WebStorm, and commands run in Ghostty or tmux?
-Yes: press `s` in the dashboard, or use `wisp open-with`.
-
-→ [Settings](./settings)
+::: details How do I stop everything?
+`wisp down <pipeline>`, or `x` on a pipeline in the dashboard. `wisp stop --all` stops every command
+Wisp started.
 :::
+
+::: details Do logs pile up on my disk?
+No. Wisp keeps the last 200 runs, a log over 10 MB keeps its last 5 MB, and everything
+together stays under 500 MB, the oldest going first. `wisp ps --clear` and
+`wisp history --clear` delete them sooner.
+:::
+
+## Servers
 
 ::: details Can I use it on a server?
-Yes, and it's handy there: SSH in and `wisp restart shop` (or `down`, `logs shop -f`) from
-wherever you land, without finding the app or remembering how it starts. Install Wisp on
-the server and run the bolt once, or `wisp scan /srv`, so it knows where things are.
+Yes: SSH in and `wisp shop deploy`, `wisp ps` or `wisp logs shop -f`, from wherever you land.
+Install Wisp there, then run a pipeline once or `wisp scan /srv` so it knows where things are.
 
-It's built to be safe there: nothing listens on the network, its folders (logs, history,
-settings) are readable by your account only, a changed `.wisp.json` runs nothing until it's
-trusted again, and `wisp notify` can tell you when a cron run fails.
+→ [Run a server](./use-cases#run-a-server)
 :::
 
-::: details Does it work on Windows, over SSH, in tmux?
-Yes. Over SSH, choose tmux in Settings, so commands keep running after you disconnect.
-
-→ [Settings](./settings)
+::: details Is it safe there?
+Nothing listens on the network. Wisp's folders (logs, history, settings) are readable by your
+account only. A changed `.wisp.json`, after a `git pull` say, runs nothing until it's trusted
+again. A value a pipeline asks for can't carry shell commands. And `wisp notify` tells you when a
+cron run fails.
 :::
 
-::: details How do I update or uninstall it?
-Run the install command again to update. To uninstall, `wisp stop --all`, then delete the
-binary.
-
-→ [Update or remove](./getting-started#update-or-remove)
+::: details Do commands keep running after I disconnect?
+Yes. What Wisp starts in the background keeps running. If you'd rather attach to it later,
+choose tmux in Settings: `tmux attach -t wisp`.
 :::
 
 ## Teams and agents
 
-::: details Can my team share bolts?
-Yes: commit the `.wisp.json`. Paths in it are relative, so it works on every machine. Your
-own extra bolts go in a `.wisp.local.json` beside it, kept out of git.
+::: details Can my team share pipelines?
+Yes: commit the `.wisp.json`. Paths in it are relative, so it works on every machine,
+Windows included. Your own extra pipelines go in a `.wisp.local.json`, kept out of git.
 
 → [Your own additions](./file#your-own-additions)
 :::
@@ -157,13 +133,11 @@ own extra bolts go in a `.wisp.local.json` beside it, kept out of git.
 ::: details Is it safe to clone a repository that has a `.wisp.json`?
 Yes. Nothing in it that runs code starts until you've read it and allowed it with
 `wisp trust`.
-
-→ [Trust](./trust)
 :::
 
 ::: details Can an AI agent use it?
-Yes: `wisp help agents` prints the whole reference, most commands take `--json`, and Wisp
-never waits on a question without a terminal. An agent can't allow commands; you do.
+Yes: `wisp help agents` prints the whole reference, every command takes `--json`, and nothing
+waits on a question without a terminal. An agent can't allow commands; you do.
 
 → [For AI agents](./agents)
 :::

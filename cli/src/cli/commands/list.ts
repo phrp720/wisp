@@ -23,7 +23,7 @@ export const list: CommandDef<{ json?: boolean }> = {
           file: read.workspace.file,
           personal: read.workspace.personal,
           trust: read.workspace.personal ? "personal" : read.trust,
-          bolts: read.workspace.bolts.map((bolt) => bolt.label),
+          pipelines: read.workspace.bolts.map((bolt) => bolt.label),
         })),
       );
     }
@@ -48,6 +48,6 @@ export const list: CommandDef<{ json?: boolean }> = {
     }
 
     for (const failure of unreadable) console.log(`${red("✗")} ${dim(tildify(failure.file))} ${failure.error}`);
-    console.log(dim("\n`wisp show <name>` lists a workspace's bolts · `wisp <name> <bolt>` runs one, from any folder · `wisp pick <name>` chooses"));
+    console.log(dim("\n`wisp show <name>` lists a workspace's pipelines · `wisp <name> <pipeline>` runs one, from any folder · `wisp pick <name>` chooses"));
   },
 };

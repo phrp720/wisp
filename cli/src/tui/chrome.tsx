@@ -34,7 +34,7 @@ export function Header({ services, glyphs, columns, here, running, failing, tab 
             {glyphs.border === "round" ? "🔮 " : ""}wisp
           </Text>
           {"   "}
-          <TabLabel number="1" title="Bolts" on={tab === "bolts"} />
+          <TabLabel number="1" title="Pipelines" on={tab === "bolts"} />
           {"   "}
           <TabLabel number="2" title="Running" on={tab === "running"} />
           {/* The Running tab says how things are: how many are up, or what needs you. */}
@@ -68,7 +68,7 @@ export function runningStatus(glyphs: Glyphs, running: number, failing: string[]
  */
 export function headerTabAt(x: number, glyphs: Glyphs, status: string): Tab | undefined {
   let at = 1 + (glyphs.border === "round" ? 3 : 0) + "wisp".length + 3;
-  for (const [tab, width] of [["bolts", "1 Bolts".length], ["running", "2 Running".length + status.length], ["history", "3 History".length]] as const) {
+  for (const [tab, width] of [["bolts", "1 Pipelines".length], ["running", "2 Running".length + status.length], ["history", "3 History".length]] as const) {
     if (x >= at && x < at + width) return tab;
     at += width + 3;
   }
@@ -94,7 +94,7 @@ export function Footer({ view, message, notice, hint, columns = 0 }: { view: Vie
     "confirm-run": `y or ← ⏎ runs it · esc cancels`,
     "run-inputs": "",
     "delete-workspace": view.kind === "delete-workspace" && view.personal
-      ? `Its file and bolts go; what it started keeps running · ${ASK_KEYS}`
+      ? `Its file and pipelines go; what it started keeps running · ${ASK_KEYS}`
       : `Only from this list; its .wisp.json stays in the repository · ${ASK_KEYS}`,
     "stop-bolt": "",
     settings: "",

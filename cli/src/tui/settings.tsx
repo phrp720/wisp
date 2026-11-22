@@ -13,8 +13,8 @@ import { TONE } from "./tones.js";
 type Category = "opening" | "running" | "notifications" | "dashboard";
 
 const CATEGORIES: { key: Category; label: string; intro: string }[] = [
-  { key: "opening", label: "Opening", intro: "What opens a bolt's folder and file steps. From a terminal: wisp open-with." },
-  { key: "running", label: "Running", intro: "Where a bolt's commands go while they keep running, like a dev server. Commands that finish always run where you can see them. From a terminal: wisp open-with terminal." },
+  { key: "opening", label: "Opening", intro: "What opens a pipeline's folder and file steps. From a terminal: wisp open-with." },
+  { key: "running", label: "Running", intro: "Where a pipeline's commands go while they keep running, like a dev server. Commands that finish always run where you can see them. From a terminal: wisp open-with terminal." },
   { key: "notifications", label: "Notifications", intro: "About a run you might have missed: one nobody watched (cron, a script), or one that took over 30 seconds. From a terminal: wisp notify." },
   { key: "dashboard", label: "Dashboard", intro: "How this screen behaves." },
 ];
@@ -195,9 +195,9 @@ function categoryForm(
     });
     return {
       fields: [
-        { key: "folder", label: "Folders open in", hint: "a bolt's folder steps, like apps/api", choices: apps },
+        { key: "folder", label: "Folders open in", hint: "a pipeline's folder steps, like apps/api", choices: apps },
         other("folder"),
-        { key: "file", label: "Files open in", hint: "a bolt's file steps, like docs/runbook.md", choices: apps },
+        { key: "file", label: "Files open in", hint: "a pipeline's file steps, like docs/runbook.md", choices: apps },
         other("file"),
       ],
       initial: {

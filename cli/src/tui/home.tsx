@@ -130,8 +130,8 @@ export function WorkspacePanel(props: {
 }) {
   const { read, reads, boltIndex, focused, glyphs, height, width = 80, here = false, runs, containers, history, confirming, scroll = 0, scrollLimit, instead } = props;
   const problems = (props.diagnostics ?? read.diagnostics).filter((entry) => entry.level !== "note" && entry.at !== "trust");
-  const problemsOf = (entry: Bolt) => problems.filter((problem) => problem.bolt?.toLowerCase() === entry.label.toLowerCase());
-  const fileProblems = problems.filter((problem) => !problem.bolt || !read.workspace.bolts.some((entry) => entry.label.toLowerCase() === problem.bolt?.toLowerCase()));
+  const problemsOf = (entry: Bolt) => problems.filter((problem) => problem.pipeline?.toLowerCase() === entry.label.toLowerCase());
+  const fileProblems = problems.filter((problem) => !problem.pipeline || !read.workspace.bolts.some((entry) => entry.label.toLowerCase() === problem.pipeline?.toLowerCase()));
   const lastRun = (label: string) => history.find((entry) => baseLabel(entry.bolt) === label);
   const { workspace } = read;
   const bolts = workspace.bolts;
@@ -189,10 +189,10 @@ export function WorkspacePanel(props: {
     bolts.length === 0 ? (
       <>
         <Text bold={focused}>
-          {focused ? glyphs.pointer : " "} <Text color={focused ? undefined : "magenta"} inverse={focused}>+ add a bolt</Text>
+          {focused ? glyphs.pointer : " "} <Text color={focused ? undefined : "magenta"} inverse={focused}>+ add a pipeline</Text>
         </Text>
         <Text> </Text>
-        <Text dimColor>{"  A bolt is one thing you do, like \"Work on the API\": what to start, in order."}</Text>
+        <Text dimColor>{"  A pipeline is one thing you do, like \"Work on the API\": what to start, in order."}</Text>
       </>
     ) : (
       rows.map(({ entry, state }, position) => {
@@ -286,7 +286,7 @@ function BoltDetails(props: {
   const lines = stepLines({ read, bolt, reads, runs, containers, glyphs });
   const needs = flow(read, bolt);
   const neededBy = usedBy(read, bolt);
-  const typed = here ? shortest(bolt, workspace.bolts) : `${slugify(workspace.name)} ${shortest(bolt, workspace.bolts)}`;
+  const typed = here ? shortest(bolt, workspace.bolts, true) : `${slugify(workspace.name)} ${shortest(bolt, workspace.bolts)}`;
 
   const problemLines = problems.length > 0 ? problems.reduce((sum, problem) => sum + 1 + (problem.hint ? 1 : 0), 0) + 1 : 0;
   const above = (full ? 1 + (bolt.notes ? 1 : 0) + (needs.length > 1 ? 1 : 0) + 2 : (bolt.notes ? 1 : 0) + 1) + problemLines;
@@ -332,7 +332,7 @@ function BoltDetails(props: {
         <Box flexDirection="column" paddingLeft={full ? 0 : 2} flexShrink={0}>
           {problems.map((problem, at) => (
             <Box key={`${problem.at}:${at}`} flexDirection="column">
-              <Text color={problem.level === "error" ? "red" : "yellow"} wrap="wrap">{`${problem.level === "error" ? glyphs.fail : "!"} ${problem.bolt && problem.bolt.toLowerCase() === bolt.label.toLowerCase() ? "" : "In the file: "}${problem.message}`}</Text>
+              <Text color={problem.level === "error" ? "red" : "yellow"} wrap="wrap">{`${problem.level === "error" ? glyphs.fail : "!"} ${problem.pipeline && problem.pipeline.toLowerCase() === bolt.label.toLowerCase() ? "" : "In the file: "}${problem.message}`}</Text>
               {problem.hint ? <Text dimColor wrap="wrap">{`  ${problem.hint}`}</Text> : null}
             </Box>
           ))}

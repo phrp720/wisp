@@ -31,14 +31,14 @@ The repository uses Wisp on itself. With Wisp installed, `wisp trust` this folde
 
 - `wisp "Work on the CLI"`: the tests and the typechecker, watching as you edit
 - `wisp "Try my build"`: your working copy as a `wisp-dev` command beside your normal `wisp`,
-  rebuilt as you save; stopping the bolt removes it
+  rebuilt as you save; stopping the pipeline removes it
 - `wisp "Check everything"`: what CI runs, before you push
 
 ## Where things are
 
 | Path | What |
 |---|---|
-| `cli/src/core` | the file format, trust, discovery, running bolts, history. No CLI or dashboard code |
+| `cli/src/core` | the file format, trust, discovery, running pipelines, history. No CLI or dashboard code |
 | `cli/src/platform` | everything specific to macOS, Linux and Windows |
 | `cli/src/cli` | the `wisp` command; `spec.ts` is the reference for AI agents |
 | `cli/src/tui` | the dashboard (Ink and React) |

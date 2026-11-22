@@ -30,17 +30,17 @@ async function files(tree: Record<string, unknown>): Promise<void> {
 
 async function draft() {
   const result = await draftProject(dir);
-  const raw = JSON.parse(result.contents) as { name: string; bolts: { label: string; color?: string; targets: unknown[]; down?: unknown[] }[] };
+  const raw = JSON.parse(result.contents) as { name: string; pipelines: { label: string; color?: string; steps: unknown[]; down?: unknown[] }[] };
   // Every bolt gets a colour, and no two the same; compared apart from the rest, since it is random.
-  const colors = raw.bolts.map((bolt) => bolt.color);
+  const colors = raw.pipelines.map((bolt) => bolt.color);
   expect(colors.every((color) => /^#[0-9a-f]{6}$/.test(color ?? ""))).toBe(true);
   expect(new Set(colors).size).toBe(colors.length);
-  const parsed = { ...raw, bolts: raw.bolts.map(({ color: _color, ...bolt }) => bolt) };
+  const parsed = { ...raw, pipelines: raw.pipelines.map(({ color: _color, ...bolt }) => bolt) };
   return { ...result, parsed };
 }
 
 describe("init reads what the project already has", () => {
-  it("turns a monorepo with services into bolts that start them in order", async () => {
+  it("turns a monorepo with services into pipelines that start them in order", async () => {
     await files({
       "package.json": { name: "@acme/root", packageManager: "pnpm@10.0.0", scripts: { dev: "turbo dev", lint: "eslint .", test: "vitest run" } },
       "apps/web/package.json": { name: "@acme/web", scripts: { dev: "next dev" } },
@@ -59,17 +59,17 @@ describe("init reads what the project already has", () => {
     const { parsed, detected } = await draft();
 
     expect(parsed.name).toBe("Root");
-    expect(parsed.bolts.map((bolt) => bolt.label)).toEqual(["Services", "Work on api", "Work on web", "Run everything", "Check"]);
-    expect(parsed.bolts[0]).toEqual({ label: "Services", targets: [{ compose: "compose.yaml" }] });
-    expect(parsed.bolts[1]!.targets).toEqual([
-      { bolt: "Services", label: "services" },
+    expect(parsed.pipelines.map((bolt) => bolt.label)).toEqual(["Services", "Work on api", "Work on web", "Run everything", "Check"]);
+    expect(parsed.pipelines[0]).toEqual({ label: "Services", steps: [{ compose: "compose.yaml" }] });
+    expect(parsed.pipelines[1]!.steps).toEqual([
+      { pipeline: "Services", label: "services" },
       { folder: "apps/api" },
       { run: "pnpm dev", cwd: "apps/api", label: "api dev", after: "services" },
       { wait: "http://localhost:4000", label: "up", after: "api dev" },
       { url: "http://localhost:4000", after: "up" },
     ]);
-    expect(parsed.bolts[2]!.targets).toContainEqual({ url: "http://localhost:3000", after: "up" });
-    expect(parsed.bolts[4]).toEqual({ label: "Check", targets: [{ run: "pnpm lint", label: "lint", finishes: true }, { run: "pnpm test", label: "test", finishes: true }] });
+    expect(parsed.pipelines[2]!.steps).toContainEqual({ url: "http://localhost:3000", after: "up" });
+    expect(parsed.pipelines[4]).toEqual({ label: "Check", steps: [{ run: "pnpm lint", label: "lint", finishes: true }, { run: "pnpm test", label: "test", finishes: true }] });
     expect(detected.sources).toContain("2 Docker services: db, cache");
   });
 
@@ -80,14 +80,14 @@ describe("init reads what the project already has", () => {
       "deployments/development/docker-compose.yml": "services:\n  postgres:\n    ports:\n      - \"5432:5432\"\n",
     });
     const { parsed } = await draft();
-    expect(parsed.bolts[0]).toEqual({ label: "Services", targets: [{ compose: "deployments/development/docker-compose.yml" }] });
-    expect(parsed.bolts[1]!.targets[0]).toEqual({ bolt: "Services", label: "services" });
+    expect(parsed.pipelines[0]).toEqual({ label: "Services", steps: [{ compose: "deployments/development/docker-compose.yml" }] });
+    expect(parsed.pipelines[1]!.steps[0]).toEqual({ pipeline: "Services", label: "services" });
   });
 
   it("uses a task runner when there is no package to start", async () => {
     await files({ Makefile: ".PHONY: dev test\ndev:\n\tgo run ./cmd/server\n\ntest:\n\tgo test ./...\n" });
     const { parsed } = await draft();
-    expect(parsed.bolts.map((bolt) => [bolt.label, bolt.targets])).toEqual([
+    expect(parsed.pipelines.map((bolt) => [bolt.label, bolt.steps])).toEqual([
       [`Work on ${parsed.name}`, [{ run: "make dev", label: `${parsed.name} dev` }]],
       ["Check", [{ run: "make test", label: "test", finishes: true }]],
     ]);
@@ -95,14 +95,14 @@ describe("init reads what the project already has", () => {
 
   it("reads mise, just and Taskfile tasks too", async () => {
     await files({ "mise.toml": '[tasks.dev]\nrun = "cargo watch"\n\n[tasks.test]\nrun = "cargo test"\n' });
-    expect((await draft()).parsed.bolts[0]!.targets).toEqual([{ run: "mise run dev", label: expect.stringContaining("dev") }]);
+    expect((await draft()).parsed.pipelines[0]!.steps).toEqual([{ run: "mise run dev", label: expect.stringContaining("dev") }]);
   });
 
   it("runs a Procfile's processes side by side", async () => {
     await files({ Procfile: "web: bundle exec rails s\nworker: bundle exec sidekiq\n" });
-    expect((await draft()).parsed.bolts[0]).toEqual({
+    expect((await draft()).parsed.pipelines[0]).toEqual({
       label: "Run all",
-      targets: [
+      steps: [
         { run: "bundle exec rails s", label: "web" },
         { run: "bundle exec sidekiq", label: "worker" },
       ],
@@ -111,7 +111,7 @@ describe("init reads what the project already has", () => {
 
   it("uses the package manager the lockfile says", async () => {
     await files({ "package.json": { name: "site", scripts: { dev: "vite" } }, "yarn.lock": "" });
-    expect((await draft()).parsed.bolts[0]!.targets).toEqual([
+    expect((await draft()).parsed.pipelines[0]!.steps).toEqual([
       { run: "yarn dev", label: "Site dev" },
       { wait: "http://localhost:5173", label: "up", after: "Site dev" },
       { url: "http://localhost:5173", after: "up" },
@@ -120,12 +120,12 @@ describe("init reads what the project already has", () => {
 
   it("does not mistake a production start script for a dev server", async () => {
     await files({ "package.json": { name: "svc", scripts: { start: "node dist/index.js", test: "node --test" } } });
-    expect((await draft()).parsed.bolts.map((bolt) => bolt.label)).toEqual(["Check"]);
+    expect((await draft()).parsed.pipelines.map((bolt) => bolt.label)).toEqual(["Check"]);
   });
 
   it("falls back to folders when there is nothing to run", async () => {
     await files({ "src/index.ts": "" });
-    expect((await draft()).parsed.bolts).toEqual([{ label: "Work on src", targets: [{ folder: "src" }] }]);
+    expect((await draft()).parsed.pipelines).toEqual([{ label: "Work on src", steps: [{ folder: "src" }] }]);
   });
 
   it("writes a file that reads back as the workspace it describes, with nothing to report", async () => {
@@ -144,7 +144,7 @@ describe("init reads what the project already has", () => {
   it("lays the file out to be read in review: one step per line", async () => {
     await files({ "package.json": { name: "app", scripts: { dev: "vite" } } });
     const { contents } = await draftProject(dir);
-    expect(contents).toMatch(/"label": "Work on App",\n {6}"color": "#[0-9a-f]{6}",\n {6}"targets": \[\n {8}\{ "run": "npm run dev", "label": "App dev" \},\n/);
+    expect(contents).toMatch(/"label": "Work on App",\n {6}"color": "#[0-9a-f]{6}",\n {6}"steps": \[\n {8}\{ "run": "npm run dev", "label": "App dev" \},\n/);
   });
 });
 
@@ -240,15 +240,15 @@ describe("more than package.json", () => {
     expect(section('[tool.poe.tasks]\ndev = "uvicorn app:app"\ntest = "pytest"\n\n[tool.other]\nx = 1\n', "tool.poe.tasks")).toEqual(["dev", "test"]);
   });
 
-  it("keeps only the bolts chosen, and a kept one stops asking for one left out", () => {
+  it("keeps only the pipelines chosen, and a kept one stops asking for one left out", () => {
     const all = [
-      { label: "Services", targets: [{ compose: "compose.yaml" }] },
-      { label: "Work on api", targets: [{ bolt: "Services" }, { run: "pnpm dev" }] },
-      { label: "Check", targets: [{ run: "pnpm test", finishes: true }] },
+      { label: "Services", steps: [{ compose: "compose.yaml" }] },
+      { label: "Work on api", steps: [{ pipeline: "Services", label: "services" }, { run: "pnpm dev", label: "api", after: "services" }, { wait: "localhost:3000", after: ["services", "api"] }] },
+      { label: "Check", steps: [{ run: "pnpm test", finishes: true }] },
     ];
     expect(chooseBolts(all, ["work on api", "Check"])).toEqual([
-      { label: "Work on api", targets: [{ run: "pnpm dev" }] },
-      { label: "Check", targets: [{ run: "pnpm test", finishes: true }] },
+      { label: "Work on api", steps: [{ run: "pnpm dev", label: "api" }, { wait: "localhost:3000", after: "api" }] },
+      { label: "Check", steps: [{ run: "pnpm test", finishes: true }] },
     ]);
     expect(chooseBolts(all)).toBe(all);
   });

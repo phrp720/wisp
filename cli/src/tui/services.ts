@@ -223,7 +223,7 @@ export function setupSuggestion(dir: string, draft: Awaited<ReturnType<typeof dr
     found: detected.sources,
     bolts: draftBolts(detected).map((bolt) => ({
       label: bolt.label,
-      steps: bolt.targets.map((step) =>
+      steps: bolt.steps.map((step) =>
         typeof step["compose"] === "string" && detected.compose
           ? `start Docker services: ${detected.compose.services.map((service) => service.name).join(", ")} — and wait until they're healthy`
           : describeDraftStep(step),
@@ -237,7 +237,7 @@ export function setupSuggestion(dir: string, draft: Awaited<ReturnType<typeof dr
 function describeDraftStep(step: Record<string, unknown>): string {
   if (typeof step["compose"] === "string") return describeStep(composeTarget({ file: step["compose"] }, "up"));
   if (typeof step["run"] === "string") return `${step["finishes"] === true ? "run" : "start"} ${typeof step["label"] === "string" ? step["label"] : step["run"]}`;
-  if (typeof step["bolt"] === "string") return `${step["bolt"]} first`;
+  if (typeof step["pipeline"] === "string") return `${step["pipeline"]} first`;
   if (typeof step["folder"] === "string") return `open the ${step["folder"]} folder`;
   if (typeof step["url"] === "string") return `open ${step["url"]}`;
   if (step["wait"] !== undefined) return `wait until ${String(step["wait"])} answers`;

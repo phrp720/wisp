@@ -77,9 +77,9 @@ export async function complete(words: string[], sources: CompletionSources = SOU
       case "open-with":
         if (position === 1) {
           return [
-            { value: "folder", description: "what opens a bolt's folders" },
-            { value: "file", description: "what opens a bolt's files" },
-            { value: "terminal", description: "where a bolt's commands run" },
+            { value: "folder", description: "what opens a pipeline's folders" },
+            { value: "file", description: "what opens a pipeline's files" },
+            { value: "terminal", description: "where a pipeline's commands run" },
           ];
         }
         if (position !== 2) return [];
@@ -128,7 +128,7 @@ async function herebolts(sources: CompletionSources): Promise<Candidate[]> {
 
 function boltsOf(workspace: Workspace | undefined): Candidate[] {
   if (!workspace) return [];
-  return workspace.bolts.map((bolt) => ({ value: slugify(bolt.label), description: ["bolt", bolt.label, bolt.notes].filter(Boolean).join(" · ") }));
+  return workspace.bolts.map((bolt) => ({ value: slugify(bolt.label), description: ["pipeline", bolt.label, bolt.notes].filter(Boolean).join(" · ") }));
 }
 
 async function workspaceSlugs(sources: CompletionSources): Promise<Candidate[]> {

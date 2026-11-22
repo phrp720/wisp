@@ -130,7 +130,7 @@ export function PanesPanel(props: {
     }
     if (entry.type === "step") {
       const step = entry.step;
-      const label = step.kind === "bolt" ? `${glyphs.bolt}${step.label}` : shortStep(step);
+      const label = step.kind === "pipeline" ? `${glyphs.bolt}${step.label}` : shortStep(step);
       if (step.state === "running") return line(selected, entry.depth ?? 1, <Text color={TONE.accent}>{glyphs.running[tick % glyphs.running.length]}</Text>, label, "running");
       if (step.state === "waiting") return line(selected, entry.depth ?? 1, <Text dimColor>{glyphs.pending}</Text>, label, "waiting", "gray");
       const mark = step.skipped ? <Text dimColor>{glyphs.skip}</Text> : step.ok ? <Text color={TONE.up}>{glyphs.ok}</Text> : <Text color={TONE.failed}>{glyphs.fail}</Text>;
@@ -184,7 +184,7 @@ export function PanesPanel(props: {
       </Text>
     ) : item?.type === "step" ? (
       <Text wrap="truncate-end">
-        <Text bold>{item.step.kind === "bolt" ? item.step.label : describeHistoryStep(item.step)}</Text>
+        <Text bold>{item.step.kind === "pipeline" ? item.step.label : describeHistoryStep(item.step)}</Text>
         {item.step.skipped ? <Text dimColor>{"  not reached"}</Text> : item.step.ok ? <Text color={TONE.up}>{`  ${glyphs.ok} done`}</Text> : <Text color={TONE.failed}>{`  ${glyphs.fail} failed`}</Text>}
         <Text dimColor>{`  in ${baseLabel(item.entry.bolt)} #${item.entry.number ?? ""} · ${since(item.entry.startedAt)}`}</Text>
       </Text>
@@ -200,7 +200,7 @@ export function PanesPanel(props: {
             {all ? "Running and stopped" : "Running"}
           </Text>
           {typing || query ? <SearchLine query={query} typing={typing} /> : null}
-          {items.length === 0 ? <Text dimColor>{query ? `Nothing matches “${query}”. esc clears it.` : all ? "Nothing has run yet." : "Nothing is running right now. Run a bolt from the Bolts tab (1), or press \"o\" to show the ones that stopped."}</Text> : null}
+          {items.length === 0 ? <Text dimColor>{query ? `Nothing matches “${query}”. esc clears it.` : all ? "Nothing has run yet." : "Nothing is running right now. Run a pipeline from the Pipelines tab (1), or press \"o\" to show the ones that stopped."}</Text> : null}
           {dockerError ? <Text color="yellow" wrap="wrap">{`Docker: ${dockerError}`}</Text> : null}
           {list.visible.map((row) => (
             <Box key={row.key}>{row.kind === "item" ? nodeOf(items[row.at] as PaneItem, row.at) : row.kind === "heading" ? <Text bold dimColor>{row.text}</Text> : <Text> </Text>}</Box>
@@ -263,7 +263,7 @@ export function PanesPanel(props: {
           <GroupSummary items={items} group={item.group} history={history} stats={stats} glyphs={glyphs} />
         ) : item?.type === "step" && shown.length === 0 ? (
           <Text dimColor wrap="wrap">
-            {item.step.kind === "bolt"
+            {item.step.kind === "pipeline"
               ? `${item.step.label} ran first and printed nothing.`
               : item.step.skipped
                 ? item.step.note ?? "It was not reached."
@@ -296,7 +296,7 @@ export function groupPanes(head: PaneItem[], runs: RunStatus[], containers: Cont
   for (const run of runs) {
     const bolt = run.bolt;
     const key = `${run.workspace}#${bolt ?? ""}`;
-    add({ key, workspace: run.workspace, workspaceName: nameOf(run.workspace, run.workspaceName), ...(bolt ? { bolt } : {}), title: bolt ?? "Not from a bolt" }, { type: "run", run, group: key });
+    add({ key, workspace: run.workspace, workspaceName: nameOf(run.workspace, run.workspaceName), ...(bolt ? { bolt } : {}), title: bolt ?? "Not from a pipeline" }, { type: "run", run, group: key });
   }
   for (const container of containers) {
     // The bolt whose compose step starts this file is the container's owner.
@@ -345,7 +345,7 @@ function nestNeededBolts(groups: Map<string, { group: PaneGroup; members: PaneIt
     const entry = history.find((candidate) => candidate.workspace === workspace && baseLabel(candidate.bolt) === bolt);
     if (!entry) continue;
     for (const member of [...found.members]) {
-      if (member.type !== "step" || member.step.kind !== "bolt" || member.entry !== entry) continue;
+      if (member.type !== "step" || member.step.kind !== "pipeline" || member.entry !== entry) continue;
       const neededKey = `${workspace}#${member.step.label}`;
       const needed = groups.get(neededKey);
       if (!needed || neededKey === key) continue;
@@ -403,7 +403,7 @@ function pipeline(group: PaneGroup, members: PaneItem[], history: HistoryEntry[]
         entry,
         index,
         group: group.key,
-        step: { kind: "bolt", label: name, value: name, ok: done.every((candidate) => candidate.ok), ...(done.length > 0 && done.every((candidate) => candidate.skipped) ? { skipped: true } : {}), durationMs: done.reduce((sum, candidate) => sum + candidate.durationMs, 0), ...(printed ? { log: printed } : {}), ...(state ? { state } : {}) },
+        step: { kind: "pipeline", label: name, value: name, ok: done.every((candidate) => candidate.ok), ...(done.length > 0 && done.every((candidate) => candidate.skipped) ? { skipped: true } : {}), durationMs: done.reduce((sum, candidate) => sum + candidate.durationMs, 0), ...(printed ? { log: printed } : {}), ...(state ? { state } : {}) },
       });
       return;
     }
@@ -530,7 +530,7 @@ export function GroupSummary({ items, group }: { items: PaneItem[]; group: PaneG
       )}
       <Text> </Text>
       <Text dimColor>
-        {group.bolt ? `x stops all of ${group.bolt} · r restarts it · ↓ to a step for its output` : "Not started by a bolt — choose one to stop it or see its output."}
+        {group.bolt ? `x stops all of ${group.bolt} · r restarts it · ↓ to a step for its output` : "Not started by a pipeline — choose one to stop it or see its output."}
       </Text>
     </Box>
   );

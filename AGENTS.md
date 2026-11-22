@@ -6,7 +6,7 @@ Notes for AI coding agents working on Wisp's own code. To *use* Wisp, run
 ## Layout
 
 - `cli/`: Wisp itself, published as `@squaredasher/wisp`.
-  - `src/core`: the file format, trust, discovery, running bolts, history. No CLI or TUI code.
+  - `src/core`: the file format, trust, discovery, running pipelines, history. No CLI or TUI code.
   - `src/platform`: everything specific to macOS, Linux and Windows.
   - `src/cli`: the `wisp` command. `src/cli/spec.ts` is the agent reference.
   - `src/tui`: the full-screen TUI (Ink + React). `App.tsx` holds state and keys; each screen

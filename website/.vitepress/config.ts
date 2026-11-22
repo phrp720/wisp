@@ -14,14 +14,14 @@ const site = "https://willowisp.dev";
  */
 const LLMS = `# Wisp
 
-> Wisp runs everyday tasks with one word each: start a project's database, server and page; run the checks; back up; redeploy. A \`.wisp.json\` next to the code, or a workspace of your own, lists each task's steps; \`wisp <bolt>\` runs them from any terminal, on a laptop or a server. Free and open source, for macOS, Linux and Windows.
+> Wisp runs pipelines on your own machines: a dev stack, checks before a push, a deploy, a backup. A pipeline is steps that run side by side or wait for what they need: commands, Docker services, waits for a port or a website, other pipelines, and links, folders and apps to open. It lives in a \`.wisp.json\` next to the code, or in a workspace of your own, and runs with \`wisp <workspace> <pipeline>\` from whatever folder you're in, on the machine Wisp is installed on: a laptop or a server. Wisp keeps track of everything it starts, keeps every run like CI, and runs nothing from a cloned repository until a person allows it. Free and open source, for macOS, Linux and Windows.
 
 The complete reference for agents, the file format, every command, JSON output and exit codes, is [llms-full.txt](${site}/llms-full.txt). The installed CLI prints the same text with \`wisp help agents\`.
 
 ## Docs
 
-- [Getting started](${site}/docs/getting-started): install, write the first bolt, run it
-- [Recipes](${site}/docs/recipes): the dev stack, checks before a push, a deploy that asks first, a nightly backup that tells you if it fails
+- [Getting started](${site}/docs/getting-started): install, write the first pipeline, run it
+- [Use cases](${site}/docs/use-cases): pipelines to copy: a dev stack, checks before a push, a release, a deploy that asks first, updating and keeping an app running on a server, scheduled backups that tell you when they fail, an SSH tunnel
 - [The .wisp.json file](${site}/docs/file): every kind of step, dependencies, several operating systems
 - [Runs and history](${site}/docs/runs): commands that finish, failures, and every run kept like a CI run
 - [What's running](${site}/docs/running): background commands, logs, stopping, restart on crash
@@ -36,7 +36,7 @@ The complete reference for agents, the file format, every command, JSON output a
 - [The dashboard](${site}/docs/dashboard): the screen \`wisp\` opens in your terminal
 `;
 
-const description = "Your everyday tasks, one word each: start the dev stack, run the checks, back up, redeploy. Written once, run from any terminal, on your laptop or a server. Free and open source.";
+const description = "Pipelines for your own machines: steps that run side by side or wait for what they need. Your dev stack, checks, deploys and backups, run by name from whatever folder you're in, the same on your laptop and on your servers. Free and open source.";
 
 export default defineConfig({
   async buildEnd(config) {
@@ -73,7 +73,7 @@ export default defineConfig({
           text: "Start here",
           items: [
             { text: "Getting started", link: "/docs/getting-started" },
-            { text: "Recipes", link: "/docs/recipes" },
+            { text: "Use cases", link: "/docs/use-cases" },
             { text: "Questions", link: "/docs/questions" },
           ],
         },

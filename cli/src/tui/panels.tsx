@@ -108,7 +108,7 @@ export function HelpPanel({ glyphs, height, tab = "bolts" }: { glyphs: Glyphs; h
   const anywhere: [string, [string, string][]] = [
     "Anywhere",
     [
-      ["1 2 3", "the tabs: bolts · running · history"],
+      ["1 2 3", "the tabs: pipelines · running · history"],
       ["mouse", "click to select · wheel to scroll · off in settings"],
       ["?", "these keys"],
     ],
@@ -117,14 +117,14 @@ export function HelpPanel({ glyphs, height, tab = "bolts" }: { glyphs: Glyphs; h
     [
       "On Running",
       [
-        ["↑↓  j k", "choose a bolt or one of its commands"],
+        ["↑↓  j k", "choose a pipeline or one of its commands"],
         ["[  ]", "its tabs: logs · info · past runs"],
         ["f", "the log full screen: ↑↓ scroll, ←→ the next command"],
         ["u d  G", "scroll the log · back to the newest"],
         ["/", "filter the list, or the log in full screen"],
         ["x  r", "stop · restart"],
         ["o", "show the ones that stopped too"],
-        ["esc  p", "back to the bolts"],
+        ["esc  p", "back to the pipelines"],
       ],
     ],
     anywhere,
@@ -133,12 +133,12 @@ export function HelpPanel({ glyphs, height, tab = "bolts" }: { glyphs: Glyphs; h
     [
       "On History",
       [
-        ["←  →", "the bolts to filter by · their runs"],
+        ["←  →", "the pipelines to filter by · their runs"],
         ["⏎", "open a run: its summary, pipeline and logs"],
         ["/", "search the runs; in a run, filter its logs"],
         ["u  d", "in a run: scroll"],
         ["r  R", "retry what failed · run it all again"],
-        ["D", "delete the run, or the selected bolt's runs"],
+        ["D", "delete the run, or the selected pipeline's runs"],
         ["esc  h", "back"],
       ],
     ],
@@ -149,11 +149,11 @@ export function HelpPanel({ glyphs, height, tab = "bolts" }: { glyphs: Glyphs; h
     [
       "Run",
       [
-        ["⏎", "run the selected bolt, in its box: each step ticks off as it goes"],
+        ["⏎", "run the selected pipeline, in its box: each step ticks off as it goes"],
         ["c", "check it: what it would do, and what's wrong; nothing runs"],
-        ["u  d", "scroll the selected bolt's steps, when they don't fit"],
+        ["u  d", "scroll the selected pipeline's steps, when they don't fit"],
         ["x  R", "stop the run, or what it started · restart it"],
-        ["r  ⏎", "after a run: retry from where it failed · close it, back to the bolt"],
+        ["r  ⏎", "after a run: retry from where it failed · close it, back to the pipeline"],
       ],
     ],
     [
@@ -161,27 +161,27 @@ export function HelpPanel({ glyphs, height, tab = "bolts" }: { glyphs: Glyphs; h
       [
         ["p", "what's running — commands and containers, live"],
         ["h", "history — every run, like a CI"],
-        ["/", "search every workspace and bolt"],
+        ["/", "search every workspace and pipeline"],
       ],
     ],
     [
       "Edit",
       [
-        ["e", "edit the selected bolt, or the workspace on the left: its name, icon, notes"],
-        ["a  D", "add a bolt · delete the selected bolt, or workspace on the left"],
-        ["K  J", "move the selected bolt up · down"],
+        ["e", "edit the selected pipeline, or the workspace on the left: its name, icon, notes"],
+        ["a  D", "add a pipeline · delete the selected pipeline, or workspace on the left"],
+        ["K  J", "move the selected pipeline up · down"],
         ["N", "a new workspace of your own"],
         ["E", "open the file itself in your text editor"],
-        ["s", "settings: your editor, and where commands run"],
+        ["s", "settings: what opens files, where commands run, notifications, the mouse"],
       ],
     ],
     [
       "Move",
       [
         ["↑↓  j k", "move"],
-        ["1 2 3", "the tabs: bolts · running · history"],
+        ["1 2 3", "the tabs: pipelines · running · history"],
         ["mouse", "click to select · wheel to scroll · off in settings"],
-        ["←→  tab", "between workspaces and bolts"],
+        ["←→  tab", "between workspaces and pipelines"],
         ["t", "review and allow what a file would run"],
         ["r  q", "reload · quit"],
       ],

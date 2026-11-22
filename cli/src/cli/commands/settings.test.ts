@@ -64,7 +64,7 @@ describe("wisp notify", () => {
     try {
       await notify.run([], { webhook: `http://127.0.0.1:${port}/hook`, test: true, json: true });
       expect(shown().test).toEqual({ ok: true, problems: [] });
-      expect(JSON.parse(bodies[0] as string)).toMatchObject({ bolt: "A test", ok: false });
+      expect(JSON.parse(bodies[0] as string)).toMatchObject({ pipeline: "A test", ok: false });
       expect(process.exitCode).toBeUndefined();
       status = 404;
       printed.length = 0;

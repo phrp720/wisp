@@ -18,13 +18,13 @@ function read(file: string, main: Record<string, unknown>, trust: TrustState = "
 
 const acme = read("/dev/acme/.wisp.json", {
   name: "Acme",
-  bolts: [
-    { label: "Work on api", targets: [{ folder: "apps/api" }, { run: "pnpm dev" }] },
-    { label: "Work on web", targets: [{ folder: "apps/web" }] },
+  pipelines: [
+    { label: "Work on api", steps: [{ folder: "apps/api" }, { run: "pnpm dev" }] },
+    { label: "Work on web", steps: [{ folder: "apps/web" }] },
   ],
 });
-const infra = read("/dev/infra/.wisp.json", { name: "infra", bolts: [{ label: "Database", targets: [{ run: "postgres" }] }] }, "untrusted");
-const morning = read("/home/.config/wisp/workspaces/Morning.json", { name: "Morning", bolts: [{ label: "Start the day", targets: [{ url: "mail.google.com" }] }] }, "trusted", true);
+const infra = read("/dev/infra/.wisp.json", { name: "infra", pipelines: [{ label: "Database", steps: [{ run: "postgres" }] }] }, "untrusted");
+const morning = read("/home/.config/wisp/workspaces/Morning.json", { name: "Morning", pipelines: [{ label: "Start the day", steps: [{ url: "mail.google.com" }] }] }, "trusted", true);
 
 function services(overrides: Partial<Services> = {}, library: Library = { reads: [morning, infra, acme], here: acme.workspace.file, unreadable: [] }): Services {
   return {
@@ -61,7 +61,7 @@ function services(overrides: Partial<Services> = {}, library: Library = { reads:
       setNotify: async (change) => ({ when: "failures", ...change }),
     },
     editing: {
-      bolt: async (_file, bolt) => ({ label: bolt, targets: [] }),
+      bolt: async (_file, bolt) => ({ label: bolt, steps: [] }),
       addBolt: async () => undefined,
       renameBolt: async () => undefined,
       setBoltNotes: async () => undefined,
@@ -110,7 +110,7 @@ async function open(api: Services) {
 }
 
 describe("the TUI", () => {
-  it("starts on the project you are in, with its bolts ready to run", async () => {
+  it("starts on the project you are in, with its pipelines ready to run", async () => {
     const { lastFrame } = await open(services());
     const frame = lastFrame() ?? "";
     expect(frame).toContain("Workspaces");
@@ -119,7 +119,7 @@ describe("the TUI", () => {
     expect(frame).toContain("pnpm dev");
   });
 
-  it("shows the bolts in one box and the selected one in a box below, with the command that runs it", async () => {
+  it("shows the pipelines in one box and the selected one in a box below, with the command that runs it", async () => {
     const app = await open(services());
     await eventually(() => {
       const frame = app.lastFrame() ?? "";
@@ -176,8 +176,8 @@ describe("the TUI", () => {
     await tick();
     await tick();
     const lines = (app.lastFrame() ?? "").split("\n");
-    expect(lines.at(-1)).toContain("⏎ open · ← bolts");
-    expect(lines.slice(0, -1).join("\n")).not.toContain("⏎ open · ← bolts");
+    expect(lines.at(-1)).toContain("⏎ open · ← pipelines");
+    expect(lines.slice(0, -1).join("\n")).not.toContain("⏎ open · ← pipelines");
     app.stdin.write("j");
     await tick();
     app.stdin.write("?");
@@ -205,7 +205,7 @@ describe("the TUI", () => {
     expect(frame).toContain("GONE");
   });
 
-  it("cuts a long bolt name in History short, never into its count", async () => {
+  it("cuts a long pipeline name in History short, never into its count", async () => {
     const entry: HistoryEntry = { id: "", workspace: acme.workspace.file, workspaceName: "Acme", bolt: "Work on the whole Flower Testbed", number: 1, startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), ok: true, steps: [] };
     const app = await open(services({ history: async () => Array.from({ length: 14 }, (_, at) => ({ ...entry, id: `${at}`.padStart(12, "a"), number: at + 1 })) }));
     app.stdin.write("h");
@@ -219,7 +219,7 @@ describe("the TUI", () => {
     expect((lastFrame() ?? "").split("\n").at(-1)).toContain(`v${VERSION}`);
   });
 
-  it("shows a run still going in History, and D deletes a finished run or a bolt's runs after asking", async () => {
+  it("shows a run still going in History, and D deletes a finished run or a pipeline's runs after asking", async () => {
     const done: HistoryEntry = { id: "aaaaaaaaaaaa", workspace: acme.workspace.file, workspaceName: "Acme", bolt: "Check", number: 1, startedAt: new Date(Date.now() - 90_000).toISOString(), finishedAt: new Date(Date.now() - 80_000).toISOString(), ok: true, steps: [] };
     const going: HistoryEntry = { ...done, id: "bbbbbbbbbbbb", number: 2, ok: false, running: true, pid: 1, total: 3, startedAt: new Date().toISOString(), steps: [{ kind: "command", label: "lint", value: "pnpm lint", ok: true, durationMs: 1000 }] };
     const forgetRuns = vi.fn(async () => undefined);
@@ -269,7 +269,7 @@ describe("the TUI", () => {
     await eventually(() => expect(app.lastFrame()).toContain('Renamed "Acme" to "Acme Labs"'));
   });
 
-  it("asks about deleting a bolt on its row, with the rest of the list still there", async () => {
+  it("asks about deleting a pipeline on its row, with the rest of the list still there", async () => {
     const removeBolt = vi.fn(async () => undefined);
     const app = await open(services({ editing: { ...services().editing, removeBolt } }));
     app.stdin.write("D");
@@ -290,7 +290,7 @@ describe("the TUI", () => {
 
   it("asks about removing a step on its row in the editor, and esc keeps it", async () => {
     const removeStep = vi.fn(async () => undefined);
-    const bolt = async () => ({ label: "Work on api", targets: [{ folder: "apps/api" }, { run: "pnpm dev" }] });
+    const bolt = async () => ({ label: "Work on api", steps: [{ folder: "apps/api" }, { run: "pnpm dev" }] });
     const app = await open(services({ editing: { ...services().editing, bolt, removeStep } }));
     app.stdin.write("e");
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ .*1 .*apps\/api/));
@@ -349,7 +349,7 @@ describe("the TUI", () => {
     expect(list.indexOf("YOURS")).toBeLessThan(list.indexOf("Morning"));
   });
 
-  it("moves between bolts and runs the selected one, showing each step", async () => {
+  it("moves between pipelines and runs the selected one, showing each step", async () => {
     const run = vi.fn(services().run);
     const app = await open(services({ run }));
     app.stdin.write(ARROW_DOWN);
@@ -366,7 +366,7 @@ describe("the TUI", () => {
 
     app.stdin.write("\r");
     await tick();
-    await eventually(() => expect(app.lastFrame()).toContain("Bolts"));
+    await eventually(() => expect(app.lastFrame()).toContain("Pipelines"));
   });
 
   it("handles keys that arrive faster than it redraws", async () => {
@@ -385,7 +385,7 @@ describe("the TUI", () => {
     await eventually(() => expect(run).toHaveBeenLastCalledWith(acme, "Work on api", expect.anything()));
   });
 
-  it("asks on the bolt's row before running a bolt that asks first: y runs it, esc runs nothing", async () => {
+  it("asks on the pipeline's row before running a pipeline that asks first: y runs it, esc runs nothing", async () => {
     const run = vi.fn(services().run);
     const questions = vi.fn(async (_read: WorkspaceRead, bolt: string) => (bolt === "Work on web" ? ["Deploy the web?"] : []));
     const app = await open(services({ run, questions }));
@@ -409,7 +409,7 @@ describe("the TUI", () => {
     await eventually(() => expect(app.lastFrame()).toContain("Acme › Work on web"));
   });
 
-  it("asks for a bolt's inputs in a form, then its question with the values in it, then runs with them", async () => {
+  it("asks for a pipeline's inputs in a form, then its question with the values in it, then runs with them", async () => {
     const run = vi.fn(services().run);
     const inputs = vi.fn(async (_read: WorkspaceRead, bolt: string) =>
       bolt === "Work on web" ? [{ name: "env", ask: "Deploy where?", choices: ["staging", "production"] }, { name: "tag", ask: "Which tag?", default: "latest" }] : [],
@@ -450,13 +450,13 @@ describe("the TUI", () => {
     expect(run).not.toHaveBeenCalled();
   });
 
-  it("says in a bolt's details that it asks first", async () => {
-    const asking = read("/dev/acme/.wisp.json", { name: "Acme", bolts: [{ label: "Ship", confirm: "Ship it?", targets: [{ url: "localhost:3000" }] }] });
+  it("says in a pipeline's details that it asks first", async () => {
+    const asking = read("/dev/acme/.wisp.json", { name: "Acme", pipelines: [{ label: "Ship", confirm: "Ship it?", steps: [{ url: "localhost:3000" }] }] });
     const app = await open(services({}, { reads: [asking], here: asking.workspace.file, unreadable: [] }));
     await eventually(() => expect(app.lastFrame()).toContain("asks first: Ship it? · never run yet"));
   });
 
-  it("checks a bolt with c: a dry run in its box, nothing runs", async () => {
+  it("checks a pipeline with c: a dry run in its box, nothing runs", async () => {
     const run = vi.fn(services().run);
     const app = await open(services({ run }));
     app.stdin.write("c");
@@ -507,7 +507,7 @@ describe("the TUI", () => {
     await eventually(() => expect(run).toHaveBeenCalledWith(acme, "Work on web", expect.anything()));
   });
 
-  it("does nothing else with the ⏎ that cancels a trust dialog — it does not run the bolt behind it", async () => {
+  it("does nothing else with the ⏎ that cancels a trust dialog — it does not run the pipeline behind it", async () => {
     const run = vi.fn(services().run);
     const trust = vi.fn(async () => undefined);
     const app = await open(services({ run, trust }));
@@ -648,27 +648,27 @@ describe("the TUI", () => {
     expect(removePersonalWorkspace).not.toHaveBeenCalled();
   });
 
-  it("offers + add a bolt in an empty workspace, and ⏎ opens the form instead of running", async () => {
-    const empty = read("/home/.config/wisp/workspaces/Notes.json", { name: "Notes", bolts: [] }, "trusted", true);
+  it("offers + add a pipeline in an empty workspace, and ⏎ opens the form instead of running", async () => {
+    const empty = read("/home/.config/wisp/workspaces/Notes.json", { name: "Notes", pipelines: [] }, "trusted", true);
     const run = vi.fn(services().run);
     const app = await open(services({ run }, { reads: [empty], here: empty.workspace.file, unreadable: [] }));
     app.stdin.write(ARROW_RIGHT);
     await tick();
-    await eventually(() => expect(app.lastFrame()).toContain("+ add a bolt"));
+    await eventually(() => expect(app.lastFrame()).toContain("+ add a pipeline"));
     app.stdin.write("\r");
     await tick();
-    await eventually(() => expect(app.lastFrame()).toContain("A new bolt in Notes"));
+    await eventually(() => expect(app.lastFrame()).toContain("A new pipeline in Notes"));
     expect(run).not.toHaveBeenCalled();
   });
 
-  it("asks before running a bolt that would start only half, and runs it once trusted", async () => {
+  it("asks before running a pipeline that would start only half, and runs it once trusted", async () => {
     const shop = (trust: TrustState) =>
       read("/dev/shop/.wisp.json", {
         name: "Shop",
-        bolts: [
-          { label: "Work on web", targets: [{ bolt: "Database", label: "db" }, { url: "http://localhost:3000", after: "db" }] },
-          { label: "Database", targets: [{ run: "postgres" }] },
-          { label: "Docs", targets: [{ url: "https://docs.shop.test" }] },
+        pipelines: [
+          { label: "Work on web", steps: [{ pipeline: "Database", label: "db" }, { url: "http://localhost:3000", after: "db" }] },
+          { label: "Database", steps: [{ run: "postgres" }] },
+          { label: "Docs", steps: [{ url: "https://docs.shop.test" }] },
         ],
       }, trust);
     let current = shop("untrusted");
@@ -727,12 +727,12 @@ describe("the TUI", () => {
     expect(ran).toEqual(["Docs:untrusted", "Work on web:trusted"]);
   });
 
-  it("shows the selected bolt whole in its box: its order, the bolts it runs opened up, what each runs", async () => {
+  it("shows the selected pipeline whole in its box: its order, the pipelines it runs opened up, what each runs", async () => {
     const shop = read("/dev/shop/.wisp.json", {
       name: "Shop",
-      bolts: [
-        { label: "Work on web", targets: [{ bolt: "Database", label: "db" }, { run: "pnpm dev", label: "web", cwd: "apps/web", restart: "on-failure", after: "db" }, { wait: "localhost:3000", label: "up", after: "web" }, { url: "http://localhost:3000", after: "up" }] },
-        { label: "Database", targets: [{ compose: "compose.yaml", services: ["db"] }] },
+      pipelines: [
+        { label: "Work on web", steps: [{ pipeline: "Database", label: "db" }, { run: "pnpm dev", label: "web", cwd: "apps/web", restart: "on-failure", after: "db" }, { wait: "localhost:3000", label: "up", after: "web" }, { url: "http://localhost:3000", after: "up" }] },
+        { label: "Database", steps: [{ compose: "compose.yaml", services: ["db"] }] },
       ],
     });
     const app = render(<App services={services({}, { reads: [shop], here: shop.workspace.file, unreadable: [] })} glyphs={unicode} size={{ columns: 100, rows: 30 }} />);
@@ -746,9 +746,9 @@ describe("the TUI", () => {
       "/dev/shop/.wisp.json",
       {
         name: "Shop",
-        bolts: [
-          { label: "Work on web", targets: [{ bolt: "Database", label: "db" }, { run: "pnpm dev", label: "web", after: "db" }, { wait: "localhost:3000", label: "up", after: "web" }, { url: "http://localhost:3000", after: "up" }] },
-          { label: "Database", targets: [{ url: "http://db.test" }, { compose: "docker-compose.yml" }] },
+        pipelines: [
+          { label: "Work on web", steps: [{ pipeline: "Database", label: "db" }, { run: "pnpm dev", label: "web", after: "db" }, { wait: "localhost:3000", label: "up", after: "web" }, { url: "http://localhost:3000", after: "up" }] },
+          { label: "Database", steps: [{ url: "http://db.test" }, { compose: "docker-compose.yml" }] },
         ],
       },
       "untrusted",
@@ -760,30 +760,30 @@ describe("the TUI", () => {
     expect(app.lastFrame()).toMatch(/ 1\. ⚡ ?Database[\s\S]* {4}1\. open[\s\S]* 2\. start web +after db +not allowed yet[\s\S]*pnpm dev[\s\S]* 3\. wait until port 3000 is open +after web[\s\S]* 4\. open http:\/\/localhost:3000 +after up/);
   });
 
-  it("shows a bolt's problems on its row and in its box, and the file's in the header, without a check to run", async () => {
+  it("shows a pipeline's problems on its row and in its box, and the file's in the header, without a check to run", async () => {
     const shop = read("/dev/shop/.wisp.json", {
       name: "Shop",
       nmae: "typo",
-      bolts: [
-        { label: "dev", targets: [{ bolt: "Services" }, { folder: "web" }] },
-        { label: "Docs", targets: [{ url: "https://docs.shop.test" }] },
+      pipelines: [
+        { label: "dev", steps: [{ pipeline: "Services" }, { folder: "web" }] },
+        { label: "Docs", steps: [{ url: "https://docs.shop.test" }] },
       ],
     });
-    const check = async () => ({ ...shop, diagnostics: [...shop.diagnostics, { level: "error" as const, at: "bolts[0].targets[1].folder", message: "no such folder: /dev/shop/web", bolt: "dev" }] });
+    const check = async () => ({ ...shop, diagnostics: [...shop.diagnostics, { level: "error" as const, at: "pipelines[0].steps[1].folder", message: "no such folder: /dev/shop/web", pipeline: "dev" }] });
     const app = render(<App services={services({ check }, { reads: [shop], here: shop.workspace.file, unreadable: [] })} glyphs={unicode} size={{ columns: 110, rows: 30 }} />);
     await eventually(() => expect(app.lastFrame()).toContain("no such folder: /dev/shop/web"));
     const frame = app.lastFrame() ?? "";
-    expect(frame).toMatch(/1\. ⚡ ?Services +✗ no bolt by that name/);
+    expect(frame).toMatch(/1\. ⚡ ?Services +✗ no pipeline by that name/);
     expect(frame).toMatch(/❯ dev +✗ 2 problems/);
     expect(frame).not.toMatch(/Docs +✗/);
-    expect(frame).toContain('✗ "dev" runs a bolt called "Services", which this file does not declare');
-    expect(frame).toContain('Pick one of this file\'s bolts in the step, or add a bolt called "Services"');
+    expect(frame).toContain('✗ "dev" runs a pipeline called "Services", which this file does not declare');
+    expect(frame).toContain('Pick one of this file\'s pipelines, or add one called "Services"');
     expect(frame).toMatch(/! "nmae"/);
     expect(frame).not.toContain("c to check");
   });
 
-  it("scrolls a long bolt's steps with u and d", async () => {
-    const long = read("/dev/long/.wisp.json", { name: "Long", bolts: [{ label: "Morning", targets: Array.from({ length: 30 }, (_, at) => ({ url: `https://site${at + 1}.example.com`, label: `site ${at + 1}` })) }] });
+  it("scrolls a long pipeline's steps with u and d", async () => {
+    const long = read("/dev/long/.wisp.json", { name: "Long", pipelines: [{ label: "Morning", steps: Array.from({ length: 30 }, (_, at) => ({ url: `https://site${at + 1}.example.com`, label: `site ${at + 1}` })) }] });
     const app = await open(services({}, { reads: [long], here: long.workspace.file, unreadable: [] }));
     await eventually(() => expect(app.lastFrame()).toMatch(/\d+ more below · u d scroll/));
     expect(app.lastFrame()).toContain(" 1. open site 1");
@@ -797,7 +797,7 @@ describe("the TUI", () => {
   it("has three tabs along the top, 1–3, and keeps a log of what happened under Running", async () => {
     const app = await open(services({ history: async () => [] }));
     await tick();
-    await eventually(() => expect(app.lastFrame()).toMatch(/1 Bolts +2 Running +3 History/));
+    await eventually(() => expect(app.lastFrame()).toMatch(/1 Pipelines +2 Running +3 History/));
     app.stdin.write("3");
     await tick();
     await tick();
@@ -905,7 +905,7 @@ describe("the TUI", () => {
     expect(setNotify).toHaveBeenCalledTimes(1);
   });
 
-  it("sets up only the suggested bolts left ticked", async () => {
+  it("sets up only the suggested pipelines left ticked", async () => {
     const suggestion = {
       dir: "/dev/shop",
       name: "Shop",
@@ -923,7 +923,7 @@ describe("the TUI", () => {
     await eventually(() => expect(app.lastFrame()).toMatch(/\[✓\] ⚡ Services[\s\S]*\[✓\] ⚡ Work on Shop[\s\S]*\[✓\] ⚡ Check/));
     app.stdin.write(" "); // untick Services
     await tick();
-    await eventually(() => expect(app.lastFrame()).toContain("Set up 2 bolts"));
+    await eventually(() => expect(app.lastFrame()).toContain("Set up 2 pipelines"));
     app.stdin.write("\r");
     await tick();
     await tick();
@@ -936,7 +936,7 @@ describe("the TUI", () => {
     const declineSetup = vi.fn(async () => undefined);
     const app = await open(services({ suggestSetup: async () => suggestion, setUp, declineSetup }, { reads: [infra], unreadable: [] }));
     await tick();
-    await eventually(() => expect(app.lastFrame()).toContain("Set up this bolt"));
+    await eventually(() => expect(app.lastFrame()).toContain("Set up this pipeline"));
     expect(app.lastFrame()).toContain("N don't ask again");
     expect(app.lastFrame()).toContain("[ Not now ]");
     expect(app.lastFrame()).toContain("[ Don't ask again ]");
@@ -966,7 +966,7 @@ describe("the TUI", () => {
 });
 
 describe("commands that finish, down and history in the TUI", () => {
-  it("runs a bolt in its own box, under the list, and esc hides what it did", async () => {
+  it("runs a pipeline in its own box, under the list, and esc hides what it did", async () => {
     const run = vi.fn(services().run);
     const app = await open(services({ run }));
     app.stdin.write("\r");
@@ -981,7 +981,7 @@ describe("commands that finish, down and history in the TUI", () => {
     expect(app.lastFrame()).not.toContain("All done.");
   });
 
-  it("closes a finished run on ⏎, back to the bolt, and runs it again only on the next ⏎", async () => {
+  it("closes a finished run on ⏎, back to the pipeline, and runs it again only on the next ⏎", async () => {
     const run = vi.fn(services().run);
     const app = await open(services({ run }));
     app.stdin.write("\r");
@@ -1021,12 +1021,12 @@ describe("commands that finish, down and history in the TUI", () => {
     await eventually(() => expect(app.lastFrame()).toContain("exited with code 1"));
   });
 
-  it("asks, when the bolt needed others, whether to stop those too", async () => {
+  it("asks, when the pipeline needed others, whether to stop those too", async () => {
     const shop = read("/dev/shop/.wisp.json", {
       name: "Shop",
-      bolts: [
-        { label: "Work on web", targets: [{ bolt: "Database", label: "db" }, { run: "pnpm dev", label: "web", after: "db" }] },
-        { label: "Database", targets: [{ run: "postgres", label: "db" }] },
+      pipelines: [
+        { label: "Work on web", steps: [{ pipeline: "Database", label: "db" }, { run: "pnpm dev", label: "web", after: "db" }] },
+        { label: "Database", steps: [{ run: "postgres", label: "db" }] },
       ],
     });
     const down = vi.fn(async () => ({ stopped: [] as never[] }));
@@ -1048,7 +1048,7 @@ describe("commands that finish, down and history in the TUI", () => {
     expect(down).toHaveBeenCalledWith(shop, shop.workspace.bolts[0], { deps: true });
   });
 
-  it("takes the selected bolt down with x", async () => {
+  it("takes the selected pipeline down with x", async () => {
     const down = vi.fn(async () => ({ stopped: [{ id: "ab12", label: "pnpm dev" }] as never[] }));
     const app = await open(services({ down }));
     app.stdin.write("x");
@@ -1057,7 +1057,7 @@ describe("commands that finish, down and history in the TUI", () => {
     expect(app.lastFrame()).toContain("Work on api: stopped 1");
   });
 
-  it("marks a bolt that is up", async () => {
+  it("marks a pipeline that is up", async () => {
     const runs = [{ id: "ab12", kind: "window", label: "pnpm dev", command: "pnpm dev", workspace: acme.workspace.file, workspaceName: "Acme", asset: "command:pnpm dev", pid: 1, startedAt: new Date().toISOString(), alive: true }];
     const app = await open(services({ runs: async () => runs as never }));
     await tick();
@@ -1090,7 +1090,7 @@ describe("commands that finish, down and history in the TUI", () => {
     expect(app.lastFrame()).not.toContain("the dashboard");
   });
 
-  it("shows past runs like a CI: bolts to filter by, numbered runs, and a run's summary, pipeline and logs", async () => {
+  it("shows past runs like a CI: pipelines to filter by, numbered runs, and a run's summary, pipeline and logs", async () => {
     const entry = {
       id: "3f2a1b",
       number: 7,
@@ -1117,7 +1117,7 @@ describe("commands that finish, down and history in the TUI", () => {
     await tick();
     await tick();
     let frame = app.lastFrame() ?? "";
-    expect(frame).toContain("All bolts");
+    expect(frame).toContain("All pipelines");
     expect(frame).toContain("Check #7");
     expect(frame).toMatch(/✗ Check #7 +at test +a1b2c3d fix cart total +· git hook/);
     expect(frame).toMatch(/⎇ main +3\.0s/);
@@ -1388,7 +1388,7 @@ describe("filtering logs", () => {
     // A second esc goes back to the runs, as before.
     app.stdin.write("\u001B");
     await tick();
-    await eventually(() => expect(app.lastFrame()).toContain("All bolts"));
+    await eventually(() => expect(app.lastFrame()).toContain("All pipelines"));
   });
 });
 
@@ -1444,16 +1444,16 @@ describe("doing everything without JSON", () => {
     expect(addStep).toHaveBeenCalledWith(acme.workspace.file, "Work on api", { run: "pnpm test", finishes: true, timeout: "10m" }, 0);
   });
 
-  it("adds a bolt as a step, picked from this workspace's own, with what it depends on", async () => {
+  it("adds a pipeline as a step, picked from this workspace's own, with what it depends on", async () => {
     const addStep = vi.fn(async () => undefined);
     const setAfter = vi.fn(async () => undefined);
-    const bolt = async (_file: string, label: string) => ({ label, targets: [{ folder: "apps/api" }] });
+    const bolt = async (_file: string, label: string) => ({ label, steps: [{ folder: "apps/api" }] });
     const app = await open(services({ editing: { ...services().editing, bolt, addStep, setAfter } }));
     app.stdin.write("e");
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ .*1 .*apps\/api/));
     await tick();
     app.stdin.write("a");
-    await eventually(() => expect(app.lastFrame()).toContain("Run a bolt"));
+    await eventually(() => expect(app.lastFrame()).toContain("Run a pipeline"));
     await tick();
     app.stdin.write("3");
     await eventually(() => expect(app.lastFrame()).toContain("● Work on web"));
@@ -1462,13 +1462,13 @@ describe("doing everything without JSON", () => {
     expect(app.lastFrame()).toContain("←→ to");
     await tick();
     app.stdin.write("\u0013");
-    await eventually(() => expect(addStep).toHaveBeenCalledWith(acme.workspace.file, "Work on api", { bolt: "Work on web" }, 1));
+    await eventually(() => expect(addStep).toHaveBeenCalledWith(acme.workspace.file, "Work on api", { pipeline: "Work on web" }, 1));
     await eventually(() => expect(setAfter).toHaveBeenCalledWith(acme.workspace.file, "Work on api", 1, [0]));
   });
 
   it("ticks every step at once from the all row, and none again", async () => {
     const setAfter = vi.fn(async () => undefined);
-    const bolt = async (_file: string, label: string) => ({ label, targets: [{ folder: "apps/api" }, { run: "pnpm lint", label: "lint" }, { run: "pnpm build" }] });
+    const bolt = async (_file: string, label: string) => ({ label, steps: [{ folder: "apps/api" }, { run: "pnpm lint", label: "lint" }, { run: "pnpm build" }] });
     const app = await open(services({ editing: { ...services().editing, bolt, setAfter } }));
     app.stdin.write("e");
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ .*1 .*apps\/api/));
@@ -1498,11 +1498,11 @@ describe("doing everything without JSON", () => {
     await eventually(() => expect(setAfter).toHaveBeenCalledWith(acme.workspace.file, "Work on api", 2, [0]));
   });
 
-  it("shows a bolt's notes, and changes them on its Notes row without renaming it", async () => {
+  it("shows a pipeline's notes, and changes them on its Notes row without renaming it", async () => {
     const setBoltNotes = vi.fn(async () => undefined);
     const renameBolt = vi.fn(async () => undefined);
-    const noted = read("/dev/acme/.wisp.json", { name: "Acme", bolts: [{ label: "Work on api", notes: "The API and its database", targets: [{ folder: "apps/api" }] }] });
-    const bolt = async () => ({ label: "Work on api", notes: "The API and its database", targets: [] });
+    const noted = read("/dev/acme/.wisp.json", { name: "Acme", pipelines: [{ label: "Work on api", notes: "The API and its database", steps: [{ folder: "apps/api" }] }] });
+    const bolt = async () => ({ label: "Work on api", notes: "The API and its database", steps: [] });
     const app = await open(services({ editing: { ...services().editing, bolt, setBoltNotes, renameBolt } }, { reads: [noted], here: noted.workspace.file, unreadable: [] }));
     expect(app.lastFrame()).toContain("The API and its database");
     app.stdin.write("e");
@@ -1521,10 +1521,10 @@ describe("doing everything without JSON", () => {
     expect(setBoltNotes).toHaveBeenCalledWith(noted.workspace.file, "Work on api", "The API and its database too");
   });
 
-  it("renames a bolt and makes it keep going after a failure from the rows above its steps, each edited on the right", async () => {
+  it("renames a pipeline and makes it keep going after a failure from the rows above its steps, each edited on the right", async () => {
     const renameBolt = vi.fn(async () => undefined);
     const setKeepGoing = vi.fn(async () => undefined);
-    const bolt = async (_file: string, label: string) => ({ label, targets: [{ folder: "apps/api" }, { run: "pnpm dev" }] });
+    const bolt = async (_file: string, label: string) => ({ label, steps: [{ folder: "apps/api" }, { run: "pnpm dev" }] });
     const app = await open(services({ editing: { ...services().editing, bolt, renameBolt, setKeepGoing } }));
     app.stdin.write("e");
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ .*1 .*apps\/api/));
@@ -1560,7 +1560,7 @@ describe("doing everything without JSON", () => {
     const setAfter = vi.fn(async () => undefined);
     const bolt = async (_file: string, label: string) => ({
       label,
-      targets: [
+      steps: [
         { run: "pnpm install", label: "install", finishes: true },
         { run: "pnpm lint", label: "lint", after: "install", finishes: true },
         { run: "pnpm test", after: ["install"], finishes: true },
@@ -1596,7 +1596,7 @@ describe("doing everything without JSON", () => {
   it("adds an input from its row, and removes one after asking", async () => {
     const setInput = vi.fn(async () => undefined);
     const removeInput = vi.fn(async () => undefined);
-    const bolt = async (_file: string, label: string) => ({ label, inputs: { tag: { ask: "Which tag?" } }, targets: [{ run: "./deploy.sh {{tag}}", finishes: true }] });
+    const bolt = async (_file: string, label: string) => ({ label, inputs: { tag: { ask: "Which tag?" } }, steps: [{ run: "./deploy.sh {{tag}}", finishes: true }] });
     const app = await open(services({ editing: { ...services().editing, bolt, setInput, removeInput } }));
     app.stdin.write("e");
     await eventually(() => expect(app.lastFrame()).toMatch(/Inputs +tag · Which tag\?/));
@@ -1631,9 +1631,9 @@ describe("doing everything without JSON", () => {
     await eventually(() => expect(removeInput).toHaveBeenCalledWith(acme.workspace.file, "Work on api", "tag"));
   });
 
-  it("sets the question a bolt asks before it runs, from the row above its steps", async () => {
+  it("sets the question a pipeline asks before it runs, from the row above its steps", async () => {
     const setConfirm = vi.fn(async () => undefined);
-    const bolt = async (_file: string, label: string) => ({ label, targets: [{ run: "./deploy.sh", finishes: true }] });
+    const bolt = async (_file: string, label: string) => ({ label, steps: [{ run: "./deploy.sh", finishes: true }] });
     const app = await open(services({ editing: { ...services().editing, bolt, setConfirm } }));
     app.stdin.write("e");
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ .*1 .*deploy\.sh/));
@@ -1660,7 +1660,7 @@ describe("doing everything without JSON", () => {
   it("asks the standard question when yes has no question of its own, and turns it off with no", async () => {
     const setConfirm = vi.fn(async () => undefined);
     let confirm: string | boolean | undefined;
-    const bolt = async (_file: string, label: string) => ({ label, ...(confirm === undefined ? {} : { confirm }), targets: [{ run: "./deploy.sh", finishes: true }] });
+    const bolt = async (_file: string, label: string) => ({ label, ...(confirm === undefined ? {} : { confirm }), steps: [{ run: "./deploy.sh", finishes: true }] });
     const app = await open(services({ editing: { ...services().editing, bolt, setConfirm } }));
     app.stdin.write("e");
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ .*1 .*deploy\.sh/));
@@ -1688,7 +1688,7 @@ describe("doing everything without JSON", () => {
   });
 
   it("edits on one screen at a time on a narrow terminal, and esc goes back to the list", async () => {
-    const bolt = async (_file: string, label: string) => ({ label, targets: [{ folder: "apps/api" }, { run: "pnpm dev" }] });
+    const bolt = async (_file: string, label: string) => ({ label, steps: [{ folder: "apps/api" }, { run: "pnpm dev" }] });
     const app = render(<App services={services({ editing: { ...services().editing, bolt } })} glyphs={unicode} size={{ columns: 80, rows: 24 }} />);
     await tick();
     await eventually(() => expect(app.lastFrame() ?? "").not.toContain("reading your workspaces"));
@@ -1719,12 +1719,12 @@ describe("doing everything without JSON", () => {
     await eventually(() => expect(app.lastFrame()).toContain("Not something Wisp can wait for"));
   });
 
-  it("creates a new bolt from a form and opens it to add steps", async () => {
+  it("creates a new pipeline from a form and opens it to add steps", async () => {
     const addBolt = vi.fn(async () => undefined);
     const app = await open(services({ editing: { ...services().editing, addBolt } }));
     app.stdin.write("a");
     await tick();
-    await eventually(() => expect(app.lastFrame()).toContain("A new bolt in Acme"));
+    await eventually(() => expect(app.lastFrame()).toContain("A new pipeline in Acme"));
     for (const char of "Run the tests") app.stdin.write(char);
     app.stdin.write("\r"); // to the button
     app.stdin.write("\r"); // Create bolt
@@ -1746,7 +1746,7 @@ describe("doing everything without JSON", () => {
       }),
     );
     // Containers are only watched for compose files a workspace uses.
-    const withCompose = read("/dev/shop/.wisp.json", { name: "Shop", bolts: [{ label: "Services", targets: [{ compose: "compose.yaml" }] }] });
+    const withCompose = read("/dev/shop/.wisp.json", { name: "Shop", pipelines: [{ label: "Services", steps: [{ compose: "compose.yaml" }] }] });
     const app2 = await open(
       services(
         {
@@ -1770,7 +1770,7 @@ describe("doing everything without JSON", () => {
     expect(frame).toContain("ready to accept connections");
   });
 
-  it("groups what runs under the bolt that started it, and finds things with /", async () => {
+  it("groups what runs under the pipeline that started it, and finds things with /", async () => {
     const server = { kind: "background", workspace: acme.workspace.file, workspaceName: "Acme", asset: "command:x", pid: 1, startedAt: new Date().toISOString(), alive: true, log: "/l" };
     const api = { ...server, id: "a1", label: "api", command: "pnpm api", bolt: "Work on web", historyId: "h3" };
     const web = { ...server, id: "w1", label: "web", command: "pnpm web", bolt: "Work on web", historyId: "h5" };
@@ -1782,7 +1782,7 @@ describe("doing everything without JSON", () => {
     await tick();
     await tick();
     let frame = app.lastFrame() ?? "";
-    expect(frame).toMatch(/ACME[\s\S]*Work on web[\s\S]*● up[\s\S]*api[\s\S]*web[\s\S]*Not from a bolt[\s\S]*notes/);
+    expect(frame).toMatch(/ACME[\s\S]*Work on web[\s\S]*● up[\s\S]*api[\s\S]*web[\s\S]*Not from a pipeline[\s\S]*notes/);
 
     for (const key of ["/", "m", "d", "b"]) {
       app.stdin.write(key);
@@ -1810,7 +1810,7 @@ describe("doing everything without JSON", () => {
 });
 
 describe("search", () => {
-  it("prefers bolts whose own words match", () => {
+  it("prefers pipelines whose own words match", () => {
     const hits = search([acme, infra], "api");
     expect(hits[0]?.label).toBe("Acme › Work on api");
   });
@@ -1961,7 +1961,7 @@ describe("long links", () => {
   });
 
   it("never push the workspace list out of shape", async () => {
-    const long = read("/dev/notes/.wisp.json", { name: "Notes", bolts: [{ label: "Notion", targets: [{ url: `https://app.notion.com/p/${"x".repeat(300)}` }] }] });
+    const long = read("/dev/notes/.wisp.json", { name: "Notes", pipelines: [{ label: "Notion", steps: [{ url: `https://app.notion.com/p/${"x".repeat(300)}` }] }] });
     const app = await open(services({}, { reads: [long], here: long.workspace.file, unreadable: [] }));
     const lines = (app.lastFrame() ?? "").split("\n").slice(1, -1);
     // Every row is exactly as wide as the screen: nothing spills, nothing wraps.
@@ -2022,7 +2022,7 @@ describe("the mouse", () => {
     await tick();
     await tick();
     await eventually(() => expect(frame()).toContain("Nothing has run yet"));
-    mouse.emit({ kind: "click", x: header.indexOf("1 Bolts") + 1, y: 0 });
+    mouse.emit({ kind: "click", x: header.indexOf("1 Pipelines") + 1, y: 0 });
     await tick();
     await eventually(() => expect(frame()).toContain("Workspaces"));
     expect(mouse.emit({ kind: "click", x: 2, y: 0 })).toBe(false);
@@ -2065,7 +2065,7 @@ describe("the mouse", () => {
     expect(mouse.emit({ kind: "wheel", ...(await spot(frame, "● web dev")), by: 1 })).toBe(false);
   });
 
-  it("selects workspaces and bolts on the Bolts tab, and runs nothing", async () => {
+  it("selects workspaces and pipelines on the Pipelines tab, and runs nothing", async () => {
     const run = vi.fn(services().run);
     const { mouse, frame } = await withMouse(services({ run }));
     mouse.emit({ kind: "click", ...(await spot(frame, "Work on web")) });
@@ -2096,7 +2096,7 @@ describe("the mouse", () => {
       }
     };
     app.stdin.write("a");
-    await eventually(() => expect(frame()).toContain("[ Create bolt ]"));
+    await eventually(() => expect(frame()).toContain("[ Create pipeline ]"));
     await tick();
     mouse.emit({ kind: "click", ...(await spot(frame, "Name")) });
     await eventually(() => expect(frame()).toMatch(/┃ Name/));
@@ -2108,7 +2108,7 @@ describe("the mouse", () => {
     await tick();
     await type("X");
     await eventually(() => expect(frame()).toContain("› XLint"));
-    mouse.emit({ kind: "click", ...(await spot(frame, "[ Create bolt ]")) });
+    mouse.emit({ kind: "click", ...(await spot(frame, "[ Create pipeline ]")) });
     await eventually(() => expect(addBolt).toHaveBeenCalledWith(acme.workspace.file, "XLint"));
     // Straight to its first step: a click on one picks it, and a click on an option chooses it.
     await eventually(() => expect(frame()).toContain("What should happen first when it runs?"));
@@ -2172,17 +2172,17 @@ describe("the mouse", () => {
     const api = services();
     const { app, mouse, frame } = await withMouse({ ...api, editing: { ...api.editing, addBolt } });
     app.stdin.write("a");
-    await eventually(() => expect(frame()).toContain("[ Create bolt ]"));
+    await eventually(() => expect(frame()).toContain("[ Create pipeline ]"));
     expect(frame()).toContain("[ Cancel ]");
     await tick();
     for (const key of "Lint") app.stdin.write(key);
     await tick();
     mouse.emit({ kind: "click", ...(await spot(frame, "[ Cancel ]")) });
-    await eventually(() => expect(frame()).not.toContain("[ Create bolt ]"));
+    await eventually(() => expect(frame()).not.toContain("[ Create pipeline ]"));
 
     await eventually(() => {
-      if (!frame().includes("[ Create bolt ]")) app.stdin.write("a");
-      expect(frame()).toContain("[ Create bolt ]");
+      if (!frame().includes("[ Create pipeline ]")) app.stdin.write("a");
+      expect(frame()).toContain("[ Create pipeline ]");
     });
     await tick();
     app.stdin.write("\t");
@@ -2190,11 +2190,11 @@ describe("the mouse", () => {
     app.stdin.write(ARROW_RIGHT);
     await eventually(() => expect(frame()).toContain("▸ Cancel"));
     app.stdin.write("\r");
-    await eventually(() => expect(frame()).not.toContain("Create bolt"));
+    await eventually(() => expect(frame()).not.toContain("Create pipeline"));
     expect(addBolt).not.toHaveBeenCalled();
   });
 
-  it("ticks bolts to set up with a click, and sets them up from the button", async () => {
+  it("ticks pipelines to set up with a click, and sets them up from the button", async () => {
     const suggestion = {
       dir: "/dev/shop",
       name: "Shop",
@@ -2211,7 +2211,7 @@ describe("the mouse", () => {
     mouse.emit({ kind: "click", ...(await spot(frame, "Services")) });
     await tick();
     await eventually(() => expect(frame()).toContain("[ ] ⚡ Services"));
-    mouse.emit({ kind: "click", ...(await spot(frame, "Set up 1 bolt")) });
+    mouse.emit({ kind: "click", ...(await spot(frame, "Set up 1 pipeline")) });
     await tick();
     await tick();
     expect(setUp).toHaveBeenCalledWith(suggestion, ["Check"]);
@@ -2265,9 +2265,9 @@ describe("the mouse", () => {
     expect(app.lastFrame()).not.toContain("[ Save ]");
   });
 
-  it("chooses a step in the bolt editor with a click, and opens it with a second", async () => {
+  it("chooses a step in the pipeline editor with a click, and opens it with a second", async () => {
     const api = services();
-    const bolt = async (_file: string, label: string) => ({ label, targets: [{ folder: "apps/api" }, { run: "pnpm dev" }] });
+    const bolt = async (_file: string, label: string) => ({ label, steps: [{ folder: "apps/api" }, { run: "pnpm dev" }] });
     const { app, mouse, frame } = await withMouse({ ...api, editing: { ...api.editing, bolt } as never });
     app.stdin.write("e");
     await tick();
@@ -2281,7 +2281,7 @@ describe("the mouse", () => {
     expect(frame()).toContain("Step 2 · ");
   });
 
-  it("chooses and opens runs in History, shows a step's log with a click, and filters by bolt", async () => {
+  it("chooses and opens runs in History, shows a step's log with a click, and filters by pipeline", async () => {
     const at10 = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
     const check = {
       id: "c7", number: 7, workspace: acme.workspace.file, workspaceName: "Acme", bolt: "Check", startedAt: at10(10), finishedAt: at10(9), ok: false,

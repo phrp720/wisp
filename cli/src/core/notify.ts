@@ -62,7 +62,7 @@ export function webhookRequest(url: string, end: RunEnd, host = hostname()): { u
     body: JSON.stringify({
       text,
       ok: end.ok,
-      bolt: end.bolt,
+      pipeline: end.bolt,
       workspace: end.workspace,
       ...(end.failedStep ? { failedStep: end.failedStep } : {}),
       ...(end.historyId ? { history: end.historyId } : {}),

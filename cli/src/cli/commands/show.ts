@@ -9,7 +9,7 @@ import { slugify } from "../../core/workspaces.js";
 
 export const show: CommandDef<{ json?: boolean }> = {
   name: "show",
-  summary: "Show a workspace: its bolts, and what each one does",
+  summary: "Show a workspace: its pipelines, and what each one does",
   args: [["[workspace]", "workspace name; omitted uses this directory's project"]],
   options: [["--json", "print the resolved workspace as JSON"]],
   examples: ["wisp show", "wisp show acme", "wisp show --json"],
@@ -22,7 +22,7 @@ export const show: CommandDef<{ json?: boolean }> = {
       const { links: _links, folders: _folders, files: _files, apps: _apps, commands: _commands, bolts, ...rest } = workspace;
       return emitJson({
         ...rest,
-        bolts: bolts.map(({ steps: _steps, down, ...bolt }) => ({
+        pipelines: bolts.map(({ steps: _steps, down, ...bolt }) => ({
           ...bolt,
           slug: slugify(bolt.label),
           steps: collectBoltTargets(workspace, { ...bolt, steps: _steps }),
@@ -41,9 +41,9 @@ export const show: CommandDef<{ json?: boolean }> = {
 
     console.log();
     if (workspace.bolts.length === 0) {
-      console.log(dim("No bolts yet. `wisp` opens the dashboard, where `a` adds one."));
+      console.log(dim("No pipelines yet. `wisp` opens the dashboard, where `a` adds one."));
     } else {
-      console.log(bold("Bolts"));
+      console.log(bold("Pipelines"));
       printBolts(workspace, true, read.withheld, await listRuns());
     }
 
@@ -58,7 +58,7 @@ export const show: CommandDef<{ json?: boolean }> = {
       const here = await maybeProject().catch(() => undefined);
       const prefix = here?.workspace.file === workspace.file ? "" : `${slugify(workspace.name)} `;
       console.log();
-      console.log(dim(`Run one with \`wisp ${prefix}${shortest(first, workspace.bolts)}\`, or \`wisp pick${prefix ? ` ${prefix.trim()}` : ""}\` to choose.`));
+      console.log(dim(`Run one with \`wisp ${prefix}${shortest(first, workspace.bolts, prefix === "")}\`, or \`wisp pick${prefix ? ` ${prefix.trim()}` : ""}\` to choose.`));
     }
   },
 };

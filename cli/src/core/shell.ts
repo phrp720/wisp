@@ -92,9 +92,14 @@ export function loginShell(env: NodeJS.ProcessEnv = process.env): Invocation {
   const shell = env["SHELL"]?.trim() || "/bin/sh";
   // bash is the exception: started interactive with no terminal it complains about job
   // control into every log, and its login startup already reads .bashrc via .profile on
-  // the systems that ship it — so login alone gets it the same PATH, quietly.
+  // the systems that ship it — so login alone gets it the same PATH, quietly. fish reads
+  // its config.fish in every shell. The rest start without job control (+m): an interactive
+  // shell with it takes the terminal for its own group and leaves it there when it exits,
+  // so Wisp, back in the background, is stopped the next time it touches the terminal.
   const name = shell.split("/").pop() ?? shell;
-  return { file: shell, args: name === "bash" || name === "sh" ? ["-lc"] : ["-ilc"] };
+  if (name === "bash" || name === "sh" || name === "fish") return { file: shell, args: ["-lc"] };
+  if (name === "csh" || name === "tcsh") return { file: shell, args: ["-c"] };
+  return { file: shell, args: ["+m", "-ilc"] };
 }
 
 /**

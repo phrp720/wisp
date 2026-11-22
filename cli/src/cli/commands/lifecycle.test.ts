@@ -28,7 +28,7 @@ beforeEach(async () => {
   dir = await realpath(await mkdtemp(join(tmpdir(), "wisp-lifecycle-")));
   process.env["WISP_HOME"] = join(dir, "home");
   file = join(dir, ".wisp.json");
-  await writeFile(file, JSON.stringify({ name: "Shop", bolts: [{ label: "Check", targets: [] }, { label: "Build", targets: [] }] }));
+  await writeFile(file, JSON.stringify({ name: "Shop", pipelines: [{ label: "Check", steps: [] }, { label: "Build", steps: [] }] }));
   for (const entry of [run("aaa111aaa111", "Check", file), run("aaa222aaa222", "Build", file), run("bbb111bbb111", "Check", "/elsewhere/.wisp.json"), run("aaa333aaa333", "Check", file, true)]) {
     await recordHistory(entry);
   }
@@ -66,7 +66,7 @@ describe("wisp history", () => {
 });
 
 describe("wisp history --clear", () => {
-  it("clears one bolt's finished runs in this project, and keeps the one still going", async () => {
+  it("clears one pipeline's finished runs in this project, and keeps the one still going", async () => {
     vi.spyOn(process, "cwd").mockReturnValue(dir);
     await history.run(["check"], { clear: true, json: true });
     expect(JSON.parse(printed.join("\n"))).toEqual({ cleared: ["aaa111aaa111"], running: ["aaa333aaa333"] });
@@ -94,10 +94,10 @@ describe("wisp history --clear", () => {
 });
 
 describe("wisp hook", () => {
-  it("runs a bolt that asks first without asking, and says so", async () => {
+  it("runs a pipeline that asks first without asking, and says so", async () => {
     const before = process.cwd();
     execFileSync("git", ["init", "-q", dir]);
-    await writeFile(file, JSON.stringify({ name: "Shop", bolts: [{ label: "Ship", confirm: "Ship it?", inputs: { env: {}, tag: { default: "latest" } }, targets: [{ run: "true {{env}} {{tag}}", finishes: true }] }] }));
+    await writeFile(file, JSON.stringify({ name: "Shop", pipelines: [{ label: "Ship", confirm: "Ship it?", inputs: { env: {}, tag: { default: "latest" } }, steps: [{ run: "true {{env}} {{tag}}", finishes: true }] }] }));
     process.chdir(dir);
     try {
       await hook.run(["pre-push", "ship"], {});

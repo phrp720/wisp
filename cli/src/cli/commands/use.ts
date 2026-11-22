@@ -29,10 +29,10 @@ export interface UseOptions {
 export const use: CommandDef<UseOptions> = {
   name: "use",
   aliases: ["run"],
-  summary: "Run a bolt: start what it lists, in the order it lists it",
+  summary: "Run a pipeline: start what it lists, in the order it lists it",
   args: [
     ["[workspace]", "workspace name; omitted uses this directory's project"],
-    ["[bolt]", "which bolt — any distinctive part of its name will do"],
+    ["[pipeline]", "which pipeline — any distinctive part of its name will do"],
   ],
   options: [
     ["-n, --dry-run", "show what would happen, and where each command would run"],
@@ -41,13 +41,13 @@ export const use: CommandDef<UseOptions> = {
     ["-d, --detach", "run commands in the background, even if you chose a terminal"],
     ["-r, --retry", "run again only what failed last time — and what that kept from running"],
     ["--skip-untrusted", "run only what the file is allowed to, skipping what waits for `wisp trust`"],
-    ["--input <name=value>", "a value the bolt asks for, like --input env=staging; once for each", []],
+    ["--input <name=value>", "a value the pipeline asks for, like --input env=staging; once for each", []],
     ["-y, --yes", "don't ask: answer yes, and take each input's default"],
     ["--json", "print the result as JSON"],
   ],
   examples: [
-    "wisp api                  # a bolt of this project: `use` is implied",
-    "wisp acme api             # a bolt of another workspace, from any folder",
+    "wisp api                  # a pipeline of this project: `use` is implied",
+    "wisp acme api             # a pipeline of another workspace, from any folder",
     "wisp api --dry-run        # what would happen, and where",
     "wisp api --detach         # commands in the background, on a server",
   ],
@@ -63,9 +63,9 @@ export const use: CommandDef<UseOptions> = {
       const prefix = workspaceRef ? `${workspaceRef} ` : "";
       throw new WispError(
         workspace.bolts.length > 0
-          ? `Name a bolt of ${workspace.name}: ${workspace.bolts.map((entry) => `\`wisp ${prefix}${slugify(entry.label)}\``).join(", ")}`
-          : `${workspace.name} has no bolts yet`,
-        "NO_BOLT",
+          ? `Name a pipeline of ${workspace.name}: ${workspace.bolts.map((entry) => `\`wisp ${prefix}${slugify(entry.label)}\``).join(", ")}`
+          : `${workspace.name} has no pipelines yet`,
+        "NO_PIPELINE",
       );
     }
 
@@ -160,12 +160,12 @@ export const use: CommandDef<UseOptions> = {
     if (json) {
       return emitJson({
         workspace: workspace.name,
-        bolt: result.bolt?.label,
+        pipeline: result.bolt?.label,
         ok: result.ok,
         dryRun: result.dryRun,
         history: result.historyId ?? null,
         ...(result.inputs ? { inputs: result.inputs } : {}),
-        targets: result.targets,
+        steps: result.targets,
         waitingForTrust: untrusted.map(({ kind, label: name, value, cwd }) => ({ kind, label: name, value, ...(cwd ? { cwd } : {}) })),
       });
     }
@@ -180,7 +180,7 @@ export const use: CommandDef<UseOptions> = {
         }
         // A bolt that resolved to nothing ran nothing. Say why, rather than listing bolts as
         // if the name had been wrong — and fail, so a script or an agent notices.
-        console.log(dim(untrusted.length > 0 ? "  nothing ran — every step waits for `wisp trust` (see `wisp check`)" : "  nothing ran — this bolt has no steps here"));
+        console.log(dim(untrusted.length > 0 ? "  nothing ran — every step waits for `wisp trust` (see `wisp check`)" : "  nothing ran — this pipeline has no steps here"));
         process.exitCode = 1;
         return;
       }

@@ -11,7 +11,7 @@ wisp trust    # allow this exact file
 In the dashboard, press `t` on a workspace. It lists every command the file would run, and the
 **Trust this file** button starts unselected, so a stray `⏎` allows nothing.
 
-A bolt never starts only half of what it lists. Press `⏎` on one that needs trust and the
+A pipeline never starts only half of what it lists. Press `⏎` on one that needs trust and the
 same list opens first, with **Trust and run**. `wisp api` asks the same at a terminal; in a
 script or a git hook it stops with `NOT_TRUSTED` and runs nothing.
 
@@ -25,5 +25,5 @@ script or a git hook it stops with `NOT_TRUSTED` and runs nothing.
 
 ## Agents
 
-A coding agent can write bolts and run them, but **it cannot approve its own commands**.
+A coding agent can write pipelines and run them, but **it cannot approve its own commands**.
 `wisp trust` needs you, at a terminal.
