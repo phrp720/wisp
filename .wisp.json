@@ -5,21 +5,11 @@
   "color": "#6d4aff",
   "notes": "Wisp's own workspace file: the tool, used to build itself.",
 
-  "links": [
-    { "label": "Repository", "url": "https://github.com/phrp720/wisp" },
-    { "label": "Issues", "url": "https://github.com/phrp720/wisp/issues" },
-    { "label": "Pull requests", "url": "https://github.com/phrp720/wisp/pulls" },
-    { "label": "CI runs", "url": "https://github.com/phrp720/wisp/actions" },
-    { "label": "Releases", "url": "https://github.com/phrp720/wisp/releases" },
-    { "label": "Live website", "url": "https://willowisp.dev" },
-    { "label": "npm package", "url": "https://www.npmjs.com/package/@squaredasher/wisp" }
-  ],
-
-  "bolts": [
+  "pipelines": [
     {
       "label": "Work on the CLI",
       "color": "#a78bfa",
-      "targets": [
+      "steps": [
         { "folder": "cli/src" },
         { "run": "pnpm --filter @squaredasher/wisp test:watch", "label": "tests (watch)" },
         { "run": "pnpm --filter @squaredasher/wisp exec tsc -p tsconfig.json --noEmit --watch --preserveWatchOutput", "label": "typecheck (watch)" }
@@ -28,64 +18,73 @@
     {
       "label": "Work on the website",
       "color": "#f472b6",
-      "targets": [
+      "steps": [
         { "run": "pnpm --filter wisp-website install && pnpm --filter wisp-website dev", "label": "website" },
-        { "wait": "http://localhost:5173" },
-        { "url": "http://localhost:5173", "label": "Website" }
+        { "wait": "http://localhost:5173", "label": "up", "after": "website" },
+        { "url": "http://localhost:5173", "label": "Website", "after": "up" }
       ]
     },
     {
       "label": "Check everything",
       "color": "#34d399",
-      "job": true,
-      "targets": [
-        { "run": "pnpm typecheck", "label": "typecheck" },
-        { "run": "pnpm test", "label": "test" },
-        { "run": "pnpm build", "label": "build" },
-        { "run": "pnpm website:build", "label": "website build" }
+      "steps": [
+        { "run": "pnpm typecheck", "label": "typecheck", "finishes": true },
+        { "run": "pnpm test", "label": "test", "finishes": true },
+        { "run": "pnpm build", "label": "build", "after": ["typecheck", "test"], "finishes": true },
+        { "run": "pnpm website:build", "label": "website build", "after": "build", "finishes": true }
       ]
     },
     {
       "label": "Try my build",
       "color": "#60a5fa",
-      "targets": [
-        { "bolt": "Make wisp-dev" },
-        { "run": "pnpm --filter @squaredasher/wisp exec tsc -p tsconfig.json --watch --preserveWatchOutput", "label": "rebuild wisp-dev as you edit" }
+      "steps": [
+        { "pipeline": "Make wisp-dev", "label": "make" },
+        { "run": "pnpm --filter @squaredasher/wisp exec tsc -p tsconfig.json --watch --preserveWatchOutput", "label": "rebuild wisp-dev as you edit", "after": "make" }
       ],
       "down": [{ "run": "rm -f \"$HOME/.local/bin/wisp-dev\"", "label": "remove wisp-dev" }]
     },
     {
       "label": "Make wisp-dev",
       "color": "#93c5fd",
-      "job": true,
-      "targets": [
-        { "run": "pnpm build", "label": "build the CLI" },
-        { "run": "mkdir -p \"$HOME/.local/bin\" && ln -sf \"$PWD/cli/dist/cli/index.js\" \"$HOME/.local/bin/wisp-dev\"", "label": "link wisp-dev to the build" },
-        { "run": "\"$HOME/.local/bin/wisp-dev\" --version", "label": "check wisp-dev runs" }
+      "steps": [
+        { "run": "pnpm build", "label": "build the CLI", "finishes": true },
+        { "run": "mkdir -p \"$HOME/.local/bin\" && ln -sf \"$PWD/cli/dist/cli/index.js\" \"$HOME/.local/bin/wisp-dev\"", "label": "link wisp-dev to the build", "after": "build the CLI", "finishes": true },
+        { "run": "\"$HOME/.local/bin/wisp-dev\" --version", "label": "check wisp-dev runs", "after": "link wisp-dev to the build", "finishes": true }
       ]
     },
     {
       "label": "Compile the binary",
       "color": "#facc15",
-      "job": true,
-      "targets": [
-        { "run": "pnpm compile", "label": "compile" },
-        { "run": "./bin/wisp --version", "cwd": "cli", "label": "it runs" }
+      "steps": [
+        { "run": "pnpm compile", "label": "compile", "finishes": true },
+        { "run": "./bin/wisp --version", "cwd": "cli", "label": "it runs", "after": "compile", "finishes": true }
       ]
     },
     {
       "label": "Update the agent reference",
       "color": "#2dd4bf",
-      "job": true,
-      "targets": [
-        { "run": "pnpm spec", "label": "write docs/SPEC.md" }
+      "steps": [
+        { "run": "pnpm spec", "label": "write docs/SPEC.md", "finishes": true }
       ]
     },
     {
       "label": "Documentation",
       "color": "#94a3b8",
-      "targets": [
+      "steps": [
         { "url": "https://willowisp.dev/docs", "label": "Documentation" }
+      ]
+    },
+    {
+      "label": "Open the project pages",
+      "color": "#38bdf8",
+      "steps": [
+        { "url": "https://github.com/phrp720/wisp", "label": "Repository" },
+        { "url": "https://github.com/phrp720/wisp/issues", "label": "Issues" },
+        { "url": "https://github.com/phrp720/wisp/pulls", "label": "Pull requests" },
+        { "url": "https://github.com/phrp720/wisp/actions", "label": "CI runs" },
+        { "url": "https://github.com/phrp720/wisp/releases", "label": "Releases" },
+        { "url": "https://willowisp.dev", "label": "Live website" },
+        { "url": "https://www.npmjs.com/package/@squaredasher/wisp", "label": "npm package" }
       ]
     }
   ]
