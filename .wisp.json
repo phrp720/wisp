@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/phrp720/wisp/main/schema/wisp.schema.json",
+  "$schema": "https://willowisp.dev/schema.json",
   "name": "Wisp",
   "icon": "🔮",
   "color": "#6d4aff",

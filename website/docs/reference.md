@@ -7,7 +7,7 @@ Your editor autocompletes all of this once the file has its `$schema` line.
 
 | Field | |
 |---|---|
-| `$schema` | `https://raw.githubusercontent.com/phrp720/wisp/main/schema/wisp.schema.json`, for autocomplete and checks as you type |
+| `$schema` | `https://willowisp.dev/schema.json`, for autocomplete and checks as you type |
 | `name` | what the project is called; left out, it's the folder's name |
 | `icon` | an emoji shown beside the name, like `"🏢"` |
 | `color` | a hex colour, like `"#6d4aff"` |

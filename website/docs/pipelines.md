@@ -5,7 +5,7 @@ A pipeline is a name and a list of [steps](./steps). A project keeps its pipelin
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/phrp720/wisp/main/schema/wisp.schema.json",
+  "$schema": "https://willowisp.dev/schema.json",
   "name": "Acme",
   "pipelines": [
     {

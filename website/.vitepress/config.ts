@@ -83,6 +83,7 @@ export default defineConfig({
   async buildEnd(config) {
     await writeFile(join(config.outDir, "llms.txt"), LLMS);
     await copyFile(join(here, "..", "..", "docs", "SPEC.md"), join(config.outDir, "llms-full.txt"));
+    await copyFile(join(here, "..", "..", "schema", "wisp.schema.json"), join(config.outDir, "schema.json"));
     await markdownPages(config.outDir);
   },
   title: "Wisp",

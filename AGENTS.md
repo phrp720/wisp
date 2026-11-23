@@ -20,7 +20,7 @@ Notes for AI coding agents working on Wisp's own code. To *use* Wisp, run
     in `tests/core/run/`). `tests/support/` holds shared setup. `pnpm typecheck` checks the tests
     too; `tsconfig.build.json` builds only `src`.
 - `website/`: the landing page and docs (VitePress), served by a Cloudflare Worker.
-- `schema/wisp.schema.json`: the file's JSON Schema. Its address is in every `.wisp.json`, so it stays here.
+- `schema/wisp.schema.json`: the file's JSON Schema. Served at https://willowisp.dev/schema.json (the website copies it there on build), the address every `.wisp.json` points to.
 - `docs/SPEC.md`: generated from `cli/src/cli/spec.ts`. Never edit it by hand.
 
 ## Commands

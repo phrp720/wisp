@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/phrp720/wisp/main/schema/wisp.schema.json",
+  "$id": "https://willowisp.dev/schema.json",
   "title": "Wisp workspace file",
   "description": "A .wisp.json: a project's pipelines (its dev stack, checks, deploys, backups), each a list of steps that run side by side or wait for each other. Committed next to the code, so the whole team runs them the same way.",
   "type": "object",

@@ -23,8 +23,7 @@ export const LOCAL_FILE = ".wisp.local.json";
  * Unversioned on purpose: the format only ever gains optional keys, and a file pinned to
  * last year's copy would start complaining about a key that works.
  */
-export const PROJECT_SCHEMA_URL =
-  "https://raw.githubusercontent.com/phrp720/wisp/main/schema/wisp.schema.json";
+export const PROJECT_SCHEMA_URL = "https://willowisp.dev/schema.json";
 
 /**
  * Find the project file governing a directory.
