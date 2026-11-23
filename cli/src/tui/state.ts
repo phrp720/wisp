@@ -100,6 +100,7 @@ export interface RunState {
   dryRun: boolean;
   steps: StepState[];
   waits?: number[][];
+  owners?: (string | undefined)[];
   done: boolean;
   error?: string;
   output: string[];

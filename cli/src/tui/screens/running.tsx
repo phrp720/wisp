@@ -57,7 +57,7 @@ export function PanesPanel(props: {
   const tab = shownTab(item, props.tab);
   const { lines, filtering, matched, room: logRoom, total } = logWindow({ item, tab: props.tab, log, logQuery, logTyping, height });
   const outputWidth = (full ? columns : columns - listWidth) - 4;
-  const live = item?.type === "current" && active && tab !== "info" && tab !== "runs" ? fitGraph(liveGraph(active), outputWidth, graphBudget(logRoom), glyphs) : undefined;
+  const live = item?.type === "current" && active && tab !== "info" && tab !== "runs" ? fitGraph(liveGraph(active, glyphs.bolt), outputWidth, graphBudget(logRoom), glyphs) : undefined;
   const room = Math.max(1, logRoom - (live ? live.height + 1 : 0));
   const end = Math.max(room, total - scroll);
   // Scrolled back: said where it can't be cut off. The tab bar has room; a long command in the header may not.

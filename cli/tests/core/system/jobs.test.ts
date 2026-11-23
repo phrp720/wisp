@@ -684,10 +684,12 @@ describe("history like a CI", () => {
 
     const { pipeline } = await import("../../../src/tui/screens/history.js");
     const graph = pipeline(latest!);
-    expect(graph.map((node) => [node.label, node.detail?.split(" ").slice(0, 2).join(" "), node.after.map((at) => graph[at]?.label)])).toEqual([
-      ["Database", "1 step", []],
-      ["Check", "1 step", ["Database"]],
+    expect(graph.map((node) => [node.label, node.after.map((at) => graph[at]?.label)])).toEqual([
+      ["Database", []],
+      ["test", ["Database"]],
     ]);
+    expect(graph[0]?.detail).toMatch(/^1 step/);
+    expect(pipeline(latest!, "⚡ ")[0]?.label).toBe("⚡ Database");
   });
 
   it("shows a run while it goes, step by step, under the number it ends with", async () => {

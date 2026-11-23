@@ -298,7 +298,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
           dryRun,
           signal: controller.signal,
           ...(Object.keys(inputs).length > 0 ? { inputs } : {}),
-          onPlan: (targets, waits) => update((state) => ({ ...state, steps: targets.map((target) => ({ target, state: "pending" })), ...(waits ? { waits } : {}) })),
+          onPlan: (targets, waits, owners) => update((state) => ({ ...state, steps: targets.map((target) => ({ target, state: "pending" })), ...(waits ? { waits } : {}), ...(owners ? { owners } : {}) })),
           onStep: (target, info) => {
             update((state) => ({ ...state, steps: markFirst(state.steps, target, (step) => ({ ...step, state: "running" })) }));
             // An attached command's output takes the pane; a window's stays in the window.

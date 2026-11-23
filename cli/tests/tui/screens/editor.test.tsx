@@ -91,6 +91,7 @@ describe("doing everything without JSON", () => {
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ .*1 .*apps\/api/));
     await tick();
     app.stdin.write("j");
+    await tick();
     app.stdin.write("j");
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ .*3 .*pnpm build/));
     await tick();
@@ -98,7 +99,10 @@ describe("doing everything without JSON", () => {
     await eventually(() => expect(app.lastFrame()).toContain("[ Save step ]"));
     await eventually(() => expect(app.lastFrame()).toContain("↓ 1 more"));
     await tick();
-    for (let down = 0; down < 5; down += 1) app.stdin.write("\u001B[B");
+    for (let down = 0; down < 5; down += 1) {
+      app.stdin.write("\u001B[B");
+      await tick();
+    }
     await eventually(() => expect(app.lastFrame()).toContain("←→ move · space ticks"));
     await eventually(() => expect(app.lastFrame()).toContain("□ all"));
     await eventually(() => expect(app.lastFrame()).toMatch(/↑ \d more/));

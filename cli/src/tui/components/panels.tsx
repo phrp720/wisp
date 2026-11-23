@@ -28,7 +28,7 @@ export function RunProgress({ view, glyphs, height, tick, width = 80 }: { view: 
   const links = view.steps.filter((step) => step.result?.kind === "link" && step.result.note?.startsWith("no display"));
   const output = view.output.length > 0 && view.output[view.output.length - 1] === "" ? view.output.slice(0, -1) : view.output;
   const summary = view.done ? 2 + links.length : 0;
-  const live = fitGraph(liveGraph(view), width, graphBudget(height - 3 - summary), glyphs);
+  const live = fitGraph(liveGraph(view, glyphs.bolt), width, graphBudget(height - 3 - summary), glyphs);
   const stepRoom = Math.max(1, height - 3 - summary - (live ? live.height : 0));
   const outputRoom = output.length > 0 ? Math.max(0, Math.min(output.length, Math.floor((stepRoom - 1) / 2))) : 0;
   const { items } = windowed(view.steps, Math.max(0, view.steps.findIndex((step) => step.state === "running")), Math.max(1, stepRoom - (outputRoom ? outputRoom + 1 : 0)));

@@ -72,7 +72,12 @@ export async function runPlan(
   const runningLogs = new Map<number, string>();
   const stageAt = stagesOf(steps);
   let halted: string | undefined;
-  options.onPlan?.(steps.map((step) => step.target), waitsOn);
+  const base = options.label.replace(/ \((retry|down)\)$/, "");
+  options.onPlan?.(
+    steps.map((step) => step.target),
+    waitsOn,
+    steps.map((step) => (step.bolt && step.bolt !== base ? (step.target.workspace ? `${step.target.workspace} › ${step.bolt}` : step.bolt) : undefined)),
+  );
 
   const owned = (result: TargetResult, at: number): HistoryStep => {
     const owner = steps[at]?.bolt;

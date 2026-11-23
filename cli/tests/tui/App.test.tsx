@@ -288,7 +288,7 @@ describe("the TUI", () => {
       expect(frame).toMatch(/❯ ▾ ● run test\s+running/);
       expect(frame).toContain("compiling the tests");
       expect(frame).toMatch(/· run build\s+waiting/);
-      expect(frame).toMatch(/● Tests/);
+      expect(frame).toMatch(/● ⚡ Tests 1 step/);
     });
   });
 
@@ -569,33 +569,28 @@ describe("the TUI", () => {
     const text = Array.from({ length: 80 }, (_, at) => `cleaned item ${at + 1}`).join("\n");
     const app = render(<App services={services({ history: async () => [entry], readLog: async () => text })} glyphs={unicode} size={{ columns: 100, rows: 24 }} />);
     await tick();
-    for (const key of ["h", "\r"]) {
-      app.stdin.write(key);
-      await tick();
-      await tick();
-    }
-    // Open its log, if it didn't open by itself.
+    app.stdin.write("h");
+    await eventually(() => expect(app.lastFrame()).toContain("All runs"));
+    await tick();
+    app.stdin.write("\r");
+    await eventually(() => expect(app.lastFrame()).toContain("Triggered"));
+    await tick();
     if ((app.lastFrame() ?? "").includes("▸ ✓ start Cleanup")) app.stdin.write("\r");
-    await tick();
-    await tick();
     const shown = () => [...(app.lastFrame() ?? "").matchAll(/cleaned item (\d+)/g)].map((match) => Number(match[1]));
-    expect(shown()[0]).toBe(1);
-
+    await eventually(() => expect(shown()[0]).toBe(1));
+    await tick();
     app.stdin.write("d");
-    await tick();
-    await tick();
+    await eventually(() => expect(shown()[0] ?? 0).toBeGreaterThan(5));
     const paged = shown()[0] ?? 0;
-    await eventually(() => expect(paged).toBeGreaterThan(5));
-
-    // ↓ past the only step reads on a line at a time; u goes back up to the top.
-    app.stdin.write("\u001B[B");
     await tick();
-    expect(shown()[0]).toBe(paged + 1);
+    app.stdin.write("\u001B[B");
+    await eventually(() => expect(shown()[0]).toBe(paged + 1));
+    await tick();
     for (const key of ["u", "u", "u"]) {
       app.stdin.write(key);
       await tick();
     }
-    expect(shown()[0]).toBe(1);
+    await eventually(() => expect(shown()[0]).toBe(1));
   });
 
   it("cancelling the delete-workspace dialog leaves the dashboard as it was: no run, focus unmoved", async () => {

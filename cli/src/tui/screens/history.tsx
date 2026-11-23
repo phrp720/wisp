@@ -12,7 +12,7 @@ import { TONE } from "../terminal/tones.js";
 import { matchesAll, shortUrl, windowed, type Services } from "../model.js";
 import { FilterLine, filterLog, MatchLine } from "../components/logfilter.js";
 import { useMouse } from "../terminal/mouse.js";
-import { fitGraph, graphBudget, Mark, StepGraph, type GraphNode } from "../components/graph.js";
+import { fitGraph, graphBudget, groupByPipeline, Mark, StepGraph, type GraphNode, type StepNode } from "../components/graph.js";
 
 export interface HistoryScreenProps {
   services: Services;
@@ -557,7 +557,7 @@ function RunDetail(props: {
     }
   });
 
-  const graph = pipeline(entry);
+  const graph = pipeline(entry, glyphs.bolt);
   const fitted = showGraph ? fitGraph(graph, columns - 6, graphBudget(height - 8), glyphs) : undefined;
   const drawn = fitted !== undefined;
   const graphLines = fitted ? fitted.height - 1 : 0;
@@ -737,78 +737,54 @@ function Summary({ entry }: { entry: HistoryEntry }) {
   );
 }
 
-export function pipeline(entry: HistoryEntry): GraphNode[] {
+export function pipeline(entry: HistoryEntry, mark = ""): GraphNode[] {
   const steps = allSteps(entry);
   const stageOf = (step: HistoryStep, at: number) => step.stage ?? at + 1;
-  const owners = [...new Set(steps.map((step) => step.bolt ?? baseLabel(entry.bolt)))];
-  const ownerOf = (step: HistoryStep) => (step.bolt ? (step.workspace ? `${step.workspace} › ${step.bolt}` : step.bolt) : baseLabel(entry.bolt));
-  const nodes: (GraphNode & { key: string; stage: number; steps: number; ms: number; done: number; running?: boolean; stopped?: boolean })[] = [];
-  const nodeOfStep: number[] = [];
-  steps.forEach((step, at) => {
-    const key = owners.length > 1 ? ownerOf(step) : `${at}`;
-    let index = nodes.findIndex((candidate) => candidate.key === key);
-    if (index < 0) {
-      index = nodes.length;
-      nodes.push({ key, label: owners.length > 1 ? ownerOf(step) : step.label, ok: true, skipped: true, stage: stageOf(step, at), steps: 0, ms: 0, done: 0, after: [] });
-    }
-    nodeOfStep[at] = index;
-    const node = nodes[index] as (typeof nodes)[number];
-    node.stage = Math.min(node.stage, stageOf(step, at));
-    node.steps += 1;
-    if (step.state === "running") node.running = true;
-    if (step.state) return;
-    node.done += 1;
-    node.ms += step.durationMs;
-    if (step.cancelled) node.stopped = true;
-    else node.ok = node.ok && (step.ok || Boolean(step.skipped));
-    node.skipped = Boolean(node.skipped && step.skipped);
-  });
-
-  const link = (from: number, to: number) => {
-    const node = nodes[to] as (typeof nodes)[number];
-    if (from !== to && !node.after.includes(from)) node.after.push(from);
-  };
+  const ownerOf = (step: HistoryStep) => (step.bolt ? (step.workspace ? `${step.workspace} › ${step.bolt}` : step.bolt) : undefined);
+  const after = steps.map(() => new Set<number>());
   const exact = steps.length > 0 && steps.every((step) => step.at !== undefined);
   if (exact) {
     const byPlan = new Map(steps.map((step, at) => [step.at as number, at]));
     steps.forEach((step, at) => {
       for (const wait of step.waits ?? []) {
         const from = byPlan.get(wait);
-        if (from !== undefined) link(nodeOfStep[from] as number, nodeOfStep[at] as number);
+        if (from !== undefined && from !== at) (after[at] as Set<number>).add(from);
       }
     });
   } else {
     steps.forEach((step, at) => {
       for (const name of step.after ?? []) {
         const from = steps.findIndex((other) => other.label === name && ownerOf(other) === ownerOf(step));
-        if (from >= 0) link(nodeOfStep[from] as number, nodeOfStep[at] as number);
+        if (from >= 0 && from !== at) (after[at] as Set<number>).add(from);
       }
     });
-    nodes.forEach((node, at) => {
-      if (node.after.length > 0) return;
-      const earlier = nodes.filter((other) => other.stage < node.stage).map((other) => other.stage);
+    steps.forEach((step, at) => {
+      if ((after[at] as Set<number>).size > 0) return;
+      const earlier = steps.map(stageOf).filter((stage) => stage < stageOf(step, at));
       if (earlier.length === 0) return;
       const previous = Math.max(...earlier);
-      nodes.forEach((other, from) => {
-        if (other.stage === previous) link(from, at);
+      steps.forEach((other, from) => {
+        if (stageOf(other, from) === previous) (after[at] as Set<number>).add(from);
       });
     });
   }
-
-  return nodes.map(({ label, ok, skipped, steps: count, ms, done, running, stopped, after }) => {
-    const state = running ? ("running" as const) : done < count ? ("running" as const) : undefined;
-    const waiting = done === 0 && !running;
-    const detail = owners.length > 1 ? `${count} step${count === 1 ? "" : "s"}${ms > 0 ? ` ${formatDuration(ms)}` : ""}` : ms > 0 ? formatDuration(ms) : "";
+  const nodes = steps.map((step, at): StepNode => {
+    const owner = ownerOf(step);
+    const ms = step.state ? 0 : step.durationMs;
+    const detail = ms > 0 ? formatDuration(ms) : "";
     return {
-      label,
-      after,
+      label: step.label,
+      after: [...(after[at] as Set<number>)],
+      ok: step.state ? true : step.ok || Boolean(step.skipped) || Boolean(step.cancelled),
+      ms,
+      ...(owner ? { owner } : {}),
       ...(detail ? { detail } : {}),
-      ok,
-      ...(stopped && ok && !state ? { cancelled: true } : {}),
-      ...(skipped && !state ? { skipped } : {}),
-      ...(waiting ? { state: "waiting" as const } : state ? { state } : {}),
+      ...(step.state === "running" ? { state: "running" as const } : step.state === "waiting" ? { state: "waiting" as const } : {}),
+      ...(!step.state && step.skipped ? { skipped: true } : {}),
+      ...(!step.state && step.cancelled ? { cancelled: true } : {}),
     };
   });
+  return groupByPipeline(nodes, mark);
 }
 
 /** A past step as the sentence the rest of Wisp would use for it. */

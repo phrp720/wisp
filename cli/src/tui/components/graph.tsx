@@ -107,19 +107,62 @@ export function StepGraph({ graph, glyphs }: { graph: FittedGraph; glyphs: Glyph
   );
 }
 
-export function liveGraph(active: RunState): GraphNode[] {
-  return active.steps.map((step, at) => {
+export type StepNode = GraphNode & { owner?: string | undefined; ms?: number };
+
+function duration(ms: number): string {
+  if (ms <= 0) return "";
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+  return `${Math.floor(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`;
+}
+
+export function groupByPipeline(steps: StepNode[], mark: string): GraphNode[] {
+  const keys = steps.map((step, at) => (step.owner ? `pipeline:${step.owner}` : `step:${at}`));
+  const order = [...new Set(keys)];
+  const indexOf = new Map(order.map((key, at) => [key, at]));
+  return order.map((key, index) => {
+    const members = steps.filter((_step, at) => keys[at] === key);
+    const after = [...new Set(steps.flatMap((step, at) => (keys[at] === key ? step.after.map((dep) => indexOf.get(keys[dep] as string) as number) : [])))].filter((dep) => dep !== undefined && dep !== index);
+    const first = members[0] as StepNode;
+    if (!first.owner) {
+      const { owner: _owner, ms: _ms, ...node } = first;
+      return { ...node, after };
+    }
+    const done = members.filter((step) => !step.state);
+    const ms = done.reduce((sum, step) => sum + (step.ms ?? 0), 0);
+    const failed = done.some((step) => !step.ok && !step.skipped && !step.cancelled);
+    const running = members.some((step) => step.state === "running") || (done.length > 0 && done.length < members.length);
+    const waiting = members.every((step) => step.state === "waiting");
+    const count = `${members.length} step${members.length === 1 ? "" : "s"}`;
+    return {
+      label: `${mark}${first.owner}`,
+      detail: [count, running || waiting ? "" : duration(ms)].filter(Boolean).join(" "),
+      ok: !failed,
+      after,
+      ...(running ? { state: "running" as const } : waiting ? { state: "waiting" as const } : {}),
+      ...(!running && !waiting && !failed && done.some((step) => step.cancelled) ? { cancelled: true } : {}),
+      ...(!running && !waiting && done.every((step) => step.skipped) ? { skipped: true } : {}),
+    };
+  });
+}
+
+export function liveGraph(active: RunState, mark = ""): GraphNode[] {
+  const steps = active.steps.map((step, at): StepNode => {
     const result = step.result;
-    const ms = result?.durationMs ?? 0;
-    const detail = step.state === "done" && ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : step.state === "done" && ms > 0 ? `${ms}ms` : "";
+    const ms = step.state === "done" ? (result?.durationMs ?? 0) : 0;
+    const detail = duration(ms);
+    const owner = active.owners?.[at];
     return {
       label: step.target.name ?? step.target.label,
       after: active.waits?.[at] ?? [],
       ok: step.state !== "done" || Boolean(result?.ok),
+      ms,
+      ...(owner ? { owner } : {}),
       ...(detail ? { detail } : {}),
       ...(step.state === "running" ? { state: "running" as const } : step.state === "pending" ? { state: "waiting" as const } : {}),
       ...(result?.skipped ? { skipped: true } : {}),
       ...(result?.cancelled ? { cancelled: true } : {}),
     };
   });
+  return groupByPipeline(steps, mark);
 }
