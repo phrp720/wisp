@@ -13,7 +13,7 @@ import { TONE } from "../terminal/tones.js";
 import { matchesAll, shortUrl, windowed, type Services } from "../model.js";
 import { FilterLine, filterLog, MatchLine } from "../components/logfilter.js";
 import { useMouse } from "../terminal/mouse.js";
-import { fitGraph, graphBudget, groupByPipeline, Mark, StepGraph, type GraphNode, type StepNode } from "../components/graph.js";
+import { fitGraph, GraphLine, groupByPipeline, Mark, type GraphNode, type StepNode } from "../components/graph.js";
 
 export interface HistoryScreenProps {
   services: Services;
@@ -559,10 +559,9 @@ function RunDetail(props: {
   });
 
   const graph = pipeline(entry, glyphs.bolt);
-  const fitted = showGraph ? fitGraph(graph, columns - 6, graphBudget(height - 8), glyphs) : undefined;
-  const drawn = fitted !== undefined;
-  const graphLines = fitted ? fitted.height - 1 : 0;
-  const room = Math.max(3, height - 8 - graphLines - (filtering || typing ? 1 : 0));
+  const fitted = showGraph ? fitGraph(graph, columns - 6, Number.POSITIVE_INFINITY, glyphs) : undefined;
+  if (fitted) rows.unshift(...fitted.lines.map((_line, at) => ({ key: `graph${at}`, node: <GraphLine graph={fitted} at={at} glyphs={glyphs} /> })), { key: "graph-below", node: <Text> </Text> });
+  const room = Math.max(3, height - 8 - (filtering || typing ? 1 : 0));
   const selectedRow = Math.max(0, rows.findIndex((row) => row.step === selected));
   // The view follows the selected step, until you scroll yourself: then it stays where you
   // put it (it used to snap straight back to the step, so u and d seemed to do nothing).
@@ -596,7 +595,7 @@ function RunDetail(props: {
       setTop(Math.min(most, Math.max(0, first + event.by * 3)));
       return true;
     }
-    let line = event.y - 1 - (headLines.current ?? 5 + graphLines);
+    let line = event.y - 1 - (headLines.current ?? 5);
     if (line < 0) return true;
     for (const row of visible) {
       const lines = row.lines ?? 1;
@@ -671,11 +670,7 @@ function RunDetail(props: {
         <Text dimColor>{`   ${entry.workspaceName}`}</Text>
       </Text>
       <Summary entry={entry} />
-      {drawn ? (
-        <StepGraph graph={fitted} glyphs={glyphs} />
-      ) : (
-        <Text> </Text>
-      )}
+      <Text> </Text>
       {filtering || typing ? (
         <FilterLine
           query={query}

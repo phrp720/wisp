@@ -39,7 +39,7 @@
       "color": "#60a5fa",
       "steps": [
         { "pipeline": "Make wisp-dev", "label": "make" },
-        { "run": "pnpm --filter @phrp720/wisp exec tsc -p tsconfig.json --watch --preserveWatchOutput", "label": "rebuild wisp-dev as you edit", "after": "make" }
+        { "run": "node scripts/bundle.mjs --watch", "cwd": "cli", "label": "rebuild wisp-dev as you edit", "after": "make" }
       ],
       "down": [{ "run": "rm -f \"$HOME/.local/bin/wisp-dev\"", "label": "remove wisp-dev" }]
     },

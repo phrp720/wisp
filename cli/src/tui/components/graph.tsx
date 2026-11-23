@@ -59,12 +59,15 @@ export function fitGraph(nodes: GraphNode[], width: number, budget: number, glyp
   if (!hasEdges(nodes) || budget < 2) return undefined;
   const ascii = glyphs.border !== "round";
   const dag = nodes.map((node) => ({ mark: nodeMark(node, glyphs).char, label: node.label, detail: node.detail, after: node.after }));
+  const wraps = (lines: DagLine[]) => lines.some((line) => line.length === 0);
   const boxes = drawDag(dag, { width, boxed: true, ascii });
-  const wraps = boxes.some((line) => line.length === 0);
-  if (!wraps && boxes.length + 1 <= budget) return { lines: boxes, nodes, compact: false, height: boxes.length + 1 };
+  if (!wraps(boxes) && boxes.length + 1 <= budget) return { lines: boxes, nodes, compact: false, height: boxes.length + 1 };
+  const tight = drawDag(dag, { width, boxed: true, ascii, tight: true });
+  if (!wraps(tight) && tight.length + 1 <= budget) return { lines: tight, nodes, compact: false, height: tight.length + 1 };
+  if (budget === Number.POSITIVE_INFINITY) return { lines: boxes, nodes, compact: false, height: boxes.length + 1 };
   const lines = drawDag(dag, { width, boxed: false, ascii });
   if (lines.length + 1 <= budget) return { lines, nodes, compact: true, height: lines.length + 1 };
-  for (let most = budget - 1; most >= 2; most -= 1) {
+  for (let most = Math.min(budget - 1, dag.length); most >= 2; most -= 1) {
     const collapsed = collapseDag(dag, most);
     if (collapsed.nodes.length === dag.length) continue;
     const lines = drawDag(collapsed.nodes, { width, boxed: false, ascii });
@@ -85,23 +88,30 @@ export function fitGraph(nodes: GraphNode[], width: number, budget: number, glyp
   return undefined;
 }
 
+export function GraphLine({ graph, at, glyphs }: { graph: FittedGraph; at: number; glyphs: Glyphs }) {
+  const line = graph.lines[at] ?? [];
+  return (
+    <Text wrap="truncate-end">
+      {line.length === 0 ? " " : null}
+      {line.map((run, index) => {
+        const node = run.node !== undefined ? graph.nodes[run.node] : undefined;
+        if (run.kind === "edge" || run.kind === "detail" || (node?.more && run.kind === "label")) return <Text key={index} dimColor>{run.text}</Text>;
+        if (run.kind === "border" && node) return <Text key={index} color={borderColor(node)}>{run.text}</Text>;
+        if (run.kind === "mark" && node) {
+          const { color } = nodeMark(node, glyphs);
+          return color === "dim" ? <Text key={index} dimColor>{run.text}</Text> : <Text key={index} color={color}>{run.text}</Text>;
+        }
+        return <Text key={index}>{run.text}</Text>;
+      })}
+    </Text>
+  );
+}
+
 export function StepGraph({ graph, glyphs }: { graph: FittedGraph; glyphs: Glyphs }) {
   return (
     <Box flexDirection="column" marginTop={1}>
-      {graph.lines.map((line, at) => (
-        <Text key={at} wrap="truncate-end">
-          {line.length === 0 ? " " : null}
-          {line.map((run, index) => {
-            const node = run.node !== undefined ? graph.nodes[run.node] : undefined;
-            if (run.kind === "edge" || run.kind === "detail" || (node?.more && run.kind === "label")) return <Text key={index} dimColor>{run.text}</Text>;
-            if (run.kind === "border" && node) return <Text key={index} color={borderColor(node)}>{run.text}</Text>;
-            if (run.kind === "mark" && node) {
-              const { color } = nodeMark(node, glyphs);
-              return color === "dim" ? <Text key={index} dimColor>{run.text}</Text> : <Text key={index} color={color}>{run.text}</Text>;
-            }
-            return <Text key={index}>{run.text}</Text>;
-          })}
-        </Text>
+      {graph.lines.map((_line, at) => (
+        <GraphLine key={at} graph={graph} at={at} glyphs={glyphs} />
       ))}
     </Box>
   );

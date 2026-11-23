@@ -15,7 +15,7 @@ import { AskHere } from "../components/forms.js";
 import type { Glyphs } from "../terminal/glyphs.js";
 import { type SearchHit, windowed } from "../model.js";
 import { flow, planGraph, stepLines, usedBy } from "../components/steps.js";
-import { fitGraph, graphBudget, hasEdges, StepGraph } from "../components/graph.js";
+import { fitGraph, GraphLine, hasEdges } from "../components/graph.js";
 import { counts, needsTrust, since } from "../state.js";
 import { TONE } from "../terminal/tones.js";
 
@@ -318,9 +318,17 @@ function PipelineDetails(props: {
   const problemLines = problems.length > 0 ? problems.reduce((sum, problem) => sum + 1 + (problem.hint ? 1 : 0), 0) + 1 : 0;
   const above = (full ? 1 + notes.length + (needs.length > 1 ? 1 : 0) + 2 : notes.length + 1) + problemLines;
   const bottom = full ? 3 + (inputNames.length > 0 ? 1 : 0) : 0;
-  const drawn = fitGraph(plan, width, graphBudget(room - above - bottom), glyphs);
-  const lines = stepLines({ read, bolt, reads, runs, containers, glyphs, after: !drawn });
-  const space = Math.max(1, room - above - bottom - (drawn ? drawn.height + 1 : 0));
+  const drawn = fitGraph(plan, width, Number.POSITIVE_INFINITY, glyphs);
+  const steps = stepLines({ read, bolt, reads, runs, containers, glyphs, after: !drawn });
+  const lines = drawn
+    ? [
+        { key: "graph-above", node: <Text> </Text> },
+        ...drawn.lines.map((_line, at) => ({ key: `graph${at}`, node: <GraphLine graph={drawn} at={at} glyphs={glyphs} /> })),
+        { key: "graph-below", node: <Text> </Text> },
+        ...steps,
+      ]
+    : steps;
+  const space = Math.max(1, room - above - bottom);
   const overflow = lines.length > space;
   const fit = overflow ? Math.max(1, space - 1) : lines.length;
   const most = Math.max(0, lines.length - fit);
@@ -376,11 +384,6 @@ function PipelineDetails(props: {
       ) : (
         <Box flexDirection="column" paddingLeft={full ? 0 : 2} flexShrink={0}>
           <Text dimColor>{live ? (last ? `Running now, from #${last.number ?? ""}:` : "Running now:") : together > 1 ? `When you run it, these ${together} run at the same time${bolt.keepGoing ? ", and it keeps going if one fails" : ""}:` : bolt.keepGoing ? "When you run it, it will (and keep going if a step fails):" : "When you run it, it will:"}</Text>
-          {drawn ? (
-            <Box marginBottom={1}>
-              <StepGraph graph={drawn} glyphs={glyphs} />
-            </Box>
-          ) : null}
           {lines.slice(top, top + fit).map((line) => (
             <Box key={line.key}>{line.node}</Box>
           ))}

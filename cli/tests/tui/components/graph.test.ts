@@ -19,6 +19,19 @@ describe("fitting a pipeline's graph", () => {
     expect(fitted?.compact).toBe(true);
     expect(dagText(fitted?.lines ?? []).some((line) => line === "")).toBe(false);
   });
+
+  it("shortens the arrows between boxes before it gives the boxes up", () => {
+    const chain = ["clean main, up to date", "⚡ Bump the version", "commit", "push main", "push the tag", "watch the release"].map((label, at) => step(label, ...(at ? [at - 1] : [])));
+    const fitted = fitGraph(chain, 149, 20, unicode);
+    expect(fitted?.compact).toBe(false);
+    expect(dagText(fitted?.lines ?? [])[1]).toContain("│ ──▶ │");
+  });
+
+  it("keeps boxes where the view scrolls, wrapping them when they are too wide", () => {
+    const fitted = fitGraph(dev, 60, Number.POSITIVE_INFINITY, unicode);
+    expect(fitted?.compact).toBe(false);
+    expect(dagText(fitted?.lines ?? []).join("\n")).toContain("│ · postgres │");
+  });
 });
 
 describe("a run's graph", () => {

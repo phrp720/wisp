@@ -826,21 +826,23 @@ describe("the TUI", () => {
     expect(app.lastFrame()).toMatch(/1\. run docker[\s\S]*1\. run variants[\s\S]*1\. run tools/);
   });
 
-  it("keeps a big pipeline's graph to part of the box: one line a step, then +N more with their edges, and its commands still show", async () => {
+  it("draws a big pipeline's graph whole, boxed, and scrolls it with its steps", async () => {
     const many = Array.from({ length: 12 }, (_, at) => ({ run: `./check-${at + 1}.sh`, label: `check ${at + 1}`, finishes: true, after: "setup" }));
     const shop = read("/dev/shop/.wisp.json", {
       name: "Shop",
       pipelines: [{ label: "Audit", steps: [{ run: "./setup.sh", label: "setup", finishes: true }, ...many, { run: "./report.sh", label: "report", finishes: true, after: many.map((step) => step.label) }] }],
     });
     const app = render(<App services={services({}, { reads: [shop], here: shop.workspace.file, unreadable: [] })} glyphs={unicode} size={{ columns: 120, rows: 40 }} />);
-    await eventually(() => expect(app.lastFrame()).toMatch(/· setup ─┬─▶ · check 1 ─╮/));
-    const frame = app.lastFrame() ?? "";
-    expect(frame).not.toContain("╭─────────╮");
-    expect(frame).toMatch(/╰─▶ +\+\d+ more ─╯/);
-    expect(frame).toMatch(/─▶ · report/);
-    expect(frame).not.toContain("check 12");
-    expect(frame).toMatch(/1\. run setup/);
-    expect(frame).toContain("./setup.sh");
+    await eventually(() => expect(app.lastFrame()).toMatch(/│ · setup │ ─┬─▶ │ · check 1 │/));
+    expect(app.lastFrame()).not.toMatch(/\+\d+ more/);
+    expect(app.lastFrame()).toMatch(/more below · u d scroll/);
+    for (let page = 0; page < 8 && !(app.lastFrame() ?? "").includes("./setup.sh"); page += 1) {
+      await tick();
+      app.stdin.write("d");
+      await tick();
+    }
+    await eventually(() => expect(app.lastFrame()).toMatch(/1\. run setup[\s\S]*\.\/setup\.sh/));
+    expect(app.lastFrame()).toMatch(/above/);
   });
 
   it("keeps a step that isn't allowed yet where the file has it, numbered by what it waits for", async () => {
@@ -857,10 +859,10 @@ describe("the TUI", () => {
     );
     const app = render(<App services={services({}, { reads: [shop], here: shop.workspace.file, unreadable: [] })} glyphs={unicode} size={{ columns: 100, rows: 30 }} />);
     await eventually(() => expect(app.lastFrame()).toMatch(/When you run it, (it will|these \d+ run at the same time):/));
-    await eventually(() => expect(app.lastFrame()).toMatch(/start Docker services from docker-com.* +not trusted yet — t │/));
-    await eventually(() => expect(app.lastFrame()).not.toContain("Docker services: Docker services"));
     await tick();
     app.stdin.write("v");
+    await eventually(() => expect(app.lastFrame()).toMatch(/start Docker services from docker-com.* +not trusted yet — t │/));
+    await eventually(() => expect(app.lastFrame()).not.toContain("Docker services: Docker services"));
     await eventually(() => expect(app.lastFrame()).toMatch(/ 1\. ⚡ ?Database[\s\S]* {4}1\. open[\s\S]* 2\. start web +after db +not trusted yet[\s\S]*pnpm dev[\s\S]* 3\. wait until port 3000 is open +after web[\s\S]* 4\. open http:\/\/localhost:3000 +after up/));
   });
 

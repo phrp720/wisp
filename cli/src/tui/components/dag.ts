@@ -19,6 +19,7 @@ export interface DagOptions {
   width: number;
   boxed: boolean;
   ascii?: boolean;
+  tight?: boolean;
 }
 
 const MAX_LABEL = 28;
@@ -72,6 +73,7 @@ interface Item {
 
 interface Gap {
   width: number;
+  start: number;
   channel: Map<number, number>;
   groups: { sources: number[]; targets: number[] }[];
 }
@@ -213,7 +215,7 @@ function assignRows(order: number[][], items: Item[]): number[] {
   return row;
 }
 
-function planGap(layer: number[], items: Item[], row: number[]): Gap {
+function planGap(layer: number[], items: Item[], row: number[], tight = false): Gap {
   const byTargets = new Map<string, { sources: number[]; targets: number[] }>();
   for (const source of layer) {
     const targets = [...(items[source] as Item).succs].sort((left, right) => left - right);
@@ -258,7 +260,7 @@ function planGap(layer: number[], items: Item[], row: number[]): Gap {
     channelOf.set(at, channel);
   }
   const channels = Math.max(0, ...channelOf.values()) + 1;
-  return { width: 2 * channels + 4, channel: channelOf, groups };
+  return { width: 2 * channels + (tight ? 3 : 4), start: tight ? 1 : 2, channel: channelOf, groups };
 }
 
 export function drawDag(nodes: DagNode[], options: DagOptions): DagLine[] {
@@ -274,7 +276,7 @@ export function drawDag(nodes: DagNode[], options: DagOptions): DagLine[] {
   };
   const boxWidth = (node: number) => content(node) + (options.boxed ? 4 : 0);
   const columnWidth = order.map((layer) => Math.max(1, ...layer.flatMap((item) => ((items[item] as Item).node !== undefined ? [boxWidth((items[item] as Item).node as number)] : []))));
-  const gaps = order.slice(0, -1).map((layer) => planGap(layer, items, row));
+  const gaps = order.slice(0, -1).map((layer) => planGap(layer, items, row, options.tight ?? false));
 
   const ENTRY = 4;
   const EXIT = 3;
@@ -400,7 +402,7 @@ export function drawDag(nodes: DagNode[], options: DagOptions): DagLine[] {
         (bits[y] as number[])[x] = ((bits[y] as number[])[x] as number) | value;
       };
       gap.groups.forEach((group, index) => {
-        const x = 2 + 2 * (gap.channel.get(index) as number);
+        const x = gap.start + 2 * (gap.channel.get(index) as number);
         const ys: number[] = [];
         for (const source of group.sources) {
           const y = lineOf(source);

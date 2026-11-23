@@ -1,6 +1,6 @@
 import { chmod, rm } from "node:fs/promises";
 
-import { build } from "esbuild";
+import { build, context } from "esbuild";
 
 const noDevtools = {
   name: "no-react-devtools",
@@ -10,8 +10,7 @@ const noDevtools = {
   },
 };
 
-await rm("dist/bin", { recursive: true, force: true });
-await build({
+const options = {
   entryPoints: { wisp: "src/cli/index.ts" },
   outdir: "dist/bin",
   chunkNames: "chunks/[name]-[hash]",
@@ -25,5 +24,14 @@ await build({
   banner: { js: "import { createRequire as __wispRequire } from 'node:module'; const require = __wispRequire(import.meta.url);" },
   plugins: [noDevtools],
   logLevel: "warning",
-});
-await chmod("dist/bin/wisp.js", 0o755);
+};
+
+await rm("dist/bin", { recursive: true, force: true });
+if (process.argv.includes("--watch")) {
+  const watching = await context({ ...options, plugins: [...options.plugins, { name: "executable", setup: (bundler) => bundler.onEnd(() => chmod("dist/bin/wisp.js", 0o755).catch(() => undefined)) }] });
+  await watching.watch();
+  console.log("rebuilding dist/bin/wisp.js as you edit src/");
+} else {
+  await build(options);
+  await chmod("dist/bin/wisp.js", 0o755);
+}
