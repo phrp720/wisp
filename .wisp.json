@@ -68,6 +68,15 @@
       ]
     },
     {
+      "label": "Bump the version",
+      "color": "#f97316",
+      "inputs": { "version": { "ask": "New version? (like 0.1.1 for fixes, 0.2.0 for features)" } },
+      "steps": [
+        { "run": "node cli/scripts/version.mjs {{version}}", "label": "set the version", "finishes": true },
+        { "run": "pnpm --filter @phrp720/wisp exec vitest run tests/cli/cli.test.ts -t version", "label": "check both match", "after": "set the version", "finishes": true }
+      ]
+    },
+    {
       "label": "Documentation",
       "color": "#94a3b8",
       "steps": [
@@ -79,10 +88,6 @@
       "color": "#38bdf8",
       "steps": [
         { "url": "https://github.com/phrp720/wisp", "label": "Repository" },
-        { "url": "https://github.com/phrp720/wisp/issues", "label": "Issues" },
-        { "url": "https://github.com/phrp720/wisp/pulls", "label": "Pull requests" },
-        { "url": "https://github.com/phrp720/wisp/actions", "label": "CI runs" },
-        { "url": "https://github.com/phrp720/wisp/releases", "label": "Releases" },
         { "url": "https://willowisp.dev", "label": "Live website" },
         { "url": "https://www.npmjs.com/package/@phrp720/wisp", "label": "npm package" }
       ]
