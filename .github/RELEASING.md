@@ -31,7 +31,7 @@ Secrets are encrypted and never appear in logs or in this repository.
 | Channel | Variable | Secret |
 |---|---|---|
 | npm (`@phrp720/wisp`) | `PUBLISH_NPM` = `true` | none: `release.yml` is the package's trusted publisher (below) |
-| Website (Cloudflare Worker, on every push to main) | `DEPLOY_WEBSITE` = `true` | `CLOUDFLARE_API_TOKEN` (the *Edit Cloudflare Workers* template) and `CLOUDFLARE_ACCOUNT_ID` |
+| Website (Cloudflare Worker, on every push to main, by `deploy-website.yml`) | `DEPLOY_WEBSITE` = `true` | `CLOUDFLARE_API_TOKEN` (the *Edit Cloudflare Workers* template) and `CLOUDFLARE_ACCOUNT_ID` |
 
 ### npm, without a token
 
