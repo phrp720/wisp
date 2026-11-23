@@ -235,7 +235,7 @@ Each step runs even if another fails, and the run still says what failed.
 0 4 * * 0 wisp use /srv/shop/.wisp.json Cleanup
 ```
 
-### Know when a site goes down
+### Uptime checks
 
 A check every 5 minutes that tells you once when the site stops answering, and once when it's
 back, not every 5 minutes in between:
@@ -264,8 +264,8 @@ server itself to check what only it can reach, like the database's port, or from
 machine to see the site as your users do. `wisp history` keeps every check, so you can see
 when it went down and for how long.
 
-It's a check from one machine, as often as cron runs it, not an uptime service: no status page,
-and nothing checking from elsewhere if that machine goes down too.
+It's uptime checking from one machine, as often as cron runs it, not a monitoring service: no
+status page, and nothing checks from elsewhere if that machine goes down too.
 
 ## Your own machine
 

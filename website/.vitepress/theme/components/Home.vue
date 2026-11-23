@@ -66,7 +66,10 @@ const more = [
   { icon: "nested", title: "Shared steps, started once", text: "Run one pipeline inside others. The database starts once, however many need it." },
   { icon: "docker", title: "Docker, without the waiting", text: "Starts your compose services and moves on once they're healthy." },
   { icon: "restart", title: "Servers that come back", text: "A crashed server restarts on its own, and you see that it did." },
+  { icon: "notify", title: "Notifies you when something goes wrong", text: "A run nobody watched posts to Slack, Discord, Teams or ntfy, once when it breaks and once when it's back." },
+  { icon: "hangs", title: "Stops what hangs", text: "Give a step a <code>timeout</code> and a stuck backup or deploy is stopped and marked failed, not left running." },
   { icon: "asks", title: "Asks when it matters", text: "A deploy can ask where to, and ask before it goes." },
+  { icon: "tools", title: "Opens in your own tools", text: "Folders and files in your editor, like VS Code, Cursor or WebStorm. Commands in the background, or in iTerm, Ghostty, kitty or tmux." },
   { icon: "laptop", title: "Same file, every machine", text: "Works the same on macOS, Linux and Windows, laptop or server." },
   { icon: "agents", title: "Ready for agents", text: "Every command takes <code>--json</code>, and nothing waits for a keypress without a terminal." },
 ];

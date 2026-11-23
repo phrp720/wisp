@@ -25,7 +25,7 @@ wisp notify changes
 ```
 
 The whole check, with its pipeline and its crontab line, is in
-[Use cases](./use-cases#know-when-a-site-goes-down).
+[Use cases](./use-cases#uptime-checks).
 
 ## Webhooks
 
