@@ -47,11 +47,24 @@ export function failureReason(end: RunEnd): string | undefined {
   return error.length > 200 ? `${error.slice(0, 199)}…` : error;
 }
 
-export function describeEnd(end: RunEnd): { title: string; message: string } {
+export function failureLines(end: RunEnd): string | undefined {
+  if (end.cancelled) return undefined;
+  const lines = (end.error ?? "").split(/\r?\n/).map((line) => line.replace(/\s+/g, " ").trim()).filter(Boolean);
+  if (lines.length === 0) return undefined;
+  const text = lines.slice(0, 8).join("\n") + (lines.length > 8 ? "\n…" : "");
+  return text.length > 200 ? `${text.slice(0, 199)}…` : text;
+}
+
+function headline(end: RunEnd): string {
+  return end.ok ? (end.previousOk === false ? `${end.bolt} works again` : `${end.bolt} finished`) : end.cancelled ? `${end.bolt} was cancelled` : `${end.bolt} failed`;
+}
+
+export function describeEnd(end: RunEnd, marks: "glyphs" | "emoji" | "none" = "glyphs"): { title: string; message: string } {
   const reason = end.cancelled ? undefined : failureReason(end);
   const at = end.failedStep ? `at ${end.failedStep}${reason ? `: ${reason}` : ""}` : "";
+  const mark = marks === "none" ? "" : marks === "emoji" ? (end.ok ? "✅" : end.cancelled ? "🚫" : "❌") : end.ok ? "✓" : end.cancelled ? "⊘" : "✗";
   return {
-    title: end.ok ? (end.previousOk === false ? `✓ ${end.bolt} works again` : `✓ ${end.bolt} finished`) : end.cancelled ? `⊘ ${end.bolt} was cancelled` : `✗ ${end.bolt} failed`,
+    title: mark ? `${mark} ${headline(end)}` : headline(end),
     message: [at, end.workspace, end.historyId ? `wisp history ${end.historyId}` : ""].filter(Boolean).join(" · "),
   };
 }
@@ -175,20 +188,20 @@ function slackEscape(text: string): string {
 }
 
 function slackBody(end: RunEnd, host: string, text: string): unknown {
-  const { title } = describeEnd(end);
-  const reason = failureReason(end);
+  const { title } = describeEnd(end, "emoji");
+  const reason = failureLines(end);
   const blocks: unknown[] = [
     { type: "header", text: { type: "plain_text", text: title.slice(0, 150), emoji: true } },
     { type: "section", fields: facts(end, host).map((fact) => ({ type: "mrkdwn", text: `*${fact.name}*\n${slackEscape(fact.value)}` })) },
     ...(reason ? [{ type: "section", text: { type: "mrkdwn", text: `\`\`\`${slackEscape(reason)}\`\`\`` } }] : []),
     ...(end.historyId ? [{ type: "context", elements: [{ type: "mrkdwn", text: `\`wisp history ${end.historyId}\`` }] }] : []),
   ];
-  return { text, attachments: [{ color: `#${colourOf(end).toString(16)}`, blocks }] };
+  return { attachments: [{ color: `#${colourOf(end).toString(16)}`, fallback: text, blocks }] };
 }
 
 function discordBody(end: RunEnd, host: string, now: Date): unknown {
-  const { title } = describeEnd(end);
-  const reason = failureReason(end);
+  const { title } = describeEnd(end, "emoji");
+  const reason = failureLines(end);
   return {
     embeds: [
       {
@@ -206,7 +219,7 @@ function discordBody(end: RunEnd, host: string, now: Date): unknown {
 }
 
 function teamsBody(end: RunEnd, host: string): unknown {
-  const { title } = describeEnd(end);
+  const { title } = describeEnd(end, "emoji");
   const reason = failureReason(end);
   return {
     type: "message",
@@ -232,7 +245,7 @@ function teamsBody(end: RunEnd, host: string): unknown {
 }
 
 export function webhookRequest(url: string, end: RunEnd, host = hostname(), now = new Date()): { url: string; body: string; headers: Record<string, string> } {
-  const { title, message } = describeEnd(end);
+  const { title, message } = describeEnd(end, "emoji");
   const text = `${title} on ${host}\n${message}`;
   const headers = { "content-type": "application/json" };
   const kind = webhookKind(url);
@@ -244,7 +257,7 @@ export function webhookRequest(url: string, end: RunEnd, host = hostname(), now 
     const segments = target.pathname.split("/").filter(Boolean);
     const topic = segments.pop() ?? "";
     const base = new URL(`/${segments.join("/")}`, target.origin).toString();
-    return { url: base, headers, body: JSON.stringify({ topic, title: `${title} on ${host}`, message, tags: [end.ok ? "white_check_mark" : end.cancelled ? "no_entry_sign" : "x"] }) };
+    return { url: base, headers, body: JSON.stringify({ topic, title: `${describeEnd(end, "none").title} on ${host}`, message, tags: [end.ok ? "white_check_mark" : end.cancelled ? "no_entry_sign" : "x"] }) };
   }
   const reason = failureReason(end);
   return {
@@ -282,7 +295,7 @@ async function deliver(end: RunEnd, deps: { platform?: Platform; environment: En
   const problems: string[] = [];
   const { title, message } = describeEnd(end);
   const sends: Promise<void>[] = [];
-  if (deps.platform?.notify && deps.environment.gui && !deps.environment.ssh) {
+  if (deps.platform?.notify && deps.settings.screen !== false && deps.environment.gui && !deps.environment.ssh) {
     sends.push(deps.platform.notify(title, message).catch((error: unknown) => void problems.push(`desktop: ${error instanceof Error ? error.message : String(error)}`)));
   }
   const results = new Map<string, Delivery>();

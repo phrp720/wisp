@@ -14,4 +14,8 @@ describe("durations", () => {
   it("says a duration the way people write it", () => {
     expect([0.5, 45, 600, 5400, 3661].map(describeDuration)).toEqual(["0.5s", "45s", "10m", "1h 30m", "1h 1m 1s"]);
   });
+
+  it("keeps tenths of a second only under a minute", () => {
+    expect([47.3, 59.97, 92.8, 184, 119.6, 3599.7].map(describeDuration)).toEqual(["47.3s", "1m", "1m 33s", "3m 4s", "2m", "1h"]);
+  });
 });

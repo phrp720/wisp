@@ -930,7 +930,7 @@ describe("the TUI", () => {
 
   it("changes your own settings by category, with s: the values on the right, saved together", async () => {
     const set = vi.fn(async (change: Record<string, string>) => change);
-    const app = await open(services({ settings: { get: async () => ({}), set, choices: () => ({ editors: [{ label: "Visual Studio Code", value: "Visual Studio Code" }], terminals: ["Ghostty", "tmux"] }), mouse: async () => true, setMouse: async (on) => on, notify: async () => ({ when: "failures", webhooks: [] }), setNotify: async (change) => ({ when: "failures", webhooks: [], ...change }) } }));
+    const app = await open(services({ settings: { get: async () => ({}), set, choices: () => ({ editors: [{ label: "Visual Studio Code", value: "Visual Studio Code" }], terminals: ["Ghostty", "tmux"] }), mouse: async () => true, setMouse: async (on) => on, notify: async () => ({ when: "failures", screen: true, webhooks: [] }), setNotify: async (change) => ({ when: "failures", screen: true, webhooks: [], ...change }) } }));
     await tick();
     app.stdin.write("s");
     await eventually(() => expect(app.lastFrame()).toContain("mouse on"));
@@ -997,7 +997,7 @@ describe("the TUI", () => {
   });
 
   it("chooses when Wisp tells you about a run, and refuses a webhook that isn't https, from settings", async () => {
-    const setNotify = vi.fn(async (change: { when?: "failures" | "changes" | "all" | "off"; webhooks?: { url: string; workspaces?: string[] }[] }) => ({ when: change.when ?? "changes", webhooks: change.webhooks ?? [] }));
+    const setNotify = vi.fn(async (change: { when?: "failures" | "changes" | "all" | "off"; webhooks?: { url: string; workspaces?: string[] }[] }) => ({ when: change.when ?? "changes", webhooks: change.webhooks ?? [], screen: true }));
     const api = services();
     const app = await open({ ...api, settings: { ...api.settings, setNotify } });
     app.stdin.write("s");
@@ -1033,11 +1033,11 @@ describe("the TUI", () => {
   });
 
   it("removes a webhook from the list, adds several in one form, and changes which workspaces one is for, from settings", async () => {
-    const setNotify = vi.fn(async (change: { when?: "failures" | "changes" | "all" | "off"; webhooks?: { url: string; workspaces?: string[] }[] }) => ({ when: change.when ?? "failures", webhooks: change.webhooks ?? [] }));
+    const setNotify = vi.fn(async (change: { when?: "failures" | "changes" | "all" | "off"; webhooks?: { url: string; workspaces?: string[] }[] }) => ({ when: change.when ?? "failures", webhooks: change.webhooks ?? [], screen: true }));
     const api = services();
     const old = "https://ntfy.sh/old-and-secret";
     const deliveries = async () => ({ [createHash("sha256").update(old).digest("hex").slice(0, 16)]: { at: new Date().toISOString(), ok: false, problem: "404 Not Found" } });
-    const app = await open({ ...api, settings: { ...api.settings, notify: async () => ({ when: "failures", webhooks: [{ url: old }] }), setNotify, deliveries } });
+    const app = await open({ ...api, settings: { ...api.settings, notify: async () => ({ when: "failures", screen: true, webhooks: [{ url: old }] }), setNotify, deliveries } });
     app.stdin.write("s");
     await eventually(() => expect(app.lastFrame()).toContain("when a run fails"));
     await tick();
@@ -1101,10 +1101,10 @@ describe("the TUI", () => {
   });
 
   it("says all workspaces when a webhook names every one, and saves ticking them all as every workspace", async () => {
-    const setNotify = vi.fn(async (change: { webhooks?: { url: string; workspaces?: string[] }[] }) => ({ when: "failures" as const, webhooks: change.webhooks ?? [] }));
+    const setNotify = vi.fn(async (change: { webhooks?: { url: string; workspaces?: string[] }[] }) => ({ when: "failures" as const, webhooks: change.webhooks ?? [], screen: true }));
     const api = services();
     const files = [morning, infra, acme].map((entry) => entry.workspace.file);
-    const app = await open({ ...api, settings: { ...api.settings, notify: async () => ({ when: "failures", webhooks: [{ url: "https://ntfy.sh/all-of-them", workspaces: files }, { url: "https://ntfy.sh/just-infra-x", workspaces: [infra.workspace.file] }] }), setNotify } });
+    const app = await open({ ...api, settings: { ...api.settings, notify: async () => ({ when: "failures", screen: true, webhooks: [{ url: "https://ntfy.sh/all-of-them", workspaces: files }, { url: "https://ntfy.sh/just-infra-x", workspaces: [infra.workspace.file] }] }), setNotify } });
     app.stdin.write("s");
     await eventually(() => expect(app.lastFrame()).toContain("when a run fails"));
     await tick();
@@ -1119,6 +1119,9 @@ describe("the TUI", () => {
     expect(app.lastFrame()).toMatch(/2 +https:\/\/ntfy\.sh\/…ra-x +infra/);
     await tick();
     app.stdin.write("j");
+    await eventually(() => expect(app.lastFrame()).toMatch(/❯ On screen/));
+    await tick();
+    app.stdin.write("j");
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ +1 +https:\/\/ntfy\.sh\/…them/));
     await tick();
     app.stdin.write("\r");
@@ -1126,6 +1129,33 @@ describe("the TUI", () => {
     await tick();
     app.stdin.write("\u0013");
     await eventually(() => expect(setNotify).toHaveBeenCalledWith({ webhooks: [{ url: "https://ntfy.sh/all-of-them" },{ url: "https://ntfy.sh/just-infra-x", workspaces: [infra.workspace.file] }] }));
+  });
+
+  it("turns notifications on this screen off and on with ⏎, from settings, leaving the webhooks", async () => {
+    const setNotify = vi.fn(async (change: { screen?: boolean }) => ({ when: "failures" as const, webhooks: [{ url: "https://ntfy.sh/acme-ops" }], screen: change.screen ?? true }));
+    const api = services();
+    const app = await open({ ...api, settings: { ...api.settings, notify: async () => ({ when: "failures", screen: true, webhooks: [{ url: "https://ntfy.sh/acme-ops" }] }), setNotify } });
+    app.stdin.write("s");
+    await eventually(() => expect(app.lastFrame()).toContain("when a run fails"));
+    for (const at of [/❯ Running/, /❯ Notifications/]) {
+      await tick();
+      app.stdin.write("j");
+      await eventually(() => expect(app.lastFrame()).toMatch(at));
+    }
+    await tick();
+    app.stdin.write("\r");
+    await eventually(() => expect(app.lastFrame()).toMatch(/On screen +on\b/));
+    await tick();
+    app.stdin.write("j");
+    await eventually(() => expect(app.lastFrame()).toMatch(/❯ On screen[\s\S]*⏎ turn off/));
+    await tick();
+    app.stdin.write("\r");
+    await eventually(() => expect(setNotify).toHaveBeenLastCalledWith({ screen: false }));
+    await eventually(() => expect(app.lastFrame()).toMatch(/On screen +off\b[\s\S]*1 +https:\/\/ntfy\.sh\/…[\s\S]*⏎ turn on/));
+    await tick();
+    app.stdin.write("\r");
+    await eventually(() => expect(setNotify).toHaveBeenLastCalledWith({ screen: true }));
+    await eventually(() => expect(app.lastFrame()).toMatch(/On screen +on\b/));
   });
 
   it("sets up only the suggested pipelines left ticked", async () => {

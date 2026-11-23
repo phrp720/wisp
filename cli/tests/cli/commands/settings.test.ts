@@ -85,6 +85,19 @@ describe("wisp notify", () => {
     expect(printed.join("\n")).toMatch(/1 {2}https:\/\/ntfy\.sh\/… {2}all workspaces$/m);
   });
 
+  it("turns the screen off, leaving the webhooks, and back on", async () => {
+    await notify.run(["screen", "off"], { json: true });
+    expect(shown()).toMatchObject({ when: "failures", screen: false, screenSetting: false });
+    printed.length = 0;
+    await notify.run([], {});
+    expect(printed.join("\n")).toMatch(/screen +off/);
+    printed.length = 0;
+    await notify.run(["screen", "on"], { json: true });
+    expect(shown()).toMatchObject({ screenSetting: true });
+    await expect(notify.run(["screen"], {})).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    await expect(notify.run(["screen", "maybe"], {})).rejects.toMatchObject({ code: "INVALID_INPUT" });
+  });
+
   it("refuses a when it doesn't know, an address that isn't one, and a webhook that isn't there", async () => {
     await expect(notify.run(["sometimes"], {})).rejects.toMatchObject({ code: "INVALID_INPUT" });
     await expect(notify.run(["add"], {})).rejects.toMatchObject({ code: "INVALID_INPUT" });

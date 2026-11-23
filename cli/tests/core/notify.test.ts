@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -86,6 +86,13 @@ describe("what it says", () => {
     expect(describeEnd({ ...failed, ok: true, previousOk: true }).title).toBe("✓ Backup finished");
   });
 
+  it("marks a webhook's title with an emoji, which chat apps show in colour", () => {
+    expect(describeEnd(failed, "emoji").title).toBe("❌ Backup failed");
+    expect(describeEnd({ ...failed, ok: true, previousOk: false }, "emoji").title).toBe("✅ Backup works again");
+    expect(describeEnd({ ...failed, cancelled: true }, "emoji").title).toBe("🚫 Backup was cancelled");
+    expect(describeEnd(failed, "none").title).toBe("Backup failed");
+  });
+
   it("says why the step failed, on one short line", () => {
     expect(describeEnd({ ...failed, error: "exited with code 1" }).message).toBe("at dump: exited with code 1 · Ops · wisp history abc123");
     expect(describeEnd({ ...failed, error: "line one\n  line two" }).message).toMatch(/^at dump: line one line two ·/);
@@ -105,12 +112,13 @@ describe("what it says", () => {
 
   const broken: RunEnd = { ...failed, error: "exited with code 1 <&>" };
 
-  it("gives Slack a coloured card, and keeps the plain text for the phone notification", () => {
+  it("gives Slack one coloured card, with the plain text kept for the phone notification only", () => {
     const body = JSON.parse(webhookRequest("https://hooks.slack.com/services/x", broken, "web-1").body);
-    expect(body.text).toBe("✗ Backup failed on web-1\nat dump: exited with code 1 <&> · Ops · wisp history abc123");
+    expect(body.text).toBeUndefined();
+    expect(body.attachments[0].fallback).toBe("❌ Backup failed on web-1\nat dump: exited with code 1 <&> · Ops · wisp history abc123");
     expect(body.attachments[0].color).toBe("#e01e5a");
     expect(body.attachments[0].blocks).toEqual([
-      { type: "header", text: { type: "plain_text", text: "✗ Backup failed", emoji: true } },
+      { type: "header", text: { type: "plain_text", text: "❌ Backup failed", emoji: true } },
       {
         type: "section",
         fields: [
@@ -126,12 +134,21 @@ describe("what it says", () => {
     expect(JSON.parse(webhookRequest("https://hooks.slack.com/services/x", { ...failed, ok: true, failedStep: undefined }, "web-1").body).attachments[0].color).toBe("#2eb67d");
   });
 
+  it("keeps an error's own lines in Slack's and Discord's box, and one line where there is no box", () => {
+    const psql: RunEnd = { ...failed, error: "psql: connection refused\n\tIs the server running?\n\n" };
+    const slack = JSON.parse(webhookRequest("https://hooks.slack.com/services/x", psql, "web-1").body);
+    expect(slack.attachments[0].blocks[2].text.text).toBe("```psql: connection refused\nIs the server running?```");
+    expect(slack.attachments[0].fallback).toContain("psql: connection refused Is the server running?");
+    const discord = JSON.parse(webhookRequest("https://discord.com/api/webhooks/1/x", psql, "web-1").body);
+    expect(discord.embeds[0].description).toBe("```\npsql: connection refused\nIs the server running?\n```");
+  });
+
   it("gives Discord an embed", () => {
     const now = new Date("2026-11-22T03:00:00.000Z");
     expect(JSON.parse(webhookRequest("https://discord.com/api/webhooks/1/x", broken, "web-1", now).body)).toEqual({
       embeds: [
         {
-          title: "✗ Backup failed",
+          title: "❌ Backup failed",
           color: 0xe01e5a,
           description: "```\nexited with code 1 <&>\n```",
           fields: [
@@ -152,7 +169,7 @@ describe("what it says", () => {
     expect(body.attachments[0].contentType).toBe("application/vnd.microsoft.card.adaptive");
     expect(body.attachments[0].content).toMatchObject({ type: "AdaptiveCard", version: "1.4" });
     expect(body.attachments[0].content.body).toEqual([
-      { type: "TextBlock", text: "✗ Backup failed", weight: "Bolder", size: "Medium", color: "Attention", wrap: true },
+      { type: "TextBlock", text: "❌ Backup failed", weight: "Bolder", size: "Medium", color: "Attention", wrap: true },
       {
         type: "FactSet",
         facts: [
@@ -170,7 +187,7 @@ describe("what it says", () => {
   it("gives ntfy a title and a tag, and anything else plain JSON", () => {
     const ntfy = webhookRequest("https://ntfy.sh/acme-ops", broken, "web-1");
     expect(ntfy.url).toBe("https://ntfy.sh/");
-    expect(JSON.parse(ntfy.body)).toMatchObject({ topic: "acme-ops", title: "✗ Backup failed on web-1", message: "at dump: exited with code 1 <&> · Ops · wisp history abc123", tags: ["x"] });
+    expect(JSON.parse(ntfy.body)).toMatchObject({ topic: "acme-ops", title: "Backup failed on web-1", message: "at dump: exited with code 1 <&> · Ops · wisp history abc123", tags: ["x"] });
     expect(JSON.parse(webhookRequest("https://example.com/hook", broken, "web-1").body)).toMatchObject({ ok: false, pipeline: "Backup", failedStep: "dump", error: "exited with code 1 <&>", history: "abc123", host: "web-1", durationMs: 2000 });
   });
 });
@@ -228,15 +245,29 @@ describe("sending", () => {
     await setNotify({ when: "off" });
     await notifyRunEnd(failed, { platform, environment: desktop });
     expect(shown).toHaveLength(1);
-    expect(await getNotify()).toEqual({ when: "off", webhooks: [] });
-    expect(await setNotify({ when: "changes", webhooks: [{ url: "https://ntfy.sh/x" }] })).toEqual({ when: "changes", webhooks: [{ url: "https://ntfy.sh/x" }] });
-    expect(await getNotify()).toEqual({ when: "changes", webhooks: [{ url: "https://ntfy.sh/x" }] });
+    expect(await getNotify()).toEqual({ when: "off", webhooks: [], screen: true });
+    expect(await setNotify({ when: "changes", webhooks: [{ url: "https://ntfy.sh/x" }] })).toEqual({ when: "changes", webhooks: [{ url: "https://ntfy.sh/x" }], screen: true });
+    expect(await getNotify()).toEqual({ when: "changes", webhooks: [{ url: "https://ntfy.sh/x" }], screen: true });
+  });
+
+  it("keeps the screen quiet when it is turned off, and remembers only that it is off", async () => {
+    const shown: string[] = [];
+    const platform = { os: "darwin" as const, notify: async (title: string) => void shown.push(title) } as never;
+    delete process.env["WISP_NOTIFY"];
+    expect(await setNotify({ screen: false })).toEqual({ when: "failures", webhooks: [], screen: false });
+    await notifyRunEnd(failed, { platform, environment: desktop });
+    expect(shown).toEqual([]);
+    expect(await setNotify({ when: "changes" })).toMatchObject({ screen: false });
+    expect(await setNotify({ screen: true })).toEqual({ when: "changes", webhooks: [], screen: true });
+    expect(JSON.parse(await readFile(configPath(), "utf8")).notify).toEqual({ when: "changes" });
+    await notifyRunEnd({ ...failed, previousOk: true }, { platform, environment: desktop });
+    expect(shown).toEqual(["✗ Backup failed"]);
   });
 
   it("reads a single webhook from older settings as the first of the list", async () => {
     await mkdir(dirname(configPath()), { recursive: true });
     await writeFile(configPath(), JSON.stringify({ version: 1, notify: { when: "all", webhook: "https://ntfy.sh/old", webhooks: [{ url: "https://discord.com/api/webhooks/1", workspaces: ["/dev/shop/.wisp.json"] }] } }));
-    expect(await getNotify()).toEqual({ when: "all", webhooks: [{ url: "https://ntfy.sh/old" }, { url: "https://discord.com/api/webhooks/1", workspaces: ["/dev/shop/.wisp.json"] }] });
+    expect(await getNotify()).toEqual({ when: "all", webhooks: [{ url: "https://ntfy.sh/old" }, { url: "https://discord.com/api/webhooks/1", workspaces: ["/dev/shop/.wisp.json"] }], screen: true });
   });
 });
 

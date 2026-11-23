@@ -63,8 +63,8 @@ export function services(overrides: Partial<Services> = {}, library: Library = {
       choices: () => ({ editors: [{ label: "Visual Studio Code", value: "Visual Studio Code" }], terminals: ["Terminal", "Ghostty", "tmux"] }),
       mouse: async () => true,
       setMouse: async (on) => on,
-      notify: async () => ({ when: "failures", webhooks: [] }),
-      setNotify: async (change) => ({ when: "failures", webhooks: [], ...change }),
+      notify: async () => ({ when: "failures", screen: true, webhooks: [] }),
+      setNotify: async (change) => ({ when: "failures", screen: true, webhooks: [], ...change }),
     },
     editing: {
       bolt: async (_file, bolt) => ({ label: bolt, steps: [] }),

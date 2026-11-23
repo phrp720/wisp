@@ -7,7 +7,8 @@ export function parseDuration(value: unknown): number | undefined {
   return seconds > 0 ? seconds : undefined;
 }
 
-export function describeDuration(seconds: number): string {
+export function describeDuration(exact: number): string {
+  const seconds = exact >= 59.95 ? Math.round(exact) : exact;
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   const rest = Math.round((seconds % 60) * 10) / 10;

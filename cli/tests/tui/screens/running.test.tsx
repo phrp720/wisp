@@ -293,7 +293,7 @@ describe("commands that finish, down and history in the TUI", () => {
 
   it("warns along the top when a webhook is failing, and s opens its settings", async () => {
     const api = services();
-    const app = await open({ ...api, settings: { ...api.settings, notify: async () => ({ when: "failures", webhooks: [{ url: "https://ntfy.sh/old-and-secret" }] }), failingWebhooks: async () => 1 } });
+    const app = await open({ ...api, settings: { ...api.settings, notify: async () => ({ when: "failures", screen: true, webhooks: [{ url: "https://ntfy.sh/old-and-secret" }] }), failingWebhooks: async () => 1 } });
     await eventually(() => expect(app.lastFrame()).toContain("a webhook is failing: s"));
     app.stdin.write("s");
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ Notifications/));

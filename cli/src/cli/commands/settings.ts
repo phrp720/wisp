@@ -108,7 +108,7 @@ function describeDelivery(delivery: Delivery | undefined): string {
 export const notify: CommandDef<{ test?: boolean; reveal?: boolean; json?: boolean }> = {
   name: "notify",
   summary: "Choose when Wisp tells you a run failed, and where: this screen, webhooks",
-  args: [["[what...]", "failures (the default), changes, all or off; add <url> [workspace...]; remove <url | number> [workspace...]"]],
+  args: [["[what...]", "failures (the default), changes, all or off; screen on or off; add <url> [workspace...]; remove <url | number> [workspace...]"]],
   options: [
     ["--test", "send a test notification now, to every webhook"],
     ["--reveal", "show the webhooks' whole addresses, secret included"],
@@ -117,6 +117,7 @@ export const notify: CommandDef<{ test?: boolean; reveal?: boolean; json?: boole
   examples: [
     "wisp notify",
     "wisp notify changes",
+    "wisp notify screen off            # webhooks only, nothing pops up here",
     "wisp notify add https://ntfy.sh/my-server",
     "wisp notify add https://hooks.slack.com/services/... staging production",
     "wisp notify remove 2",
@@ -132,13 +133,16 @@ export const notify: CommandDef<{ test?: boolean; reveal?: boolean; json?: boole
       const files = await Promise.all(names.map(async (name) => (await workspaceFor(name)).workspace.file));
       const { webhooks } = await getNotify();
       settings = await setNotify({ webhooks: first === "add" ? addWebhook(webhooks, ref.trim(), files) : removeWebhook(webhooks, ref, files) });
+    } else if (first === "screen") {
+      if ((ref !== "on" && ref !== "off") || args.length > 2) throw new WispError(`Say on or off: wisp notify screen ${ref ?? "<on | off>"}`, "INVALID_INPUT");
+      settings = await setNotify({ screen: ref === "on" });
     } else if (first !== undefined) {
-      if (!(first in WHEN) || args.length > 1) throw new WispError(`Say failures, changes, all or off, or add or remove: not "${args.join(" ")}"`, "INVALID_INPUT");
+      if (!(first in WHEN) || args.length > 1) throw new WispError(`Say failures, changes, all or off, screen, or add or remove: not "${args.join(" ")}"`, "INVALID_INPUT");
       settings = await setNotify({ when: first as NotifyWhen });
     } else settings = await getNotify();
 
     const environment = detectEnvironment();
-    const screen = environment.ssh ? "none: this is an SSH session" : environment.gui ? "this one" : "none: no display here";
+    const screen = !settings.screen ? "off" : environment.ssh ? "none: this is an SSH session" : environment.gui ? "this one" : "none: no display here";
     const files = [...new Set(settings.webhooks.flatMap((hook) => hook.workspaces ?? []))];
     const reads = files.length > 0 ? await everything() : [];
     const nameOf = new Map(
@@ -167,7 +171,8 @@ export const notify: CommandDef<{ test?: boolean; reveal?: boolean; json?: boole
           workspaces: hook.workspaces ? hook.workspaces.map(named) : null,
           lastDelivery: lastDelivery(deliveries, hook.url) ?? null,
         })),
-        screen: environment.gui && !environment.ssh,
+        screen: settings.screen && environment.gui && !environment.ssh,
+        screenSetting: settings.screen,
         ...(problems ? { test: { ok: problems.length === 0, problems } } : {}),
       });
     }

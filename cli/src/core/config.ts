@@ -73,11 +73,11 @@ export async function setMouse(on: boolean): Promise<boolean> {
   return config.mouse ?? true;
 }
 
-export type NotifyChoice = { when: NotifyWhen; webhooks: Webhook[] };
+export type NotifyChoice = { when: NotifyWhen; webhooks: Webhook[]; screen: boolean };
 
 export async function getNotify(): Promise<NotifyChoice> {
   const config = await loadConfig().catch(() => undefined);
-  return { when: config?.notify?.when ?? "failures", webhooks: config?.notify?.webhooks ?? [] };
+  return { when: config?.notify?.when ?? "failures", webhooks: config?.notify?.webhooks ?? [], screen: config?.notify?.screen ?? true };
 }
 
 export async function setNotify(change: NotifySettings): Promise<NotifyChoice> {
@@ -85,10 +85,11 @@ export async function setNotify(change: NotifySettings): Promise<NotifyChoice> {
     const next: NotifySettings = { ...current.notify, ...change };
     if (next.when === "failures") delete next.when;
     if (next.webhooks?.length === 0) delete next.webhooks;
+    if (next.screen !== false) delete next.screen;
     const { notify: _previous, ...rest } = current;
     return Object.keys(next).length > 0 ? { ...rest, notify: next } : rest;
   });
-  return { when: config.notify?.when ?? "failures", webhooks: config.notify?.webhooks ?? [] };
+  return { when: config.notify?.when ?? "failures", webhooks: config.notify?.webhooks ?? [], screen: config.notify?.screen ?? true };
 }
 
 /**
@@ -183,6 +184,7 @@ function normalizeConfig(value: unknown): Config {
       webhooks.push({ url: entry["url"].trim(), ...(scope.length > 0 ? { workspaces: scope } : {}) });
     }
     if (webhooks.length > 0) settings.webhooks = webhooks;
+    if (notify["screen"] === false) settings.screen = false;
     if (Object.keys(settings).length > 0) config.notify = settings;
   }
 

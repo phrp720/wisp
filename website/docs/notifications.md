@@ -7,12 +7,20 @@ and posts to your webhooks.
 ```bash
 wisp notify                                     # what is set, webhooks numbered
 wisp notify changes                             # failures (the default), changes, all, or off
+wisp notify screen off                          # webhooks only: nothing pops up on this machine
 wisp notify add https://ntfy.sh/my-server       # a webhook for every workspace
 wisp notify --test                              # send one now to every webhook, to check
 wisp notify --reveal                            # the webhooks' whole addresses
 ```
 
 The same is in the dashboard's [Settings](./settings), under **Notifications**.
+
+## Only the webhooks
+
+When Slack or your phone already tells you, the notification on this machine's screen is the
+same news twice. `wisp notify screen off` keeps it quiet and leaves the webhooks as they are;
+`wisp notify screen on` brings it back. It's set for this machine only, and the dashboard has
+it as **On screen**, under **Inform me**.
 
 ## Checks that run every few minutes
 
@@ -64,7 +72,7 @@ Any other address gets JSON:
 
 ```json
 {
-  "text": "✗ Backup failed on web-1\nat dump: exited with code 1 · Shop · wisp history 8efbda976796",
+  "text": "❌ Backup failed on web-1\nat dump: exited with code 1 · Shop · wisp history 8efbda976796",
   "ok": false,
   "pipeline": "Backup",
   "workspace": "Shop",

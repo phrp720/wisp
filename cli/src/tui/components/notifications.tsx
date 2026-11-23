@@ -13,7 +13,9 @@ export const WHEN = { failures: "when a run fails", changes: "when a pipeline st
 
 const MOST_AT_ONCE = 8;
 
-type Row = { kind: "when" } | { kind: "hook"; at: number } | { kind: "add" };
+type Row = { kind: "when" } | { kind: "screen" } | { kind: "hook"; at: number } | { kind: "add" };
+
+const FIRST_HOOK = 2;
 type Open = { kind: "when" } | { kind: "add" } | { kind: "hook"; at: number };
 
 function delivered(delivery: Delivery | undefined): { text: string; failed: boolean } {
@@ -53,9 +55,9 @@ export function NotificationsPanel({
   onClose: () => void;
 }) {
   const hooks = notify.webhooks;
-  const rows: Row[] = [{ kind: "when" }, ...hooks.map((_hook, at): Row => ({ kind: "hook", at })), { kind: "add" }];
+  const rows: Row[] = [{ kind: "when" }, { kind: "screen" }, ...hooks.map((_hook, at): Row => ({ kind: "hook", at })), { kind: "add" }];
   const firstFailing = hooks.findIndex((hook) => lastDelivery(deliveries, hook.url)?.ok === false);
-  const [index, setIndexState] = useState(firstFailing >= 0 ? firstFailing + 1 : 0);
+  const [index, setIndexState] = useState(firstFailing >= 0 ? firstFailing + FIRST_HOOK : 0);
   const indexRef = useRef(index);
   const setIndex = (next: number) => {
     indexRef.current = next;
@@ -86,7 +88,13 @@ export function NotificationsPanel({
     onSaved(said);
     return next;
   };
+  const toggleScreen = async () => {
+    const next = await services.settings.setNotify({ screen: !notify.screen });
+    onChange(next);
+    onSaved(next.screen ? "On screen: on" : "On screen: off");
+  };
   const edit = (row: Row) => {
+    if (row.kind === "screen") return void toggleScreen().catch((error: unknown) => onSaved(error instanceof Error ? error.message : String(error)));
     if (row.kind === "hook" && workspaces.length === 0) return;
     setOpen(row.kind === "hook" ? { kind: "hook", at: row.at } : { kind: row.kind });
   };
@@ -183,7 +191,7 @@ export function NotificationsPanel({
           }
           if (Object.keys(errors).length > 0) return errors;
           const next = await save(webhooks, added === 1 ? "Added a webhook" : `Added ${added} webhooks`);
-          setIndex(next.webhooks.length + 1);
+          setIndex(next.webhooks.length + FIRST_HOOK);
           back();
           return undefined;
         }}
@@ -227,7 +235,7 @@ export function NotificationsPanel({
   const hint =
     removing !== undefined
       ? `It stops getting messages · ${ASK_KEYS}`
-      : ["↑↓ choose", row.kind === "hook" ? (workspaces.length > 0 ? "⏎ workspaces" : "") : "⏎ edit", "a add", row.kind === "hook" ? "D remove" : "", "esc back"].filter(Boolean).join(" · ");
+      : ["↑↓ choose", row.kind === "hook" ? (workspaces.length > 0 ? "⏎ workspaces" : "") : row.kind === "screen" ? (notify.screen ? "⏎ turn off" : "⏎ turn on") : "⏎ edit", "a add", row.kind === "hook" ? "D remove" : "", "esc back"].filter(Boolean).join(" · ");
 
   return (
     <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor={active ? TONE.accent : "gray"} paddingX={1} overflow="hidden">
@@ -241,17 +249,24 @@ export function NotificationsPanel({
           <Text>{WHEN[notify.when]}</Text>
         </Text>
       </Box>
+      <Box ref={rowNodes.set(1)}>
+        <Text wrap="truncate-end">
+          {pointer(1)}
+          <Text bold={on(1)} color={on(1) ? TONE.accent : undefined}>{"On screen".padEnd(10)}</Text>
+          {notify.screen ? <Text>on</Text> : <Text dimColor>off</Text>}
+        </Text>
+      </Box>
       <Text> </Text>
       <Text bold>  Webhooks</Text>
       {hooks.map((hook, at) => {
         const state = delivered(lastDelivery(deliveries, hook.url));
         return (
           <Box key={hook.url} flexDirection="column">
-            <Box ref={rowNodes.set(at + 1)} flexDirection="column">
+            <Box ref={rowNodes.set(at + FIRST_HOOK)} flexDirection="column">
               <Text wrap="truncate-end">
-                {pointer(at + 1)}
+                {pointer(at + FIRST_HOOK)}
                 <Text dimColor>{`${String(at + 1).padStart(2)}  `}</Text>
-                <Text bold={on(at + 1)} color={at === removing ? "red" : on(at + 1) ? TONE.accent : undefined}>{maskWebhook(hook.url)}</Text>
+                <Text bold={on(at + FIRST_HOOK)} color={at === removing ? "red" : on(at + FIRST_HOOK) ? TONE.accent : undefined}>{maskWebhook(hook.url)}</Text>
                 <Text dimColor>{`  ${scope(hook.workspaces)}`}</Text>
               </Text>
               <Text wrap="truncate-end" color={state.failed ? TONE.failed : undefined} dimColor={!state.failed}>{`      ${state.text}`}</Text>
@@ -267,7 +282,7 @@ export function NotificationsPanel({
                     hooks.filter((_other, other) => other !== at),
                     `Removed ${maskWebhook(hook.url)}`,
                   )
-                    .then((next) => setIndex(Math.min(at + 1, next.webhooks.length)))
+                    .then((next) => setIndex(Math.min(at + FIRST_HOOK, next.webhooks.length + FIRST_HOOK - 1)))
                     .catch((error: unknown) => onSaved(error instanceof Error ? error.message : String(error)));
                 }}
               />
@@ -275,10 +290,10 @@ export function NotificationsPanel({
           </Box>
         );
       })}
-      <Box ref={rowNodes.set(hooks.length + 1)}>
+      <Box ref={rowNodes.set(hooks.length + FIRST_HOOK)}>
         <Text wrap="truncate-end">
-          {pointer(hooks.length + 1)}
-          <Text color={TONE.accent} bold={on(hooks.length + 1)}>{`${hooks.length > 0 ? "    " : ""}+  ${hooks.length === 0 ? "add a webhook" : "add webhooks"}`}</Text>
+          {pointer(hooks.length + FIRST_HOOK)}
+          <Text color={TONE.accent} bold={on(hooks.length + FIRST_HOOK)}>{`${hooks.length > 0 ? "    " : ""}+  ${hooks.length === 0 ? "add a webhook" : "add webhooks"}`}</Text>
         </Text>
       </Box>
       <Box flexGrow={1} />

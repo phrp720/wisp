@@ -215,6 +215,7 @@ export interface Webhook {
 export interface NotifySettings {
   when?: NotifyWhen;
   webhooks?: Webhook[];
+  screen?: boolean;
 }
 
 /**
