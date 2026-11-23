@@ -5,7 +5,7 @@ pipeline is a short list of steps, like *start the database, then the API, open 
 You write it once, then run it by name from whatever folder you're in.
 
 ```bash
-wisp acme dev
+wisp <workspace> <pipeline>
 ```
 
 <Recording name="cli" alt="wisp acme dev, from the home folder: the database, then the API, with the web app beside them, each step ticking off" />
