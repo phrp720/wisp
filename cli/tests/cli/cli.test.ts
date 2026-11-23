@@ -26,7 +26,11 @@ describe("withImplicitUse", () => {
   it("reads `wisp help agents` as the reference for agents, not help about a command", () => {
     expect(withImplicitUse(argv("help", "agents"), commands)).toEqual(argv("spec"));
     expect(withImplicitUse(argv("agents"), commands)).toEqual(argv("agents"));
-    expect(withImplicitUse(argv("help", "use"), commands)).toEqual(argv("help", "use"));
+    expect(withImplicitUse(argv("help", "use"), commands)).toEqual(argv("use", "--help"));
+  });
+
+  it("reads a bare `wisp help` as the help", () => {
+    expect(withImplicitUse(argv("help"), commands)).toEqual(argv("--help"));
   });
 
   it("reads `wisp help all` as the help with every command", () => {

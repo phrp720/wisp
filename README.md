@@ -1,7 +1,7 @@
 <h1 align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="website/public/wordmark-dark.svg" />
-    <img src="website/public/wordmark-light.svg" alt="Wisp" height="96" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://willowisp.dev/wordmark-dark.svg" />
+    <img src="https://willowisp.dev/wordmark-light.svg" alt="Wisp" height="96" />
   </picture><br />
   <sub><sub><i>as in will-o'-the-wisp, the little light that leads the way</i></sub></sub>
 </h1>
@@ -10,7 +10,7 @@
   <a href="https://github.com/phrp720/wisp/releases/latest"><img src="https://img.shields.io/github/v/release/phrp720/wisp?color=6d4aff&label=release" alt="latest release" /></a>
   <a href="https://www.npmjs.com/package/@phrp720/wisp"><img src="https://img.shields.io/npm/v/@phrp720/wisp?color=6d4aff&label=npm" alt="npm version" /></a>
   <a href="https://github.com/phrp720/wisp/actions/workflows/ci.yml"><img src="https://github.com/phrp720/wisp/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-6d4aff" alt="MIT license" /></a>
+  <a href="https://github.com/phrp720/wisp/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-6d4aff" alt="MIT license" /></a>
 </p>
 
 <p align="center">
@@ -20,7 +20,7 @@
 </p>
 
 <p align="center">
-  <img src="website/public/demo/cli.gif" alt="wisp api: the database, the API server and the page, started in order, each step ticking off" width="800" />
+  <img src="https://willowisp.dev/demo/cli.gif" alt="wisp api: the database, the API server and the page, started in order, each step ticking off" width="800" />
 </p>
 
 <p align="center">
@@ -37,7 +37,7 @@ A **pipeline** is a name and its steps, in a `.wisp.json` next to your code or i
 workspace. Steps start together unless they say what they wait for:
 
 <p align="center">
-  <img src="website/public/pipeline-dark.svg" alt="The Dev pipeline: db and web start together; api waits for db; a wait for port 3000 waits for api; the page opens once both are done" width="628" />
+  <img src="https://willowisp.dev/pipeline-dark.svg" alt="The Dev pipeline: db and web start together; api waits for db; a wait for port 3000 waits for api; the page opens once both are done" width="628" />
 </p>
 
 ```json
@@ -82,7 +82,7 @@ Then Wisp:
   and `wisp help agents` prints the whole reference. An agent can't approve its own commands.
 
 <p align="center">
-  <img src="website/public/demo/dashboard.gif" alt="Wisp's dashboard: running a pipeline in its box, its server's live output on the Running tab, then the History tab" width="900" />
+  <img src="https://willowisp.dev/demo/dashboard.gif" alt="Wisp's dashboard: running a pipeline in its box, its server's live output on the Running tab, then the History tab" width="900" />
 </p>
 
 ## Install
@@ -116,8 +116,8 @@ pnpm website:dev       # the website, at http://localhost:5173
 
 `cli/` is Wisp (`src/core`: the format, trust and running; `src/cli` and `src/tui`: the
 command and its dashboard). `website/` is the site and docs. Start with
-[CONTRIBUTING.md](CONTRIBUTING.md).
+[CONTRIBUTING.md](https://github.com/phrp720/wisp/blob/main/CONTRIBUTING.md).
 
 ## License
 
-[MIT](LICENSE)
+[MIT](https://github.com/phrp720/wisp/blob/main/LICENSE)
