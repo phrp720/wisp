@@ -1,6 +1,6 @@
 {
   "name": "@phrp720/wisp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Run a project's bolts from the terminal: its links, folders, files, apps and commands, started together. macOS, Linux and Windows.",
   "keywords": [
     "wisp",
