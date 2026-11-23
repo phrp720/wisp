@@ -1,8 +1,9 @@
 /** Your own settings on this machine, by category: what opens folders and files, where commands run, when Wisp tells you about a run, and the mouse. */
 
-import { Box, type DOMElement, Text, useInput } from "ink";
+import { Box, type DOMElement, Text } from "ink";
 import { useEffect, useRef, useState } from "react";
 
+import { useKeys } from "../terminal/keys.js";
 import type { Delivery } from "../../core/notify.js";
 import { type FieldSpec, Form } from "../components/forms.js";
 import type { Glyphs } from "../terminal/glyphs.js";
@@ -80,7 +81,7 @@ export function SettingsScreen({ services, glyphs, height, columns = 100, worksp
     !editing,
   );
 
-  useInput(
+  useKeys(
     (input, key) => {
       if (key.escape || input === "q" || input === "s") return onClose();
       if (onJump && (input === "1" || input === "2" || input === "3")) return onJump(input);

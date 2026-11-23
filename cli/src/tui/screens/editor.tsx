@@ -1,6 +1,7 @@
-import { Box, type DOMElement, Text, useInput } from "ink";
+import { Box, type DOMElement, Text } from "ink";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { useKeys } from "../terminal/keys.js";
 import { STEP_FIELDS, STEP_KINDS, afterOf, buildInput, buildStep, describeRawStep, inputValues, stepKindOf, stepValues, type RawPipeline, type RawInput, type StepKindName } from "../../core/edit.js";
 import { tildify } from "../../core/paths.js";
 import { slugify } from "../../core/workspaces.js";
@@ -153,7 +154,7 @@ export function PipelineEditor({ file, bolt, workspace, others, adding = false, 
     setOpen(true);
   };
 
-  useInput(
+  useKeys(
     (input, key) => {
       const at = place(indexRef.current);
       const current = rows[at] as Row;

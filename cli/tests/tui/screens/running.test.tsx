@@ -182,11 +182,10 @@ describe("commands that finish, down and history in the TUI", () => {
     app.stdin.write("h");
     await tick();
     await tick();
-    let frame = app.lastFrame() ?? "";
-    await eventually(() => expect(frame).toContain("All pipelines"));
-    await eventually(() => expect(frame).toContain("Check #7"));
-    await eventually(() => expect(frame).toMatch(/✗ Check #7 +at test +a1b2c3d fix cart total +· git hook/));
-    await eventually(() => expect(frame).toMatch(/⎇ main +3\.0s/));
+    await eventually(() => expect(app.lastFrame()).toContain("All pipelines"));
+    await eventually(() => expect(app.lastFrame()).toContain("Check #7"));
+    await eventually(() => expect(app.lastFrame()).toMatch(/✗ Check #7 +at test +a1b2c3d fix cart total +· git hook/));
+    await eventually(() => expect(app.lastFrame()).toMatch(/⎇ main +3\.0s/));
 
     // / narrows the runs as you type; nothing matching says so.
     for (const key of ["/", "z", "z"]) {
@@ -207,16 +206,15 @@ describe("commands that finish, down and history in the TUI", () => {
     app.stdin.write("\r");
     await tick();
     await tick();
-    frame = app.lastFrame() ?? "";
-    await eventually(() => expect(frame).toContain("Check #7"));
-    await eventually(() => expect(frame).toContain("Triggered"));
-    await eventually(() => expect(frame).toContain("from a git hook"));
-    await eventually(() => expect(frame).toContain("env=staging"));
-    await eventually(() => expect(frame).toContain("Failed"));
-    await eventually(() => expect(frame).toContain("Database"));
-    await eventually(() => expect(frame).toContain("1 step"));
+    await eventually(() => expect(app.lastFrame()).toContain("Check #7"));
+    await eventually(() => expect(app.lastFrame()).toContain("Triggered"));
+    await eventually(() => expect(app.lastFrame()).toContain("from a git hook"));
+    await eventually(() => expect(app.lastFrame()).toContain("env=staging"));
+    await eventually(() => expect(app.lastFrame()).toContain("Failed"));
+    await eventually(() => expect(app.lastFrame()).toContain("Database"));
+    await eventually(() => expect(app.lastFrame()).toContain("1 step"));
     await eventually(() => expect(readLog).toHaveBeenCalledWith("/logs/2"));
-    await eventually(() => expect(frame).toMatch(/2 FAIL divides by zero/));
+    await eventually(() => expect(app.lastFrame()).toMatch(/2 FAIL divides by zero/));
 
     // The tab keys work here too: 3 is the list of runs again, 1 the bolts.
     app.stdin.write("3");
@@ -425,28 +423,25 @@ describe("panes", () => {
     app.stdin.write("p");
     await tick();
     await tick();
-    let frame = app.lastFrame() ?? "";
-    await eventually(() => expect(frame).toContain("Logs │ Info │ Runs"));
-    await eventually(() => expect(frame).toContain("ready on :3000"));
+    await eventually(() => expect(app.lastFrame()).toContain("Logs │ Info │ Runs"));
+    await eventually(() => expect(app.lastFrame()).toContain("ready on :3000"));
 
     await tick();
 
     app.stdin.write("]");
     await tick();
-    frame = app.lastFrame() ?? "";
-    await eventually(() => expect(frame).toMatch(/Command +pnpm dev/));
-    await eventually(() => expect(frame).toMatch(/State +running, PID 1/));
-    await eventually(() => expect(frame).toContain("wisp logs ab12 -f"));
-    await eventually(() => expect(frame).not.toContain("ready on :3000"));
+    await eventually(() => expect(app.lastFrame()).toMatch(/Command +pnpm dev/));
+    await eventually(() => expect(app.lastFrame()).toMatch(/State +running, PID 1/));
+    await eventually(() => expect(app.lastFrame()).toContain("wisp logs ab12 -f"));
+    await eventually(() => expect(app.lastFrame()).not.toContain("ready on :3000"));
 
     await tick();
 
     app.stdin.write("]");
     await tick();
-    frame = app.lastFrame() ?? "";
-    await eventually(() => expect(frame).toMatch(/ab12/));
-    await eventually(() => expect(frame).toMatch(/failed \(exit 1\) +ef56/));
-    await eventually(() => expect(frame).not.toContain("gh78"));
+    await eventually(() => expect(app.lastFrame()).toMatch(/ab12/));
+    await eventually(() => expect(app.lastFrame()).toMatch(/failed \(exit 1\) +ef56/));
+    await eventually(() => expect(app.lastFrame()).not.toContain("gh78"));
 
     // Back to Info, then to the next command: still on Info, now about that one.
     app.stdin.write("[");
@@ -454,8 +449,7 @@ describe("panes", () => {
     app.stdin.write("j");
     await tick();
     await tick();
-    frame = app.lastFrame() ?? "";
-    await eventually(() => expect(frame).toMatch(/Command +pnpm worker/));
+    await eventually(() => expect(app.lastFrame()).toMatch(/Command +pnpm worker/));
 
     await tick();
 
@@ -482,12 +476,11 @@ describe("filtering logs", () => {
       await tick();
     }
     await tick();
-    let frame = app.lastFrame() ?? "";
-    await eventually(() => expect(frame).toContain("/ err"));
-    await eventually(() => expect(frame).toContain("2 of 5 lines"));
-    await eventually(() => expect(frame).toMatch(/3 ERROR cart total is NaN/));
-    await eventually(() => expect(frame).toMatch(/5 error: retrying the cart/));
-    await eventually(() => expect(frame).not.toContain("GET /cart 200"));
+    await eventually(() => expect(app.lastFrame()).toContain("/ err"));
+    await eventually(() => expect(app.lastFrame()).toContain("2 of 5 lines"));
+    await eventually(() => expect(app.lastFrame()).toMatch(/3 ERROR cart total is NaN/));
+    await eventually(() => expect(app.lastFrame()).toMatch(/5 error: retrying the cart/));
+    await eventually(() => expect(app.lastFrame()).not.toContain("GET /cart 200"));
     // Filtering reads more of the log than the last screens.
     await eventually(() => expect(tail).toHaveBeenLastCalledWith("/logs/web", 20_000, 4 * 1024 * 1024));
 
@@ -499,9 +492,8 @@ describe("filtering logs", () => {
     app.stdin.write("\u001B");
     await tick();
     await tick();
-    frame = app.lastFrame() ?? "";
-    await eventually(() => expect(frame).toContain("GET /cart 200"));
-    await eventually(() => expect(frame).not.toContain("/ err"));
+    await eventually(() => expect(app.lastFrame()).toContain("GET /cart 200"));
+    await eventually(() => expect(app.lastFrame()).not.toContain("/ err"));
   });
 
   it("filters every step's log of a past run, and says where the matches are", async () => {
@@ -592,10 +584,10 @@ describe("a run in progress", () => {
       }),
     );
     app.stdin.write("\r");
+    await eventually(() => expect(signal).toBeDefined());
     await tick();
     app.stdin.write("x");
-    await tick();
-    expect(signal?.aborted).toBe(true);
+    await eventually(() => expect(signal?.aborted).toBe(true));
     await eventually(() => expect(app.lastFrame()).toContain("Stopped — you stopped it."));
   });
 

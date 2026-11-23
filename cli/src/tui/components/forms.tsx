@@ -1,7 +1,8 @@
-import { Box, type DOMElement, Text, useInput, type Key } from "ink";
+import { Box, type DOMElement, Text, type Key } from "ink";
 import { useRef, useState } from "react";
 
 import type { Glyphs } from "../terminal/glyphs.js";
+import { useKeys } from "../terminal/keys.js";
 import { useMouse, useRefs } from "../terminal/mouse.js";
 import { TONE } from "../terminal/tones.js";
 
@@ -121,7 +122,7 @@ export function Form({ title, intro, fields, initial = {}, submitLabel = "Save",
     setIndex((at) => Math.min(at, visible(settled).length));
   };
 
-  useInput((input, key) => {
+  useKeys((input, key) => {
     if (saving) return;
     const values = valuesRef.current;
     const index = indexRef.current;
@@ -414,7 +415,7 @@ export function Picker(props: {
   };
   const shown = matching(query);
 
-  useInput((input, key) => {
+  useKeys((input, key) => {
     const list = matching(queryRef.current);
     if (key.escape) return queryRef.current ? setQuery("") : onCancel();
     if (key.upArrow) return setIndex(Math.max(0, indexRef.current - 1));
@@ -501,7 +502,7 @@ function useChoice(danger: boolean, onAnswer: (yes: boolean) => void, onCancel?:
     answered.current = true;
     setTimeout(() => onAnswer(yes), 0);
   };
-  useInput((input, key) => {
+  useKeys((input, key) => {
     if (answered.current) return;
     // Arrows go where they point: ← to the left button (yes), → to the right one (no). Only
     // tab flips, so → on "No" stays on "No" instead of jumping to "Yes, delete it".

@@ -293,9 +293,10 @@ describe("the TUI", () => {
   });
 
   it("lists projects before personal workspaces, and flags one waiting for trust", async () => {
-    const frame = (await open(services())).lastFrame() ?? "";
+    const app = await open(services());
+    await eventually(() => expect(app.lastFrame()).toContain("infra !"));
+    const frame = app.lastFrame() ?? "";
     expect(frame.indexOf("infra")).toBeLessThan(frame.indexOf("Morning"));
-    await eventually(() => expect(frame).toContain("infra !"));
     // Grouped, and said in words: no unexplained marks. Read from the list alone — the
     // left column — since the panel beside it names the workspace too.
     const list = frame.split("\n").map((line) => line.slice(0, 28)).join("\n");
@@ -600,11 +601,18 @@ describe("the TUI", () => {
     const app = await open(services({ run, editing: { ...base.editing, deleteProjectFile } }));
     app.stdin.write(ARROW_LEFT);
     await tick();
-    for (const key of ["D", ARROW_RIGHT, "\r", "D", ARROW_RIGHT, ARROW_LEFT, ARROW_RIGHT, "\r"]) {
-      app.stdin.write(key);
+    for (const keys of [[ARROW_RIGHT], [ARROW_RIGHT, ARROW_LEFT, ARROW_RIGHT]]) {
+      app.stdin.write("D");
+      await eventually(() => expect(app.lastFrame()).toContain("Delete its .wisp.json?"));
+      for (const key of keys) {
+        await tick();
+        app.stdin.write(key);
+      }
+      await tick();
+      app.stdin.write("\r");
+      await eventually(() => expect(app.lastFrame()).not.toContain("Delete its .wisp.json?"));
       await tick();
     }
-    await tick();
     await eventually(() => expect(run).not.toHaveBeenCalled());
     await eventually(() => expect(deleteProjectFile).not.toHaveBeenCalled());
     // Still on the workspaces: D asks about the workspace again, not about a bolt.
@@ -1101,6 +1109,8 @@ describe("the TUI", () => {
     await eventually(() => expect(app.lastFrame()).toContain("when a run fails"));
     await tick();
     app.stdin.write("j");
+    await eventually(() => expect(app.lastFrame()).toMatch(/❯ Running/));
+    await tick();
     app.stdin.write("j");
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ Notifications/));
     await tick();
@@ -1109,12 +1119,13 @@ describe("the TUI", () => {
     expect(app.lastFrame()).toMatch(/2 +https:\/\/ntfy\.sh\/…ra-x +infra/);
     await tick();
     app.stdin.write("j");
+    await eventually(() => expect(app.lastFrame()).toMatch(/❯ +1 +https:\/\/ntfy\.sh\/…them/));
     await tick();
     app.stdin.write("\r");
-    await eventually(() => expect(app.lastFrame()).toContain("[ Save ]"));
+    await eventually(() => expect(app.lastFrame()).toMatch(/https:\/\/ntfy\.sh\/…them[\s\S]*\[ Save \]/));
     await tick();
     app.stdin.write("\u0013");
-    await eventually(() => expect(setNotify).toHaveBeenCalledWith({ webhooks: [{ url: "https://ntfy.sh/all-of-them" }, { url: "https://ntfy.sh/just-infra-x", workspaces: [infra.workspace.file] }] }));
+    await eventually(() => expect(setNotify).toHaveBeenCalledWith({ webhooks: [{ url: "https://ntfy.sh/all-of-them" },{ url: "https://ntfy.sh/just-infra-x", workspaces: [infra.workspace.file] }] }));
   });
 
   it("sets up only the suggested pipelines left ticked", async () => {

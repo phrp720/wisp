@@ -1,8 +1,9 @@
 /** Questions that need an answer before going on: trusting a file, setting a folder up. */
 
-import { Box, type DOMElement, Text, useInput } from "ink";
+import { Box, type DOMElement, Text } from "ink";
 import { useRef, useState } from "react";
 
+import { useKeys } from "../terminal/keys.js";
 import { tildify } from "../../core/paths.js";
 import type { WorkspaceRead } from "../../core/types.js";
 import { Choice } from "./forms.js";
@@ -67,7 +68,7 @@ export function SetupPanel({ suggestion, glyphs, height, onAnswer }: { suggestio
     setTimeout(() => onAnswer(chosen), 0);
   };
 
-  useInput((input, key) => {
+  useKeys((input, key) => {
     if (answered.current) return;
     if (key.escape || input === "q" || input === "n") return answer(undefined);
     if (input === "N") return answer("never");

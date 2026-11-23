@@ -1,6 +1,7 @@
-import { Box, type DOMElement, measureElement, Text, useInput } from "ink";
+import { Box, type DOMElement, measureElement, Text } from "ink";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
+import { useKeys } from "../terminal/keys.js";
 import { cleanOutput } from "../../core/text/ansi.js";
 import { allSteps, baseLabel, withWorkspaceNames, type HistoryEntry, type HistoryStep } from "../../core/history.js";
 import { ASK_KEYS, AskHere } from "../components/forms.js";
@@ -125,9 +126,9 @@ export function HistoryScreen(props: HistoryScreenProps) {
     return true;
   }, !opened && !forget && !help);
 
-  useInput(() => setHelp(false), { isActive: help });
+  useKeys(() => setHelp(false), { isActive: help });
 
-  useInput(
+  useKeys(
     (input, key) => {
       if (!entries) return;
       // Typing a search: letters go into it; ⏎ or ↓ keeps it and goes back to the runs.
@@ -611,7 +612,7 @@ function RunDetail(props: {
     return true;
   });
 
-  useInput((input, key) => {
+  useKeys((input, key) => {
     // Typing the filter: letters go into it; ⏎ or ↓ keeps it.
     if (typingRef.current) {
       if (key.escape) {

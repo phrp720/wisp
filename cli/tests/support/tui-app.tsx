@@ -103,7 +103,10 @@ export function services(overrides: Partial<Services> = {}, library: Library = {
   };
 }
 
-export const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
+export async function tick(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  for (let turn = 0; turn < 10; turn += 1) await new Promise((resolve) => setImmediate(resolve));
+}
 export const eventually = (check: () => void) => vi.waitFor(check, { timeout: 5000, interval: 10 });
 export const ARROW_DOWN = "\u001B[B";
 export const ARROW_LEFT = "\u001B[D";

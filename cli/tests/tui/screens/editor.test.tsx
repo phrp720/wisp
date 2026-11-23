@@ -369,14 +369,20 @@ describe("doing everything without JSON", () => {
   it("says what is wrong with a field, in words", async () => {
     const app = await open(services());
     app.stdin.write("e");
+    await eventually(() => expect(app.lastFrame()).toContain("⚡ Work on api"));
     await tick();
     app.stdin.write("a");
+    await eventually(() => expect(app.lastFrame()).toContain("Wait until something is ready"));
     await tick();
     app.stdin.write("4");
+    await eventually(() => expect(app.lastFrame()).toContain("[ Add step ]"));
+    for (const char of "soon") {
+      await tick();
+      app.stdin.write(char);
+    }
+    await eventually(() => expect(app.lastFrame()).toContain("soon"));
     await tick();
-    for (const char of "soon") app.stdin.write(char);
-    app.stdin.write("\u0013"); // Add step
-    await tick();
+    app.stdin.write("\u0013");
     await eventually(() => expect(app.lastFrame()).toContain("Not something Wisp can wait for"));
   });
 
@@ -444,17 +450,15 @@ describe("doing everything without JSON", () => {
     app.stdin.write("p");
     await tick();
     await tick();
-    let frame = app.lastFrame() ?? "";
-    await eventually(() => expect(frame).toMatch(/ACME[\s\S]*Work on web[\s\S]*● up[\s\S]*api[\s\S]*web[\s\S]*Not from a pipeline[\s\S]*notes/));
+    await eventually(() => expect(app.lastFrame()).toMatch(/ACME[\s\S]*Work on web[\s\S]*● up[\s\S]*api[\s\S]*web[\s\S]*Not from a pipeline[\s\S]*notes/));
 
     for (const key of ["/", "m", "d", "b"]) {
       app.stdin.write(key);
       await tick();
     }
-    frame = app.lastFrame() ?? "";
-    await eventually(() => expect(frame).toContain("/ mdb"));
-    await eventually(() => expect(frame).toContain("notes"));
-    await eventually(() => expect(frame).not.toContain("Work on web"));
+    await eventually(() => expect(app.lastFrame()).toContain("/ mdb"));
+    await eventually(() => expect(app.lastFrame()).toContain("notes"));
+    await eventually(() => expect(app.lastFrame()).not.toContain("Work on web"));
     await tick();
     app.stdin.write("\u001B");
     await tick();

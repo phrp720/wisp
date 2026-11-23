@@ -1,4 +1,4 @@
-import { Box, Text, useApp, useInput } from "ink";
+import { Box, Text, useApp } from "ink";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { containerMood } from "../core/system/docker.js";
@@ -18,6 +18,7 @@ import { pipelineWindow, Empty, FIRST_PIPELINE_LINE, SearchPanel, WorkspaceList,
 import { type Library, ordered, search, type Services } from "./model.js";
 import { HelpPanel, RunProgress } from "./components/panels.js";
 import { SettingsScreen } from "./screens/settings.js";
+import { KeysContext, useKeyRoot, useKeys } from "./terminal/keys.js";
 import { type MouseListener, MouseContext, type MouseSource } from "./terminal/mouse.js";
 import { PanesPanel } from "./screens/running.js";
 import { filterPanes, groupPanes, logWindow, nextTab, nextWithLog, paneKey, paneSpotAt, shownTab } from "./screens/panes.js";
@@ -450,7 +451,8 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
     ...(focus ? { focus } : {}),
   });
 
-  useInput((input, key) => {
+  const keys = useKeyRoot();
+  useKeys((input, key) => {
     const view = viewRef.current;
     if (SELF_DRIVEN.has(view.kind)) return;
     if (notice) setNotice(undefined);
@@ -736,7 +738,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
       }
       void runPipeline(current, bolt.label, input === "c");
     }
-  }, { isActive: !SELF_DRIVEN.has(view.kind) });
+  }, { isActive: !SELF_DRIVEN.has(view.kind) }, keys);
 
   const bodyHeight = Math.max(4, rows - 2);
   const hereLabel = library?.here ? tildify(library.here.replace(/[\\/]\.wisp\.json$/, "")) : undefined;
@@ -858,6 +860,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
   const mouseArea = useMemo(() => (mouse ? { source: mouse, top: 1 } : undefined), [mouse]);
 
   return (
+    <KeysContext.Provider value={keys}>
     <MouseContext.Provider value={mouseArea}>
     <Box flexDirection="column" width={columns} height={rows}>
       <Header
@@ -1219,6 +1222,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
       <Footer view={view} notice={notice} columns={columns} hint={view.kind === "history" || view.kind === "editor" ? screenHint : undefined} message={message ?? (library?.unreadable.length ? `${library.unreadable.length} workspace file(s) could not be read — \`wisp list\`` : undefined)} />
     </Box>
     </MouseContext.Provider>
+    </KeysContext.Provider>
   );
 }
 

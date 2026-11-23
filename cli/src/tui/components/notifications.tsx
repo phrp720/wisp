@@ -1,6 +1,7 @@
-import { Box, Text, useInput } from "ink";
+import { Box, Text } from "ink";
 import { useRef, useState } from "react";
 
+import { useKeys } from "../terminal/keys.js";
 import { addWebhook, type Delivery, lastDelivery, maskWebhook } from "../../core/notify.js";
 import { ASK_KEYS, AskHere, Form } from "./forms.js";
 import type { Glyphs } from "../terminal/glyphs.js";
@@ -90,7 +91,7 @@ export function NotificationsPanel({
     setOpen(row.kind === "hook" ? { kind: "hook", at: row.at } : { kind: row.kind });
   };
 
-  useInput(
+  useKeys(
     (input, key) => {
       const at = Math.min(indexRef.current, rows.length - 1);
       const row = rows[at] as Row;
