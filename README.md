@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="https://github.com/phrp720/wisp/releases/latest"><img src="https://img.shields.io/github/v/release/phrp720/wisp?color=6d4aff&label=release" alt="latest release" /></a>
-  <a href="https://www.npmjs.com/package/@squaredasher/wisp"><img src="https://img.shields.io/npm/v/@squaredasher/wisp?color=6d4aff&label=npm" alt="npm version" /></a>
+  <a href="https://www.npmjs.com/package/@phrp720/wisp"><img src="https://img.shields.io/npm/v/@phrp720/wisp?color=6d4aff&label=npm" alt="npm version" /></a>
   <a href="https://github.com/phrp720/wisp/actions/workflows/ci.yml"><img src="https://github.com/phrp720/wisp/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-6d4aff" alt="MIT license" /></a>
 </p>
@@ -89,7 +89,7 @@ Then Wisp:
 
 ```bash
 curl -fsSL https://willowisp.dev/install.sh | sh     # macOS and Linux, no Node needed
-npm install -g @squaredasher/wisp                     # anywhere, with Node 22.12+
+npm install -g @phrp720/wisp                         # anywhere, with Node 22.12+
 ```
 
 Windows without Node: [Releases](https://github.com/phrp720/wisp/releases) has a zip.

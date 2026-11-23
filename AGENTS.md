@@ -5,7 +5,7 @@ Notes for AI coding agents working on Wisp's own code. To *use* Wisp, run
 
 ## Layout
 
-- `cli/`: Wisp itself, published as `@squaredasher/wisp`.
+- `cli/`: Wisp itself, published as `@phrp720/wisp`.
   - `src/core`: the file format, trust, discovery, running pipelines, history. No CLI or TUI code.
     `core/project` reads and checks a `.wisp.json`; `core/run` plans and runs pipelines
     (import each through its `index.ts`). `core/system` talks to the machine (processes,

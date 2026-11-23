@@ -6,7 +6,7 @@ Install Wisp, let it write a pipeline for your project, allow it, and run it.
 
 ```bash
 curl -fsSL https://willowisp.dev/install.sh | sh    # macOS and Linux
-npm install -g @squaredasher/wisp                   # anywhere, with Node 22.12+
+npm install -g @phrp720/wisp                        # anywhere, with Node 22.12+
 ```
 
 On Windows without Node, download `wisp-windows-x64.zip` from
@@ -64,10 +64,10 @@ them.
 
 ```bash
 curl -fsSL https://willowisp.dev/install.sh | sh    # update: installs the latest over it
-npm install -g @squaredasher/wisp@latest            # or with npm
+npm install -g @phrp720/wisp@latest                 # or with npm
 ```
 
 To remove it, stop what it runs with `wisp stop --all`, then delete the binary
-(`rm ~/.local/bin/wisp`, or `npm uninstall -g @squaredasher/wisp`). Its settings, history
+(`rm ~/.local/bin/wisp`, or `npm uninstall -g @phrp720/wisp`). Its settings, history
 and personal workspaces live in the folders `wisp doctor` shows; delete those too for a
 clean slate.

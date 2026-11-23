@@ -8,7 +8,7 @@ const links = [
   { text: "Docs", href: "/docs/getting-started" },
   { text: "For agents", href: "/docs/agents" },
   { text: "Releases", href: "https://github.com/phrp720/wisp/releases" },
-  { text: "npm", href: "https://www.npmjs.com/package/@squaredasher/wisp" },
+  { text: "npm", href: "https://www.npmjs.com/package/@phrp720/wisp" },
   { text: "GitHub", href: "https://github.com/phrp720/wisp" },
 ];
 </script>

@@ -7,11 +7,11 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "pnpm --filter @squaredasher/wisp build",
-    "test": "pnpm --filter @squaredasher/wisp test",
-    "typecheck": "pnpm --filter @squaredasher/wisp typecheck",
-    "spec": "pnpm --filter @squaredasher/wisp spec",
-    "compile": "pnpm --filter @squaredasher/wisp compile",
+    "build": "pnpm --filter @phrp720/wisp build",
+    "test": "pnpm --filter @phrp720/wisp test",
+    "typecheck": "pnpm --filter @phrp720/wisp typecheck",
+    "spec": "pnpm --filter @phrp720/wisp spec",
+    "compile": "pnpm --filter @phrp720/wisp compile",
     "website:dev": "pnpm --filter wisp-website dev",
     "website:build": "pnpm --filter wisp-website build",
     "website:deploy": "pnpm --filter wisp-website deploy"

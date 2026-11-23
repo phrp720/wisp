@@ -31,7 +31,7 @@ onBeforeUnmount(() => timers.forEach(clearTimeout));
 const installs = [
   { tab: "macOS & Linux", command: "curl -fsSL https://willowisp.dev/install.sh | sh" },
   { tab: "Windows", command: "" },
-  { tab: "npm", command: "npm install -g @squaredasher/wisp" },
+  { tab: "npm", command: "npm install -g @phrp720/wisp" },
 ];
 const tab = ref(0);
 const copied = ref("");

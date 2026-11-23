@@ -11,8 +11,8 @@
       "color": "#a78bfa",
       "steps": [
         { "folder": "cli/src" },
-        { "run": "pnpm --filter @squaredasher/wisp test:watch", "label": "tests (watch)" },
-        { "run": "pnpm --filter @squaredasher/wisp exec tsc -p tsconfig.json --noEmit --watch --preserveWatchOutput", "label": "typecheck (watch)" }
+        { "run": "pnpm --filter @phrp720/wisp test:watch", "label": "tests (watch)" },
+        { "run": "pnpm --filter @phrp720/wisp exec tsc -p tsconfig.json --noEmit --watch --preserveWatchOutput", "label": "typecheck (watch)" }
       ]
     },
     {
@@ -39,7 +39,7 @@
       "color": "#60a5fa",
       "steps": [
         { "pipeline": "Make wisp-dev", "label": "make" },
-        { "run": "pnpm --filter @squaredasher/wisp exec tsc -p tsconfig.json --watch --preserveWatchOutput", "label": "rebuild wisp-dev as you edit", "after": "make" }
+        { "run": "pnpm --filter @phrp720/wisp exec tsc -p tsconfig.json --watch --preserveWatchOutput", "label": "rebuild wisp-dev as you edit", "after": "make" }
       ],
       "down": [{ "run": "rm -f \"$HOME/.local/bin/wisp-dev\"", "label": "remove wisp-dev" }]
     },
@@ -84,7 +84,7 @@
         { "url": "https://github.com/phrp720/wisp/actions", "label": "CI runs" },
         { "url": "https://github.com/phrp720/wisp/releases", "label": "Releases" },
         { "url": "https://willowisp.dev", "label": "Live website" },
-        { "url": "https://www.npmjs.com/package/@squaredasher/wisp", "label": "npm package" }
+        { "url": "https://www.npmjs.com/package/@phrp720/wisp", "label": "npm package" }
       ]
     }
   ]

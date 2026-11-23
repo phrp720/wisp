@@ -12,7 +12,7 @@ matches the installed version:
 wisp help agents
 ```
 
-If `wisp` is not installed, ask the user before installing it (`npm install -g @squaredasher/wisp`).
+If `wisp` is not installed, ask the user before installing it (`npm install -g @phrp720/wisp`).
 
 ## The loop
 
