@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { cellWidth, clip, dagText, drawDag, layerDag, type DagNode } from "../../../src/tui/components/dag.js";
+import { cellWidth, clip, dagText, drawDag, layerDag, reduceDeps, type DagNode } from "../../../src/tui/components/dag.js";
 
 const step = (label: string, ...after: number[]): DagNode => ({ mark: "·", label, after });
 const draw = (nodes: DagNode[], width = 120, boxed = false, ascii = false) => dagText(drawDag(nodes, { width, boxed, ascii }));
@@ -25,9 +25,17 @@ describe("drawing a pipeline", () => {
   });
 
   it("carries an edge that skips a column straight past it", () => {
-    expect(draw([step("a"), step("b", 0), step("c", 1), step("d", 0, 2)])).toEqual([
-      "· a ─┬─▶ · b ───▶ · c ─┬─▶ · d",
-      "     ╰─────────────────╯",
+    expect(draw([step("a"), step("b", 0), step("c", 1), step("web"), step("d", 2, 3)])).toEqual([
+      "· a ─────▶ · b ───▶ · c ─┬─▶ · d",
+      "· web ───────────────────╯",
+    ]);
+  });
+
+  it("leaves out a line another path already implies", () => {
+    expect(reduceDeps([step("postgres"), step("port", 0), step("api", 0, 1), step("web"), step("open", 2, 3)])).toEqual([[], [0], [1], [], [2, 3]]);
+    expect(draw([step("postgres"), step("port", 0), step("api", 0, 1), step("web"), step("open", 2, 3)])).toEqual([
+      "· postgres ───▶ · port ───▶ · api ─┬─▶ · open",
+      "· web ─────────────────────────────╯",
     ]);
   });
 

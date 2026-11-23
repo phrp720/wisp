@@ -94,6 +94,23 @@ export function layerDag(nodes: DagNode[]): number[] {
   return layer;
 }
 
+export function reduceDeps(nodes: DagNode[], layer: number[] = layerDag(nodes)): number[][] {
+  const deps = nodes.map((node, at) => [...new Set(node.after)].filter((dep) => dep !== at && dep >= 0 && dep < nodes.length && (layer[dep] as number) < (layer[at] as number)));
+  const above: (Set<number> | undefined)[] = nodes.map(() => undefined);
+  const ancestors = (at: number): Set<number> => {
+    const known = above[at];
+    if (known) return known;
+    const found = new Set<number>();
+    above[at] = found;
+    for (const dep of deps[at] as number[]) {
+      found.add(dep);
+      for (const higher of ancestors(dep)) found.add(higher);
+    }
+    return found;
+  };
+  return deps.map((own) => own.filter((dep) => !own.some((other) => other !== dep && ancestors(other).has(dep))));
+}
+
 function buildItems(nodes: DagNode[]): Item[] {
   const layer = layerDag(nodes);
   const items: Item[] = nodes.map((_node, at) => ({ layer: layer[at] as number, node: at, preds: [], succs: [] }));
@@ -104,10 +121,9 @@ function buildItems(nodes: DagNode[]): Item[] {
     (items[to] as Item).preds.push(from);
   };
   const dummies = new Map<string, number>();
-  nodes.forEach((node, at) => {
-    for (const dep of new Set(node.after)) {
-      if (dep === at || dep < 0 || dep >= nodes.length) continue;
-      if ((layer[dep] as number) >= (layer[at] as number)) continue;
+  const direct = reduceDeps(nodes, layer);
+  nodes.forEach((_node, at) => {
+    for (const dep of direct[at] as number[]) {
       let previous = dep;
       for (let through = (layer[dep] as number) + 1; through < (layer[at] as number); through += 1) {
         const key = `${dep}:${through}`;

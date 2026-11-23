@@ -59,10 +59,11 @@ export function fitGraph(nodes: GraphNode[], width: number, budget: number, glyp
   if (!hasEdges(nodes) || budget < 2) return undefined;
   const ascii = glyphs.border !== "round";
   const dag = nodes.map((node) => ({ mark: nodeMark(node, glyphs).char, label: node.label, detail: node.detail, after: node.after }));
-  for (const boxed of [true, false]) {
-    const lines = drawDag(dag, { width, boxed, ascii });
-    if (lines.length + 1 <= budget) return { lines, nodes, compact: !boxed, height: lines.length + 1 };
-  }
+  const boxes = drawDag(dag, { width, boxed: true, ascii });
+  const wraps = boxes.some((line) => line.length === 0);
+  if (!wraps && boxes.length + 1 <= budget) return { lines: boxes, nodes, compact: false, height: boxes.length + 1 };
+  const lines = drawDag(dag, { width, boxed: false, ascii });
+  if (lines.length + 1 <= budget) return { lines, nodes, compact: true, height: lines.length + 1 };
   for (let most = budget - 1; most >= 2; most -= 1) {
     const collapsed = collapseDag(dag, most);
     if (collapsed.nodes.length === dag.length) continue;
