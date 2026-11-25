@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 
 import { WispError, describe, isNotFound } from "./errors.js";
 import { expandHome, readJson, trustPath, withLock, writeJson } from "./paths.js";
+import { diffLines, type DiffLine } from "./text/diff.js";
 import type { TrustFile, TrustState, TrustedProject } from "./types.js";
 
 /**
@@ -87,7 +88,8 @@ export async function trustStateOf(file: string, hash?: string): Promise<TrustSt
  */
 export async function trustProject(file: string, expectedHash?: string): Promise<TrustedProject> {
   const path = absolutePath(file);
-  const hash = await hashProjectFile(path);
+  const bytes = await readTrustedBytes(path);
+  const hash = hashContents(bytes.main, bytes.local);
   if (expectedHash && expectedHash !== hash) {
     throw new WispError(
       `${path} changed while you were reading it — nothing was trusted. Look again and re-run \`wisp trust\``,
@@ -100,6 +102,7 @@ export async function trustProject(file: string, expectedHash?: string): Promise
     const store = await loadTrust();
     const kept = store.trusted.filter((entry) => entry.path !== path);
     await writeJson(trustPath(), { version: TRUST_VERSION, trusted: [...kept, grant] });
+    await writeJson(approvedPath(path), { hash, main: bytes.main.toString("utf8"), ...(bytes.local ? { local: bytes.local.toString("utf8") } : {}) });
   });
 
   return grant;
@@ -114,6 +117,7 @@ export async function revokeProject(file: string): Promise<boolean> {
     if (kept.length === store.trusted.length) return false;
 
     await writeJson(trustPath(), { version: TRUST_VERSION, trusted: kept });
+    await rm(approvedPath(path), { force: true });
     return true;
   });
 }
@@ -148,5 +152,49 @@ function absolutePath(file: string): string {
     return realpathSync(path);
   } catch {
     return path;
+  }
+}
+
+function approvedPath(path: string): string {
+  return join(dirname(trustPath()), "approved", `${createHash("sha256").update(path).digest("hex").slice(0, 32)}.json`);
+}
+
+export interface TrustChange {
+  file: string;
+  lines: DiffLine[];
+}
+
+export interface ChangesSinceTrust {
+  trustedAt: string;
+  changes: TrustChange[];
+}
+
+export async function changesSinceTrust(file: string): Promise<ChangesSinceTrust | undefined> {
+  const path = absolutePath(file);
+  const grant = (await listTrustedProjects()).find((entry) => entry.path === path);
+  if (!grant) return undefined;
+  const approved = await readJson(approvedPath(path));
+  if (typeof approved !== "object" || approved === null) return undefined;
+  const { hash, main, local } = approved as Record<string, unknown>;
+  if (hash !== grant.hash || typeof main !== "string") return undefined;
+
+  const now = await readTrustedBytes(path).catch(() => undefined);
+  if (!now) return undefined;
+  const compare = (name: string, before: string | undefined, after: string | undefined): TrustChange[] => {
+    const lines = diffLines(readable(before), readable(after));
+    return lines.some((line) => line.kind !== "same") ? [{ file: name, lines }] : [];
+  };
+  return {
+    trustedAt: grant.at,
+    changes: [...compare(path, main, now.main.toString("utf8")), ...compare(localFileFor(path), typeof local === "string" ? local : undefined, now.local?.toString("utf8"))],
+  };
+}
+
+function readable(text: string | undefined): string {
+  if (text === undefined) return "";
+  try {
+    return JSON.stringify(JSON.parse(text), null, 2);
+  } catch {
+    return text.replace(/\n$/, "");
   }
 }

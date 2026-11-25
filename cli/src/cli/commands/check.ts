@@ -5,8 +5,10 @@ import { tildify } from "../../core/paths.js";
 import { PROJECT_FILE, checkProject, findProjectFile } from "../../core/project/index.js";
 import { bold, counts, cyan, dim, green, kindLabel, plural, title, yellow } from "../lib/format.js";
 import { emitJson } from "../lib/context.js";
+import { changesSinceTrust } from "../../core/trust.js";
+import { unifiedDiff } from "../../core/text/diff.js";
 import type { CommandDef } from "../lib/define.js";
-import { countDiagnostics, named, printPipelines, printDiagnostics, trustLine, whereLine } from "../lib/render.js";
+import { countDiagnostics, printChanges, named, printPipelines, printDiagnostics, trustLine, whereLine } from "../lib/render.js";
 
 export const check: CommandDef<{ json?: boolean }> = {
   name: "check",
@@ -24,6 +26,7 @@ export const check: CommandDef<{ json?: boolean }> = {
     const read = await checkProject(file);
     const { errors, warnings } = countDiagnostics(read.diagnostics);
 
+    const since = read.trust === "stale" ? await changesSinceTrust(read.workspace.file) : undefined;
     if (options.json) {
       if (errors > 0) process.exitCode = 1;
       return emitJson({
@@ -36,6 +39,7 @@ export const check: CommandDef<{ json?: boolean }> = {
         diagnostics: read.diagnostics,
         commands: read.declaredCommands,
         withheld: read.withheld,
+        ...(since ? { changedSinceTrust: { trustedAt: since.trustedAt, changes: since.changes.map((change) => ({ file: change.file, diff: unifiedDiff(change.lines) })) } } : {}),
       });
     }
 
@@ -50,8 +54,12 @@ export const check: CommandDef<{ json?: boolean }> = {
 
     // The reason to read a file before trusting it: everything that would run, in full,
     // always. You cannot decide about something you have to open another window to see.
-    if (read.declaredCommands.length > 0 || read.withheld.length > 0) {
+    if (since) {
       console.log();
+      printChanges(since);
+    }
+    if (read.declaredCommands.length > 0 || read.withheld.length > 0) {
+      if (!since) console.log();
       console.log(`${bold("Runs code")} ${dim(read.workspace.trusted ? "— allowed" : "— waiting for `wisp trust`")}`);
       for (const command of read.declaredCommands) {
         const where = whereLine(command.cwd, dirname(read.workspace.file));

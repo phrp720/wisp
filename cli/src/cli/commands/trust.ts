@@ -2,11 +2,11 @@
 import { WispError } from "../../core/errors.js";
 import { tildify } from "../../core/paths.js";
 import { PROJECT_FILE, findProjectFile, readProjectFile } from "../../core/project/index.js";
-import { listTrustedProjects, revokeProject, trustProject } from "../../core/trust.js";
+import { changesSinceTrust, listTrustedProjects, revokeProject, trustProject } from "../../core/trust.js";
 import { bold, cyan, dim, green, plural, red, yellow } from "../lib/format.js";
 import { emitJson } from "../lib/context.js";
 import type { CommandDef } from "../lib/define.js";
-import { printWithheld } from "../lib/render.js";
+import { printChanges, printWithheld } from "../lib/render.js";
 import { Prompter } from "../lib/prompt.js";
 
 export const trust: CommandDef<{ revoke?: boolean; list?: boolean; yes?: boolean; json?: boolean }> = {
@@ -57,7 +57,10 @@ export const trust: CommandDef<{ revoke?: boolean; list?: boolean; yes?: boolean
     // Trust is granted to what you have read, so what you are granting it to is printed
     // first — every time, including the re-grant after a change. A prompt that asks
     // "trust this file?" without saying what is in it is a rubber stamp, not a decision.
-    printWithheld(read, options.json ? console.error : console.log);
+    const print = options.json ? console.error : console.log;
+    const since = read.trust === "stale" ? await changesSinceTrust(path) : undefined;
+    if (since) printChanges(since, print);
+    printWithheld(read, print);
 
     if (!process.stdin.isTTY) {
       throw new WispError("Trusting a project file is for a person at a terminal, not a script or an agent", "NEEDS_CONFIRMATION");

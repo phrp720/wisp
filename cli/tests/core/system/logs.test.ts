@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { failureOutput, filterLog, readLog } from "../../../src/core/system/processes.js";
+import { failureOutput, filterLog, readLog, restartsIn } from "../../../src/core/system/processes.js";
 import { RESTART_MARK } from "../../../src/core/system/shell.js";
 
 let dir: string;
@@ -61,5 +61,21 @@ describe("failureOutput", () => {
 
   it("is empty for a log that is missing", async () => {
     expect(await failureOutput(join(dir, "missing.log"))).toBe("");
+  });
+});
+
+describe("restartsIn", () => {
+  it("counts restarts and keeps the exit code of the last one", () => {
+    const text = ["boot", `${RESTART_MARK} api (exited with 1) — try 1 of 10, in 1s`, "boot", `\u001b[2m${RESTART_MARK} api (exited with 137) — try 2 of 10, in 2s\u001b[0m`, "boot"].join("\n");
+    expect(restartsIn(text)).toEqual({ restarts: 2, lastExit: 137 });
+  });
+
+  it("says when it gave up, and with what code", () => {
+    const text = [`${RESTART_MARK} api (exited with 1) — try 10 of 10, in 30s`, "[wisp] api exited with 2 — gave up after 10 restarts"].join("\n");
+    expect(restartsIn(text)).toEqual({ restarts: 1, lastExit: 2, gaveUp: true });
+  });
+
+  it("is zero for a command that never restarted", () => {
+    expect(restartsIn("boot\nready")).toEqual({ restarts: 0 });
   });
 });

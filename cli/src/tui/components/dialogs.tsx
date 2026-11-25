@@ -1,11 +1,14 @@
 /** Questions that need an answer before going on: trusting a file, setting a folder up. */
 
 import { Box, type DOMElement, Text } from "ink";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useKeys } from "../terminal/keys.js";
 import { tildify } from "../../core/paths.js";
 import type { WorkspaceRead } from "../../core/types.js";
+import type { ChangesSinceTrust } from "../../core/trust.js";
+import { hunks, type DiffLine } from "../../core/text/diff.js";
+import { ago } from "../../cli/lib/format.js";
 import { Choice } from "./forms.js";
 import type { Glyphs } from "../terminal/glyphs.js";
 import { type SetupSuggestion, windowed } from "../model.js";
@@ -13,16 +16,75 @@ import { useMouse, useRefs } from "../terminal/mouse.js";
 import { KIND } from "../state.js";
 import { TONE } from "../terminal/tones.js";
 
-export function TrustPanel({ read, then, glyphs, height, onAnswer }: { read: WorkspaceRead; then?: string; glyphs: Glyphs; height: number; onAnswer: (yes: boolean) => void }) {
+type DiffRow = { kind: "file" | "gap" | DiffLine["kind"]; text: string };
+
+function diffRows(since: ChangesSinceTrust): DiffRow[] {
+  return since.changes.flatMap((change) => [
+    { kind: "file" as const, text: tildify(change.file) },
+    ...hunks(change.lines).flatMap((hunk, at) => [...(at > 0 ? [{ kind: "gap" as const, text: "…" }] : []), ...hunk]),
+  ]);
+}
+
+function DiffText({ row }: { row: DiffRow }) {
+  if (row.kind === "file") return <Text dimColor wrap="truncate-end">{`  ${row.text}`}</Text>;
+  if (row.kind === "gap") return <Text dimColor>{"    …"}</Text>;
+  if (row.kind === "added") return <Text color="green" wrap="truncate-end">{`  + ${row.text}`}</Text>;
+  if (row.kind === "removed") return <Text color="red" wrap="truncate-end">{`  - ${row.text}`}</Text>;
+  return <Text dimColor wrap="truncate-end">{`    ${row.text}`}</Text>;
+}
+
+export function TrustPanel({ read, then, glyphs, height, loadChanges, onAnswer }: { read: WorkspaceRead; then?: string; glyphs: Glyphs; height: number; loadChanges?: (file: string) => Promise<ChangesSinceTrust | undefined>; onAnswer: (yes: boolean) => void }) {
+  const [since, setSince] = useState<ChangesSinceTrust | undefined>(undefined);
+  const [offset, setOffset] = useState(0);
+  useEffect(() => {
+    if (read.trust !== "stale" || !loadChanges) return;
+    let live = true;
+    void loadChanges(read.workspace.file)
+      .then((found) => {
+        if (live) setSince(found);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [read.workspace.file, read.trust, loadChanges]);
+
+  const rows = since ? diffRows(since) : [];
+  const room = Math.max(1, height - 12 - (then ? 1 : 0) + (since ? 1 : 0));
+  const listFloor = Math.min(read.withheld.length, 3);
+  const diffRoom = since ? Math.max(3, room - 3 - listFloor) : 0;
+  const diffShown = Math.min(rows.length || 1, diffRoom);
+  const maxOffset = Math.max(0, rows.length - diffShown);
+  const start = Math.min(offset, maxOffset);
+  const listRoom = Math.max(1, room - (since ? diffShown + 3 : 0));
+  const overflow = read.withheld.length > listRoom;
+  const listed = overflow ? read.withheld.slice(0, listRoom - 1) : read.withheld;
+
+  useKeys((_input, key) => {
+    if (key.upArrow) setOffset(Math.max(0, start - 1));
+    if (key.downArrow) setOffset(Math.min(maxOffset, start + 1));
+    if (key.pageUp) setOffset(Math.max(0, start - diffShown));
+    if (key.pageDown) setOffset(Math.min(maxOffset, start + diffShown));
+  }, { isActive: maxOffset > 0 });
+
+  const when = since ? ago(since.trustedAt) : "";
   return (
     <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor="yellow" paddingX={1}>
       <Text bold>{`Trust ${read.workspace.name}?`}</Text>
       <Text dimColor wrap="truncate-start">{tildify(read.workspace.file) + (read.workspace.local ? "  + local" : "")}</Text>
-      {read.trust === "stale" ? <Text color="yellow">this file has changed since you last trusted it</Text> : null}
+      {read.trust === "stale" && !since ? <Text color="yellow">this file has changed since you last trusted it</Text> : null}
       {then ? <Text color="yellow">{`"${then}" needs some of these. Run it without them and only part of it would start.`}</Text> : null}
       <Text> </Text>
+      {since ? (
+        <>
+          <Text color="yellow">{`Changed since you trusted it${when ? ` ${when} ago` : ""}:`}</Text>
+          {rows.length === 0 ? <Text dimColor>{"  only its formatting: nothing it does is different"}</Text> : rows.slice(start, start + diffShown).map((row, at) => <DiffText key={start + at} row={row} />)}
+          {maxOffset > 0 ? <Text dimColor>{`  lines ${start + 1}–${start + diffShown} of ${rows.length} · ↑↓ scroll`}</Text> : <Text> </Text>}
+          <Text> </Text>
+        </>
+      ) : null}
       <Text>{`It would be allowed to run ${read.withheld.length} thing${read.withheld.length === 1 ? "" : "s"}:`}</Text>
-      {windowed(read.withheld, 0, height - 12).items.map((item) => (
+      {listed.map((item) => (
         <Text key={item.id} wrap="truncate-end">
           <Text dimColor>{`  ${KIND[item.kind].padEnd(8)} `}</Text>
           <Text color="cyan">{tildify(item.value)}</Text>
@@ -30,6 +92,7 @@ export function TrustPanel({ read, then, glyphs, height, onAnswer }: { read: Wor
           {item.reason ? <Text dimColor>{` (${item.reason})`}</Text> : null}
         </Text>
       ))}
+      {overflow ? <Text dimColor>{`  … and ${read.withheld.length - listed.length} more (\`wisp check\` lists every one)`}</Text> : null}
       <Text> </Text>
       <Text dimColor>These run on your machine, as you. Any later edit to the file asks again.</Text>
       <Text> </Text>

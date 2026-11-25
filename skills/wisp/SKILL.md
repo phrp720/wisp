@@ -32,7 +32,9 @@ is `{"ok": false, "error": {"code": "…", "message": "…", "hint": "…"}}`.
 ## Never on the user's behalf
 
 - `wisp trust`. On `NOT_TRUSTED`, show the user what `wisp check` lists under "Runs code"
-  and ask them to approve it.
+  and ask them to approve it. If the file changed since they trusted it (`"trust": "stale"`,
+  from your edit or a `git pull`), show them the diff in `wisp check --json`'s
+  `changedSinceTrust` instead of the whole list.
 - `--yes` on a pipeline that asks first (`CONFIRM_NEEDED`). Ask the user its question, and
   pass `--yes` only once they agree.
 - `wisp notify`, `wisp completion --install` and `wisp hook`: these are the user's settings.

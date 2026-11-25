@@ -75,3 +75,24 @@ describe("wisp trust --json", () => {
     expect(JSON.parse(stdout.join("\n"))).toEqual({ path: file, trusted: false, changed: false, runsCode: false });
   });
 });
+
+describe("wisp trust after the file changed", () => {
+  it("shows what changed since it was last trusted, before the list it grants", async () => {
+    setTTY(true);
+    await trust.run([file], { yes: true });
+    await writeFile(file, JSON.stringify({ name: "Shop", pipelines: [{ label: "Check", steps: [{ run: "pnpm test --coverage", finishes: true }] }] }));
+    stdout.length = 0;
+    await trust.run([file], { yes: true });
+    const text = stdout.join("\n").replace(/\u001b\[[0-9;]*m/g, "");
+    expect(text).toContain("Changed since you trusted it");
+    expect(text).toContain('-           "run": "pnpm test",');
+    expect(text).toContain('+           "run": "pnpm test --coverage",');
+    expect(text.indexOf("Changed since")).toBeLessThan(text.indexOf("Would allow"));
+  });
+
+  it("shows no diff to a file trusted for the first time", async () => {
+    setTTY(true);
+    await trust.run([file], { yes: true });
+    expect(stdout.join("\n")).not.toContain("Changed since");
+  });
+});

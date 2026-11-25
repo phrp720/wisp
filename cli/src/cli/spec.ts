@@ -206,8 +206,12 @@ Running a pipeline that needs something not yet approved starts nothing: at a te
 shows the list and asks to trust and run; without one, or with \`--json\`, it exits 1 with
 the error code \`NOT_TRUSTED\`. \`--skip-untrusted\` runs only the approved part.
 
+A file that changed since it was trusted is \`stale\`: \`wisp check\` and \`wisp trust\` show
+what changed since that approval, the whole file and its local override, before the list.
+
 **Agents: never run \`wisp trust\` yourself. Show the user what \`wisp check\` lists
-under "Runs code" and ask them to approve it.**
+under "Runs code", and for a \`stale\` file the diff in \`changedSinceTrust\`, and ask them
+to approve it.**
 
 ## CLI
 
@@ -230,7 +234,7 @@ under "Runs code" and ask them to approve it.**
 | \`wisp history [pipeline \\| id] [--log <n>] [--json]\` | past runs, each step's result, duration and output; \`notified: [{ url, ok, problem? }]\` says which webhooks the run's notification reached |
 | \`wisp history [pipeline \\| id] --clear [--all]\` | delete a run, a pipeline's runs, or this project's (every project's with \`--all\`); runs still going are kept |
 | \`wisp hook <git-hook> <pipeline>\` · \`--list\` · \`--remove\` | run a pipeline from a git hook |
-| \`wisp ps [--all] [--json]\` · \`wisp logs <run> [-f] [-n <lines>] [--grep <pattern>] [--since-restart]\` · \`wisp stop <run> \\| --all\` | what Wisp has running; \`--grep\` keeps the lines that match (a regular expression, case ignored), \`--since-restart\` only its last restart and what it printed after |
+| \`wisp ps [--all] [--json]\` · \`wisp logs <run> [-f] [-n <lines>] [--grep <pattern>] [--since-restart]\` · \`wisp stop <run> \\| --all\` | what Wisp has running; in \`ps --json\`, \`restarts\` counts how often a command was brought back, \`lastExit\` is the code it last exited with, and \`gaveUp\` means it stopped restarting; \`--grep\` keeps the lines that match (a regular expression, case ignored), \`--since-restart\` only its last restart and what it printed after |
 | \`wisp scan <dir>\` | find project files under a directory |
 | \`wisp notify [failures\\|changes\\|all\\|off] [--test] [--reveal] [--json]\` · \`wisp notify screen on\\|off\` · \`wisp notify add <url> [workspace...]\` · \`wisp notify remove <url \\| n> [workspace...]\` | when Wisp tells the user about a run they might have missed (nobody watched it, or it took over 30s): a desktop notification (unless \`screen off\`: webhooks only), and every webhook for all workspaces or for the run's own (https only, or http to localhost). With no workspace, \`add\` is for every workspace and \`remove\` removes the webhook; \`--json\` lists \`webhooks: [{ number, url, workspaces, lastDelivery }]\`, \`workspaces: null\` meaning every one, \`lastDelivery\` \`{ at, ok, problem? }\` or null. The url is shown without its secret part; remove a webhook by its number. \`--reveal\` shows whole addresses: don't use it unless the user asks. \`changes\` tells once when a pipeline starts failing and once when it works again, for checks run from cron. The user's own setting: don't change it for them. \`WISP_NOTIFY=off\` silences one command |
 | \`wisp doctor [--json]\` | what works here, and where files live |
@@ -309,12 +313,19 @@ commands are not in \`steps\` but in \`withheld\`, so look at both.
 \`\`\`
 
 \`wisp check --json\`: \`errors\` and \`warnings\` count \`diagnostics\`; \`commands\` is every
-command the file declares, with where it runs.
+command the file declares, with where it runs. A \`stale\` file adds \`changedSinceTrust\`:
+when it was trusted, and a diff per file that changed, \`-\` and \`+\` lines with a little
+context, \`…\` between the parts.
 
 \`\`\`json
 { "file": "/…/.wisp.json", "trust": "untrusted", "errors": 0, "warnings": 1,
   "diagnostics": [{ "level": "warning", "at": "trust", "message": "2 commands declared but will not run", "hint": "…" }],
   "commands": [{ "label": "test", "run": "pnpm test", "cwd": "/…", "finishes": true }], "withheld": [] }
+\`\`\`
+
+\`\`\`json
+"changedSinceTrust": { "trustedAt": "2026-11-20T09:12:00.000Z", "changes": [{ "file": "/…/.wisp.json",
+  "diff": "          {\\n-           \\"run\\": \\"./deploy.sh\\",\\n+           \\"run\\": \\"./deploy.sh --force\\",\\n            \\"finishes\\": true" }] }
 \`\`\`
 
 \`wisp <pipeline> --json\` (and with \`--dry-run\`): how each step went. \`history\` is the run's

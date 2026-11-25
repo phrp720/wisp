@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { check } from "../../../src/cli/commands/check.js";
+import { trustProject } from "../../../src/core/trust.js";
 
 let dir: string;
 let printed: string[];
@@ -42,5 +43,38 @@ describe("wisp check --json", () => {
     const result = JSON.parse(printed.join("\n")) as { errors: number };
     expect(result.errors).toBe(0);
     expect(process.exitCode).toBeUndefined();
+  });
+});
+
+describe("wisp check --json on a file changed since it was trusted", () => {
+  it("gives the diff, so an agent can show it to the person who approves it", async () => {
+    const file = join(dir, ".wisp.json");
+    await writeFile(file, JSON.stringify({ name: "Shop", pipelines: [{ label: "Deploy", steps: [{ run: "./deploy.sh", finishes: true }] }] }));
+    await trustProject(file);
+    await writeFile(file, JSON.stringify({ name: "Shop", pipelines: [{ label: "Deploy", steps: [{ run: "./deploy.sh --force", finishes: true }] }] }));
+    await check.run([file], { json: true });
+    const result = JSON.parse(printed.join("\n")) as { trust: string; changedSinceTrust?: { trustedAt: string; changes: { file: string; diff: string }[] } };
+    expect(result.trust).toBe("stale");
+    expect(result.changedSinceTrust?.changes[0]?.diff).toContain('-           "run": "./deploy.sh",');
+    expect(result.changedSinceTrust?.changes[0]?.diff).toContain('+           "run": "./deploy.sh --force",');
+  });
+
+  it("prints the same diff without --json, above what runs", async () => {
+    const file = join(dir, ".wisp.json");
+    await writeFile(file, JSON.stringify({ name: "Shop", pipelines: [{ label: "Deploy", steps: [{ run: "./deploy.sh", finishes: true }] }] }));
+    await trustProject(file);
+    await writeFile(file, JSON.stringify({ name: "Shop", pipelines: [{ label: "Deploy", steps: [{ run: "./deploy.sh --force", finishes: true }] }] }));
+    await check.run([file], {});
+    const text = printed.join("\n").replace(/\u001b\[[0-9;]*m/g, "");
+    expect(text).toContain('+           "run": "./deploy.sh --force",');
+    expect(text.indexOf("Changed since")).toBeLessThan(text.indexOf("Runs code"));
+  });
+
+  it("leaves it out when the file is as it was trusted", async () => {
+    const file = join(dir, ".wisp.json");
+    await writeFile(file, JSON.stringify({ name: "Shop", pipelines: [{ label: "Deploy", steps: [{ run: "./deploy.sh", finishes: true }] }] }));
+    await trustProject(file);
+    await check.run([file], { json: true });
+    expect(JSON.parse(printed.join("\n"))).not.toHaveProperty("changedSinceTrust");
   });
 });
