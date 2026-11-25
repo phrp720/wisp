@@ -4,9 +4,11 @@ import { WispError } from "../../core/errors.js";
 import { tildify } from "../../core/paths.js";
 import {
   clearFinishedRuns,
+  filterLog,
   listRuns,
   logSize,
   matchRun,
+  readLog,
   stopRun,
   tail,
   type RunStatus,
@@ -84,17 +86,20 @@ function printTable(headings: string[], rows: string[][]): void {
   for (const row of rows) console.log(line(row));
 }
 
-export const logs: CommandDef<{ follow?: boolean; lines?: string }> = {
+export const logs: CommandDef<{ follow?: boolean; lines?: string; grep?: string; sinceRestart?: boolean }> = {
   name: "logs",
   summary: "Show what a background command has printed",
   args: [["[run]", "its id or name; omitted means the one running, if there is one"]],
   options: [
     ["-f, --follow", "keep printing as it writes"],
     ["-n, --lines <count>", "how many lines from the end", "100"],
+    ["--grep <pattern>", "only lines that match it (a regular expression, case ignored)"],
+    ["--since-restart", "only what it printed since it last restarted"],
   ],
-  examples: ["wisp logs", "wisp logs dev -f", "wisp logs 3fa9"],
+  examples: ["wisp logs", "wisp logs dev -f", "wisp logs 3fa9", "wisp logs api --grep error", "wisp logs api --since-restart"],
 
   async run([query], options) {
+    const grep = options.grep === undefined ? undefined : pattern(options.grep);
     const run = pick(query, await listRuns());
     const lines = Number.parseInt(options.lines ?? "100", 10) || 100;
 
@@ -106,8 +111,23 @@ export const logs: CommandDef<{ follow?: boolean; lines?: string }> = {
     const log = run.log;
 
     // macOS's `script` opens a log with an echoed ^D and two backspaces; not output.
-    process.stdout.write((await tail(log, lines)).replace(/^\^D\u0008\u0008/, ""));
+    if (grep || options.sinceRestart) {
+      const found = await readLog(log, { lines, ...(grep ? { grep } : {}), ...(options.sinceRestart ? { sinceRestart: true } : {}) });
+      const text = found.join("\n").replace(/^\^D\u0008\u0008/, "");
+      if (text) process.stdout.write(text.endsWith("\n") ? text : `${text}\n`);
+    } else {
+      process.stdout.write((await tail(log, lines)).replace(/^\^D\u0008\u0008/, ""));
+    }
     if (!options.follow) return;
+
+    let partial = "";
+    const write = (chunk: string) => {
+      if (!grep) return void process.stdout.write(chunk);
+      const pieces = (partial + chunk).split("\n");
+      partial = pieces.pop() ?? "";
+      const matched = filterLog(pieces.join("\n"), { lines: Number.MAX_SAFE_INTEGER, grep });
+      if (pieces.length > 0 && matched.length > 0) process.stdout.write(`${matched.join("\n")}\n`);
+    };
 
     // Polled rather than watched: `fs.watch` is unreliable across filesystems, and twice a
     // second is all a log needs.
@@ -120,7 +140,7 @@ export const logs: CommandDef<{ follow?: boolean; lines?: string }> = {
       if (size > offset) {
         await new Promise<void>((resolve, reject) => {
           createReadStream(log, { start: offset, end: size - 1 })
-            .on("data", (chunk) => process.stdout.write(chunk))
+            .on("data", (chunk) => write(chunk.toString()))
             .on("end", resolve)
             .on("error", reject);
         });
@@ -129,6 +149,14 @@ export const logs: CommandDef<{ follow?: boolean; lines?: string }> = {
     }
   },
 };
+
+function pattern(source: string): RegExp {
+  try {
+    return new RegExp(source, "i");
+  } catch (error) {
+    throw new WispError(`--grep "${source}" is not a pattern Wisp can read: ${error instanceof Error ? error.message : String(error)}`, "INVALID_INPUT", "Plain words work too: `wisp logs api --grep error`");
+  }
+}
 
 export const stop: CommandDef<{ all?: boolean }> = {
   name: "stop",

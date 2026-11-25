@@ -11,6 +11,7 @@ import { ago, bold, cyan, dim, green, kindLabel, plural, red, title, yellow } fr
 import { emitJson, everything, maybeProject, resolveRun } from "../lib/context.js";
 import type { CommandDef } from "../lib/define.js";
 import { beforeRun } from "../lib/ask.js";
+import { withFailureOutput } from "../lib/failures.js";
 import { named, resultLine } from "../lib/render.js";
 
 /** The bolt a lifecycle command means, by the same rules as running one. */
@@ -143,7 +144,10 @@ async function showEntry(entry: HistoryEntry, options: { log?: string; json?: bo
     process.stdout.write(await readFile(step.log, "utf8").catch(() => ""));
     return;
   }
-  if (options.json) return emitJson(publicRun(entry));
+  if (options.json) {
+    const run = publicRun(entry);
+    return emitJson({ ...run, steps: await withFailureOutput(run.steps) });
+  }
 
   const mark = entry.running ? cyan("running") : entry.interrupted ? yellow("interrupted") : entry.ok ? green("passed") : entry.cancelled ? dim("cancelled") : red("failed");
   const context = [TRIGGERS[entry.trigger ?? ""] ? `from ${TRIGGERS[entry.trigger ?? ""]}` : "", entry.git ? `${entry.git.branch} @ ${entry.git.commit}` : ""].filter(Boolean).join(" · ");
@@ -297,7 +301,7 @@ function hooksDir(): string {
   return isAbsolute(output) ? output : resolve(output);
 }
 
-function publicRun(entry: HistoryEntry): Record<string, unknown> {
+function publicRun(entry: HistoryEntry) {
   const { bolt, steps, pending, ...rest } = entry;
   const step = ({ bolt: group, ...other }: HistoryEntry["steps"][number]) => ({ ...other, ...(group ? { pipeline: group } : {}) });
   return { ...rest, pipeline: bolt, steps: steps.map(step), ...(pending ? { pending: pending.map(step) } : {}) };

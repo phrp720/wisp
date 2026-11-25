@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { currentOS, privateDir, readJson, stateDir, withLock, writeJson } from "../paths.js";
 import { cleanOutput, stripAnsi } from "../text/ansi.js";
 import { listHistory } from "../history.js";
-import { exitFileFor, recordExit, underTerminal } from "./shell.js";
+import { exitFileFor, recordExit, RESTART_MARK, underTerminal } from "./shell.js";
 import type { Invocation } from "../types.js";
 
 /**
@@ -584,6 +584,39 @@ export async function tail(file: string | undefined, lines: number, maxBytes = 2
   } finally {
     await handle.close();
   }
+}
+
+export interface LogFilter {
+  lines: number;
+  grep?: RegExp;
+  sinceRestart?: boolean;
+}
+
+export function filterLog(text: string, filter: LogFilter): string[] {
+  let lines = text.split(/\r?\n/);
+  if (filter.sinceRestart) {
+    const last = lines.findLastIndex((line) => stripAnsi(line).includes(RESTART_MARK));
+    if (last >= 0) lines = lines.slice(last);
+  }
+  if (filter.grep) {
+    const pattern = filter.grep;
+    lines = lines.filter((line) => pattern.test(stripAnsi(line)));
+  }
+  return lines.slice(-filter.lines);
+}
+
+export async function readLog(file: string, filter: LogFilter): Promise<string[]> {
+  const whole = filter.grep !== undefined || filter.sinceRestart === true;
+  const text = whole ? await tail(file, Number.MAX_SAFE_INTEGER, LOG_CAP) : await tail(file, filter.lines);
+  return filterLog(text, filter);
+}
+
+export const FAILURE_LINES = 40;
+
+export async function failureOutput(file: string, lines = FAILURE_LINES): Promise<string> {
+  const plain = stripAnsi(cleanOutput(await tail(file, Number.MAX_SAFE_INTEGER, 64 * 1024))).split("\n");
+  while (plain.length > 0 && (plain[plain.length - 1] as string).trim() === "") plain.pop();
+  return plain.slice(-lines).join("\n");
 }
 
 /** Bytes a log has grown to, for following it. */

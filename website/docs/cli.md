@@ -37,7 +37,7 @@ How names are matched: [Running pipelines](./running-pipelines#how-wisp-reads-a-
 | Command | |
 |---|---|
 | `wisp ps` | what's running: status, uptime, restarts; `--all` adds finished ones, `--clear` forgets them |
-| `wisp logs <name>` | what one printed; `-f` follows it, `-n 500` shows more lines |
+| `wisp logs <name>` | what one printed; `-f` follows it, `-n 500` shows more lines, `--grep error` keeps the lines that match, `--since-restart` only what it printed since it last restarted |
 | `wisp stop <name>` | stop one, and everything it started; `--all` stops every one |
 | `wisp history` | past runs of this project; `--all` for every project |
 | `wisp history <id>` | one run, step by step; `--log 3` prints what step 3 printed |
