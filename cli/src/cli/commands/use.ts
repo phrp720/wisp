@@ -6,6 +6,7 @@ import { beforeRun } from "../lib/ask.js";
 import type { RunMode, SwitchOptions, SwitchResult, SwitchTarget, TargetResult, Workspace } from "../../core/types.js";
 import { bold, cyan, dim, green, kindLabel, plural, red, title, yellow } from "../lib/format.js";
 import { emitJson, resolveRun } from "../lib/context.js";
+import { withFailureOutput } from "../lib/failures.js";
 import type { CommandDef } from "../lib/define.js";
 import { diagnosticSummary, named as showNamed, printWithheld, resultLine, trustLine } from "../lib/render.js";
 import { tildify } from "../../core/paths.js";
@@ -167,7 +168,7 @@ export const use: CommandDef<UseOptions> = {
         dryRun: result.dryRun,
         history: result.historyId ?? null,
         ...(result.inputs ? { inputs: result.inputs } : {}),
-        steps: result.targets,
+        steps: await withFailureOutput(result.targets),
         running: result.targets.flatMap((target) => (target.run ? [{ label: target.label, run: target.run }] : [])),
         waitingForTrust: untrusted.map(({ kind, label: name, value, cwd }) => ({ kind, label: name, value, ...(cwd ? { cwd } : {}) })),
       });

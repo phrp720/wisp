@@ -15,6 +15,9 @@ wisp history <id>              # one run, step by step
 wisp history <id> --log 3      # what step 3 printed
 ```
 
+With `--json`, a step that failed carries its last 40 lines in `output`, so a script or an
+agent sees what broke without asking again.
+
 ## In the dashboard
 
 The History tab (`3`) lists pipelines on the left and their runs on the right. Open a run

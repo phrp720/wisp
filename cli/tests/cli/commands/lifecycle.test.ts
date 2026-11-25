@@ -57,6 +57,17 @@ describe("wisp history", () => {
     expect(names).toContain("ccc111ccc111 Shop");
     expect(names).toContain("ddd111ddd111 Gone");
   });
+  it("gives a failed step's last lines in a run's JSON", async () => {
+    const log = join(dir, "1.log");
+    await writeFile(log, "building\n\u001b[31mTypeError\u001b[0m: x is undefined\n");
+    const step = { kind: "command" as const, label: "build", value: "pnpm build", durationMs: 5, log };
+    await recordHistory({ ...run("fff111fff111", "Check", file), ok: false, steps: [{ ...step, label: "lint", ok: true }, { ...step, ok: false, error: "exited with code 1" }] });
+    vi.spyOn(process, "cwd").mockReturnValue(dir);
+    await history.run(["fff111"], { json: true });
+    const steps = (JSON.parse(printed.join("\n")) as { steps: { output?: string }[] }).steps;
+    expect(steps[0]?.output).toBeUndefined();
+    expect(steps[1]?.output).toBe("building\nTypeError: x is undefined");
+  });
   it("shows the values a run was given", async () => {
     await recordHistory({ ...run("eee111eee111", "Check", file), inputs: { env: "staging", tag: "v2" } });
     vi.spyOn(process, "cwd").mockReturnValue(dir);

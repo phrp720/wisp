@@ -7,6 +7,8 @@ child processes included.
 ```bash
 wisp ps              # what's running: status, uptime, restarts
 wisp logs api -f     # follow one
+wisp logs api --grep error      # only the lines that match
+wisp logs api --since-restart   # only what it printed since it last restarted
 wisp stop api        # stop one, and everything it started
 ```
 

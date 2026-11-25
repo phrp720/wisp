@@ -225,7 +225,7 @@ under "Runs code" and ask them to approve it.**
 | `wisp history [pipeline \| id] [--log <n>] [--json]` | past runs, each step's result, duration and output; `notified: [{ url, ok, problem? }]` says which webhooks the run's notification reached |
 | `wisp history [pipeline \| id] --clear [--all]` | delete a run, a pipeline's runs, or this project's (every project's with `--all`); runs still going are kept |
 | `wisp hook <git-hook> <pipeline>` · `--list` · `--remove` | run a pipeline from a git hook |
-| `wisp ps [--all] [--json]` · `wisp logs <run> [-f]` · `wisp stop <run> \| --all` | what Wisp has running |
+| `wisp ps [--all] [--json]` · `wisp logs <run> [-f] [-n <lines>] [--grep <pattern>] [--since-restart]` · `wisp stop <run> \| --all` | what Wisp has running; `--grep` keeps the lines that match (a regular expression, case ignored), `--since-restart` only its last restart and what it printed after |
 | `wisp scan <dir>` | find project files under a directory |
 | `wisp notify [failures\|changes\|all\|off] [--test] [--reveal] [--json]` · `wisp notify screen on\|off` · `wisp notify add <url> [workspace...]` · `wisp notify remove <url \| n> [workspace...]` | when Wisp tells the user about a run they might have missed (nobody watched it, or it took over 30s): a desktop notification (unless `screen off`: webhooks only), and every webhook for all workspaces or for the run's own (https only, or http to localhost). With no workspace, `add` is for every workspace and `remove` removes the webhook; `--json` lists `webhooks: [{ number, url, workspaces, lastDelivery }]`, `workspaces: null` meaning every one, `lastDelivery` `{ at, ok, problem? }` or null. The url is shown without its secret part; remove a webhook by its number. `--reveal` shows whole addresses: don't use it unless the user asks. `changes` tells once when a pipeline starts failing and once when it works again, for checks run from cron. The user's own setting: don't change it for them. `WISP_NOTIFY=off` silences one command |
 | `wisp doctor [--json]` | what works here, and where files live |
@@ -257,7 +257,8 @@ https://willowisp.dev/docs/use-cases.md; every docs page is Markdown at `/docs/<
 6. `wisp <pipeline> --inline` to run and read the output directly, or `--detach` for
    servers and then `wisp logs <name>` / `wisp ps --json` / `wisp down <pipeline>`.
 7. For checks, mark each command `"finishes": true`: `wisp Check --json` gives `ok` and
-   a `history` id; `wisp history <id> --log <n>` prints the failing step's output.
+   a `history` id, and a failed step's last 40 lines are in its `output`. For more,
+   `wisp history <id> --log <n>` prints the step's whole output.
 
 ## The TUI
 
@@ -312,7 +313,8 @@ command the file declares, with where it runs.
 ```
 
 `wisp <pipeline> --json` (and with `--dry-run`): how each step went. `history` is the run's
-id (`null` for a dry run); `log` is a step's output file; a failed step has `error`.
+id (`null` for a dry run); `log` is a step's output file; a failed step has `error`
+and, when it kept its output, `output`: its last 40 lines, without colours.
 A command without `"finishes": true` keeps running in the background: its `ok` means it
 started, not that it succeeded. `running` lists those, with the id for `wisp logs <run>`.
 
@@ -320,12 +322,14 @@ started, not that it succeeded. `running` lists those, with the id for `wisp log
 { "workspace": "Shop", "pipeline": "Check", "ok": false, "dryRun": false, "history": "54b4b6af2c92",
   "steps": [
     { "kind": "command", "name": "lint", "value": "pnpm lint", "ok": true, "durationMs": 720, "log": "/…/1.log" },
-    { "kind": "command", "name": "test", "value": "pnpm test", "ok": false, "error": "exited with code 3", "durationMs": 526, "log": "/…/2.log" }],
+    { "kind": "command", "name": "test", "value": "pnpm test", "ok": false, "error": "exited with code 3", "durationMs": 526, "log": "/…/2.log",
+      "output": "FAIL src/cart.test.ts\n  expected 3, got 2" }],
   "running": [], "waitingForTrust": [] }
 ```
 
 `wisp history <id> --json`: the same steps with `stage` (when each could start), plus
 `number`, `trigger` (`cli`, `hook`, `tui` or `retry`), `startedAt` and `finishedAt`.
+A run asked for by its id gives each failed step's `output` too.
 `wisp history <id> --log <n>` prints step n's output as plain text.
 
 ### Error codes

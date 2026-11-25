@@ -89,6 +89,16 @@ describe("a run that fails", () => {
     expect(result.ok).toBe(false);
     expect(process.exitCode).toBe(1);
   });
+
+  it("puts the failed step's last lines in the JSON, and none on a step that passed", async () => {
+    await writeFile(mine, JSON.stringify({ name: "Checks", pipelines: [{ label: "Lint", steps: [{ run: "echo fine", label: "first", finishes: true }, { run: "echo 'src/a.ts: 1 problem'; exit 3", label: "lint", after: "first", finishes: true }] }] }));
+    await use.run([mine, "Lint"], { json: true });
+    const result = JSON.parse(printed.join("\n")) as { steps: { name: string; ok: boolean; output?: string }[] };
+    const [first, lint] = result.steps;
+    expect(first?.output).toBeUndefined();
+    expect(lint?.ok).toBe(false);
+    expect(lint?.output).toContain("src/a.ts: 1 problem");
+  });
 });
 
 describe("a pipeline that asks before it runs", () => {

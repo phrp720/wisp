@@ -22,7 +22,9 @@ If `wisp` is not installed, ask the user before installing it (`npm install -g @
 3. `wisp <pipeline> --dry-run --json` to see the plan.
 4. `wisp <pipeline> --inline` for checks (read the output directly), or `--detach` for
    servers, then `wisp ps --json`, `wisp logs <name>` and `wisp down <pipeline>`.
-5. After a failure: `wisp history <id> --log <n>` prints the failing step's output.
+5. After a failure: under `--json`, each failed step's `output` holds its last 40 lines. For
+   the whole of it, `wisp history <id> --log <n>`. For a server, `wisp logs <name> --grep error`
+   or `--since-restart`.
 
 Add `--json` to anything you parse. `"ok": false` comes with exit code 1, and a refusal
 is `{"ok": false, "error": {"code": "…", "message": "…", "hint": "…"}}`.
