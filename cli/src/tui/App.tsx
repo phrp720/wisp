@@ -1094,6 +1094,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
       ) : view.kind === "trust" ? (
         <TrustPanel
           read={view.read}
+          loadChanges={services.changesSinceTrust}
           {...(view.then ? { then: view.then } : {})}
           glyphs={glyphs}
           height={bodyHeight}

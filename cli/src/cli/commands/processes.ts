@@ -9,6 +9,7 @@ import {
   logSize,
   matchRun,
   readLog,
+  restartsOf,
   stopRun,
   tail,
   type RunStatus,
@@ -36,7 +37,8 @@ export const ps: CommandDef<{ all?: boolean; clear?: boolean; json?: boolean }> 
 
     const runs = await listRuns();
     const shown = options.all ? runs : runs.filter((run) => run.alive);
-    if (options.json) return emitJson(shown);
+    const restarts = await Promise.all(shown.map(restartsOf));
+    if (options.json) return emitJson(shown.map((run, at) => ({ ...run, ...restarts[at] })));
 
     if (shown.length === 0) {
       const finished = runs.length - runs.filter((run) => run.alive).length;
@@ -45,29 +47,26 @@ export const ps: CommandDef<{ all?: boolean; clear?: boolean; json?: boolean }> 
     }
 
     // A table, as a process manager shows one: what it is, how it is, for how long.
-    const { tail: readTail } = await import("../../core/system/processes.js");
-    const rows = await Promise.all(
-      shown.map(async (run) => {
-        const restarts = run.log ? ((await readTail(run.log, 2000)).match(/\[wisp\] restarting/g)?.length ?? 0) : 0;
-        return [
-          run.alive && run.waiting
-            ? yellow("● waiting")
-            : run.alive
-              ? green("● running")
-              : run.exitCode === 0
-                ? dim("○ finished")
-                : run.exitCode !== undefined
-                  ? red(`○ failed (${run.exitCode})`)
-                  : dim("○ stopped"),
-          bold(run.id),
-          run.label,
-          run.workspaceName,
-          run.alive ? ago(run.startedAt) : "",
-          restarts > 0 ? yellow(`${restarts}×`) : dim("–"),
-          run.kind === "window" ? dim(run.where ?? "window") : dim("background"),
-        ];
-      }),
-    );
+    const rows = shown.map((run, at) => {
+      const count = restarts[at]?.restarts ?? 0;
+      return [
+        run.alive && run.waiting
+          ? yellow("● waiting")
+          : run.alive
+            ? green("● running")
+            : run.exitCode === 0
+              ? dim("○ finished")
+              : run.exitCode !== undefined
+                ? red(`○ failed (${run.exitCode})`)
+                : dim("○ stopped"),
+        bold(run.id),
+        run.label,
+        run.workspaceName,
+        run.alive ? ago(run.startedAt) : "",
+        count > 0 ? yellow(`${count}×`) : dim("–"),
+        run.kind === "window" ? dim(run.where ?? "window") : dim("background"),
+      ];
+    });
     printTable(["STATUS", "ID", "NAME", "WORKSPACE", "UP", "RESTARTS", "WHERE"], rows);
     for (const run of shown.filter((candidate) => candidate.alive && candidate.waiting)) {
       console.log(yellow(`\n! ${run.label} is waiting for an answer: "${run.waiting}"`));

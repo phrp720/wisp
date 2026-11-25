@@ -4,7 +4,9 @@ import type { RunStatus } from "../../core/system/processes.js";
 import { pipelineStatus, collectPipelineTargets, collectDownTargets } from "../../core/run/index.js";
 import type { Pipeline, Diagnostic, SwitchTarget, Withheld, Workspace, WorkspaceRead } from "../../core/types.js";
 import { hasWords, slugify, pipelineSlug } from "../../core/workspaces.js";
-import { bold, cyan, dim, green, kindLabel, plural, red, yellow } from "./format.js";
+import type { ChangesSinceTrust } from "../../core/trust.js";
+import { hunks } from "../../core/text/diff.js";
+import { ago, bold, cyan, dim, green, kindLabel, plural, red, yellow } from "./format.js";
 
 /**
  * A label and the thing it names — once, when they are the same. An inline `{ "run":
@@ -181,6 +183,20 @@ export function resultLine(result: {
  * Everything a file would be allowed to run, as `wisp trust` and a run that needs trust both
  * show it. Trust is granted to what you have read, so it is printed every time.
  */
+export function printChanges(since: ChangesSinceTrust, print: (line?: string) => void = console.log): void {
+  const when = ago(since.trustedAt);
+  print(bold(`Changed since you trusted it${when ? ` ${when} ago` : ""}:`));
+  if (since.changes.length === 0) print(dim("  only its formatting: nothing it does is different"));
+  for (const change of since.changes) {
+    print(`  ${dim(tildify(change.file))}`);
+    hunks(change.lines).forEach((hunk, at) => {
+      if (at > 0) print(dim("    …"));
+      for (const line of hunk) print(line.kind === "added" ? green(`  + ${line.text}`) : line.kind === "removed" ? red(`  - ${line.text}`) : dim(`    ${line.text}`));
+    });
+  }
+  print();
+}
+
 export function printWithheld(read: WorkspaceRead, print: (line?: string) => void = console.log): void {
   const path = read.workspace.file;
   print(dim(tildify(path)));

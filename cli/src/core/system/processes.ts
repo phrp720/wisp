@@ -611,6 +611,32 @@ export async function readLog(file: string, filter: LogFilter): Promise<string[]
   return filterLog(text, filter);
 }
 
+export interface Restarts {
+  restarts: number;
+  lastExit?: number;
+  gaveUp?: boolean;
+}
+
+export function restartsIn(text: string): Restarts {
+  let restarts = 0;
+  let lastExit: number | undefined;
+  let gaveUp = false;
+  for (const raw of text.split("\n")) {
+    const line = stripAnsi(raw);
+    const restarted = line.includes(RESTART_MARK) ? /\(exited with (\d+)\)/.exec(line) : null;
+    const quit = line.includes("[wisp]") && line.includes("gave up after") ? /exited with (\d+)/.exec(line) : null;
+    if (line.includes(RESTART_MARK)) restarts += 1;
+    if (quit) gaveUp = true;
+    const code = (restarted ?? quit)?.[1];
+    if (code !== undefined) lastExit = Number(code);
+  }
+  return { restarts, ...(lastExit !== undefined ? { lastExit } : {}), ...(gaveUp ? { gaveUp } : {}) };
+}
+
+export async function restartsOf(run: Run): Promise<Restarts> {
+  return run.log ? restartsIn(await tail(run.log, 2000)) : { restarts: 0 };
+}
+
 export const FAILURE_LINES = 40;
 
 export async function failureOutput(file: string, lines = FAILURE_LINES): Promise<string> {

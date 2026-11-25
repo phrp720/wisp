@@ -95,6 +95,7 @@ export function services(overrides: Partial<Services> = {}, library: Library = {
     readLog: async () => "",
     check: async () => acme,
     trust: async () => undefined,
+    changesSinceTrust: async () => undefined,
     runs: async () => [],
     stop: () => true,
     tail: async () => "",

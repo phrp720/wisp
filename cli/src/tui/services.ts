@@ -15,7 +15,7 @@ import { PROJECT_FILE, checkProject, findProjectFile } from "../core/project/ind
 import { bolts as draftPipelines, draftProject, writeProjectDraft } from "../core/init/scaffold.js";
 import { downPipeline, inputsFor, planRetry, questionsFor, resolvePipeline, runPlan, switchToWorkspace } from "../core/run/index.js";
 import { forgetHistory, listHistory } from "../core/history.js";
-import { trustProject } from "../core/trust.js";
+import { changesSinceTrust, trustProject } from "../core/trust.js";
 import { which } from "../core/system/which.js";
 import { discoverWorkspaces } from "../core/workspaces.js";
 import { everything } from "../cli/lib/context.js";
@@ -101,6 +101,8 @@ export function realServices(hooks: { suspend: () => void; resume: () => void })
     async trust(file, hash) {
       await trustProject(file, hash);
     },
+
+    changesSinceTrust: (file) => changesSinceTrust(file),
 
     async containers(files) {
       if (files.length === 0) return { containers: [] };

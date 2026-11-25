@@ -10,6 +10,7 @@ import type { Pipeline, InputSpec, NotifySettings, SwitchResult, SwitchTarget, T
 
 export type { NotifyChoice };
 import type { Unreadable } from "../core/workspaces.js";
+import type { ChangesSinceTrust } from "../core/trust.js";
 
 /** Everything the TUI shows: the workspaces, in the order the list shows them. */
 export interface Library {
@@ -50,6 +51,7 @@ export interface Services {
   readLog(path: string): Promise<string>;
   check(file: string): Promise<WorkspaceRead>;
   trust(file: string, hash: string | undefined): Promise<void>;
+  changesSinceTrust(file: string): Promise<ChangesSinceTrust | undefined>;
   runs(): Promise<RunStatus[]>;
   stop(run: RunStatus): boolean;
   restart(run: RunStatus): Promise<StartResult>;
