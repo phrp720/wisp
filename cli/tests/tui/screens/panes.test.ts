@@ -93,6 +93,32 @@ describe("the Running list", () => {
     expect(build?.type === "step" && build.step.log).toBe("/logs/2.log");
   });
 
+  it("shows the pipelines a pipeline that runs nothing itself brought up under it", () => {
+    const withUp = interpret(
+      {
+        main: {
+          name: "Shop",
+          pipelines: [
+            { label: "Services", steps: [{ compose: "compose.yaml", services: ["postgres"] }] },
+            { label: "Web", steps: [{ run: "pnpm dev", label: "web" }] },
+            { label: "Up", steps: [{ pipeline: "Services" }, { pipeline: "Web" }] },
+          ],
+        },
+      },
+      { file, personal: false, trust: "trusted", os: "darwin" },
+    );
+    const upRun = entry(
+      "Up",
+      [
+        { kind: "compose", label: "postgres", value: "compose.yaml", ok: true, durationMs: 9000, bolt: "Services" },
+        { kind: "command", label: "web", value: "pnpm dev", ok: true, durationMs: 1500, bolt: "Web" },
+      ],
+      "2026-11-18T10:00:00Z",
+    );
+    const items = groupPanes([], [{ ...web, bolt: "Web" }], [postgres], [withUp], [upRun]);
+    expect(titles(items)).toEqual(["group Up", " step Services", "  container postgres", " step Web", "  run web"]);
+  });
+
   it("keeps a needed pipeline in its own group once it has been run on its own since", () => {
     const servicesRun = entry("Services", [{ kind: "compose", label: "postgres", value: "compose.yaml", ok: true, durationMs: 9000 }], "2026-11-18T11:00:00Z");
     const items = groupPanes([], [web], [postgres], [shop], [servicesRun, workRun]);
