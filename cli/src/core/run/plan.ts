@@ -5,25 +5,25 @@ import { describeWait } from "../system/wait.js";
 import type { Pipeline, PipelineStep, InputSpec, SwitchTarget, TargetResult, Workspace } from "../types.js";
 import { collectTargets, composeTarget, resolvePipeline } from "./targets.js";
 
-/** One step of a plan, the workspace it belongs to, and the bolt that put it there. */
+/** One step of a plan, the workspace it belongs to, and the pipeline that put it there. */
 export interface PlannedStep {
   key: string;
   deps: string[];
   target: SwitchTarget;
   workspace: Workspace;
-  /** The bolt it comes from carries on after one of its steps fails. */
+  /** The pipeline it comes from carries on after one of its steps fails. */
   keepGoing: boolean;
-  bolt: string;
+  pipeline: string;
 }
 
 /**
  * The steps of a past run worth running again — read back from history and matched step
- * by step against the bolt as it is now. A bolt edited since is refused rather than
+ * by step against the pipeline as it is now. A pipeline edited since is refused rather than
  * half-matched: retrying the wrong steps is worse than retrying none.
  */
 export async function planRetry(workspace: Workspace, entry: HistoryEntry): Promise<PlannedStep[]> {
-  if (entry.ok) throw new WispError(`That run of "${entry.bolt}" passed — there is nothing to retry`, "NOTHING_TO_RETRY");
-  const label = entry.bolt.replace(/ \((retry|down)\)$/, "");
+  if (entry.ok) throw new WispError(`That run of "${entry.pipeline}" passed — there is nothing to retry`, "NOTHING_TO_RETRY");
+  const label = entry.pipeline.replace(/ \((retry|down)\)$/, "");
   const plan = fillPlan(await planPipeline(workspace, resolvePipeline(workspace, label)), entry.inputs ?? {});
   // A retry's own history holds only the steps it retried: match those by label instead.
   const steps = entry.steps;
@@ -53,14 +53,14 @@ export function retryPlan(result: { plan?: PlannedStep[]; targets: TargetResult[
 }
 
 /**
- * A bolt as the steps it will take, its dependencies expanded in place.
+ * A pipeline as the steps it will take, its dependencies expanded in place.
  *
- * A dependency runs where it is listed, once: a bolt needing "Database" twice over — or
- * two bolts both needing it — starts it a single time. A dependency that leads back to a
- * bolt already being expanded is a cycle, and is refused before anything has opened.
- * Each step remembers whether its own bolt keeps going after a failure.
+ * A dependency runs where it is listed, once: a pipeline needing "Database" twice over — or
+ * two pipelines both needing it — starts it a single time. A dependency that leads back to a
+ * pipeline already being expanded is a cycle, and is refused before anything has opened.
+ * Each step remembers whether its own pipeline keeps going after a failure.
  */
-export async function planPipeline(workspace: Workspace, bolt: Pipeline): Promise<PlannedStep[]> {
+export async function planPipeline(workspace: Workspace, pipeline: Pipeline): Promise<PlannedStep[]> {
   const plan: PlannedStep[] = [];
   const finished = new Map<string, string[]>();
   const firstOf = new Map<string, string>();
@@ -94,7 +94,7 @@ export async function planPipeline(workspace: Workspace, bolt: Pipeline): Promis
       const stepKey = `${key}#${at}`;
 
       if (step.kind === "pipeline") {
-        const keys = await expand(owner, resolvePipeline(owner, step.bolt), [...stack, key], waitsFor);
+        const keys = await expand(owner, resolvePipeline(owner, step.pipeline), [...stack, key], waitsFor);
         doneBy.set(at, keys.length > 0 ? keys : waitsFor);
         all.push(...keys);
         continue;
@@ -127,7 +127,7 @@ export async function planPipeline(workspace: Workspace, bolt: Pipeline): Promis
         target: { ...target, ...(step.name ? { name: step.name } : {}), ...(after.length > 0 ? { after } : {}) },
         workspace: owner,
         keepGoing: current.keepGoing ?? false,
-        bolt: current.label,
+        pipeline: current.label,
       });
       doneBy.set(at, [stepKey]);
       all.push(stepKey);
@@ -137,7 +137,7 @@ export async function planPipeline(workspace: Workspace, bolt: Pipeline): Promis
     return all;
   };
 
-  await expand(workspace, bolt, [], []);
+  await expand(workspace, pipeline, [], []);
   return plan;
 }
 
@@ -165,31 +165,31 @@ export function fillPlan(plan: PlannedStep[], values: InputValues): PlannedStep[
   return plan.map((step) => ({ ...step, target: fillTarget(step.target, values) }));
 }
 
-async function pipelinesOf(workspace: Workspace, bolt: Pipeline): Promise<Pipeline[]> {
-  const plan = await planPipeline(workspace, bolt);
-  const found = [bolt, ...uniquePipelines(plan).map((owner) => owner.workspace.bolts.find((entry) => entry.label === owner.bolt))];
+async function pipelinesOf(workspace: Workspace, pipeline: Pipeline): Promise<Pipeline[]> {
+  const plan = await planPipeline(workspace, pipeline);
+  const found = [pipeline, ...uniquePipelines(plan).map((owner) => owner.workspace.pipelines.find((entry) => entry.label === owner.pipeline))];
   return [...new Set(found.filter((entry): entry is Pipeline => entry !== undefined))];
 }
 
-export async function questionsFor(workspace: Workspace, bolt: Pipeline, values: InputValues = {}): Promise<string[]> {
+export async function questionsFor(workspace: Workspace, pipeline: Pipeline, values: InputValues = {}): Promise<string[]> {
   const questions: string[] = [];
-  for (const owner of await pipelinesOf(workspace, bolt)) {
+  for (const owner of await pipelinesOf(workspace, pipeline)) {
     const question = owner.confirm ? fillText(owner.confirm, values) : undefined;
     if (question && !questions.includes(question)) questions.push(question);
   }
   return questions;
 }
 
-export async function inputsFor(workspace: Workspace, bolt: Pipeline): Promise<InputSpec[]> {
+export async function inputsFor(workspace: Workspace, pipeline: Pipeline): Promise<InputSpec[]> {
   const specs: InputSpec[] = [];
-  for (const owner of await pipelinesOf(workspace, bolt)) {
+  for (const owner of await pipelinesOf(workspace, pipeline)) {
     for (const spec of owner.inputs ?? []) if (!specs.some((known) => known.name === spec.name)) specs.push(spec);
   }
   return specs;
 }
 
-export function uniquePipelines(plan: PlannedStep[]): { workspace: Workspace; bolt: string }[] {
-  const seen = new Map<string, { workspace: Workspace; bolt: string }>();
-  for (const step of plan) seen.set(`${step.workspace.file}#${step.bolt}`, { workspace: step.workspace, bolt: step.bolt });
+export function uniquePipelines(plan: PlannedStep[]): { workspace: Workspace; pipeline: string }[] {
+  const seen = new Map<string, { workspace: Workspace; pipeline: string }>();
+  for (const step of plan) seen.set(`${step.workspace.file}#${step.pipeline}`, { workspace: step.workspace, pipeline: step.pipeline });
   return [...seen.values()];
 }

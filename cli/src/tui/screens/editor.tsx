@@ -26,12 +26,12 @@ const SIDE_BY_SIDE = 90;
 
 export interface PipelineEditorProps {
   file: string;
-  bolt: string;
+  pipeline: string;
   workspace?: string | undefined;
-  /** Other bolts of this workspace, for "run another bolt first". */
+  /** Other pipelines of this workspace, for "run another pipeline first". */
   others: string[];
   /** Pipelines of other workspaces, which can be run first too. */
-  /** Open on choosing the first step — the bolt was just made. */
+  /** Open on choosing the first step — the pipeline was just made. */
   adding?: boolean;
   editing: Editing;
   glyphs: Glyphs;
@@ -49,11 +49,11 @@ export interface PipelineEditorProps {
 }
 
 /**
- * A bolt, edited without its JSON: its steps in plain words, in order, and keys to add,
+ * A pipeline, edited without its JSON: its steps in plain words, in order, and keys to add,
  * change, move and remove them. Every change is saved as it is made.
  */
-export function PipelineEditor({ file, bolt, workspace, others, adding = false, editing, glyphs, height, columns = 100, onClose, onChanged, onMessage, onSaving, onHint, onJump, onBusy }: PipelineEditorProps) {
-  const [label, setLabel] = useState(bolt);
+export function PipelineEditor({ file, pipeline, workspace, others, adding = false, editing, glyphs, height, columns = 100, onClose, onChanged, onMessage, onSaving, onHint, onJump, onBusy }: PipelineEditorProps) {
+  const [label, setLabel] = useState(pipeline);
   const [raw, setRaw] = useState<RawPipeline>();
   const [index, setIndexState] = useState(-1);
   const indexRef = useRef(-1);
@@ -71,7 +71,7 @@ export function PipelineEditor({ file, bolt, workspace, others, adding = false, 
   const load = useCallback(
     async (name: string) => {
       try {
-        setRaw(await editing.bolt(file, name));
+        setRaw(await editing.pipeline(file, name));
         setError(undefined);
       } catch (failure) {
         setError(failure instanceof Error ? failure.message : String(failure));
@@ -79,7 +79,7 @@ export function PipelineEditor({ file, bolt, workspace, others, adding = false, 
     },
     [editing, file],
   );
-  useEffect(() => void load(bolt), [load, bolt]);
+  useEffect(() => void load(pipeline), [load, pipeline]);
 
   const steps = raw?.steps ?? [];
 
@@ -556,7 +556,7 @@ export function PipelineEditor({ file, bolt, workspace, others, adding = false, 
 
   const left = (
     <Box flexDirection="column" width={leftWidth} flexGrow={sideBySide ? 0 : 1} flexShrink={0} height={height} borderStyle={glyphs.border} borderColor={open ? "gray" : TONE.accent} paddingX={1} overflow="hidden">
-      <Text bold color={TONE.accent} wrap="truncate-end">{`${glyphs.bolt}${label}`}</Text>
+      <Text bold color={TONE.accent} wrap="truncate-end">{`${glyphs.pipeline}${label}`}</Text>
       <Box>
         {workspace ? (
           <Box flexShrink={0}>

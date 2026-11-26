@@ -77,7 +77,7 @@ export async function loadWorkspaces(options: ReadOptions = {}): Promise<Workspa
 /**
  * A workspace named by any distinctive part of its name.
  *
- * The same rule bolts use, so there is one rule to learn: an exact name, slug or path
+ * The same rule pipelines use, so there is one rule to learn: an exact name, slug or path
  * wins, and otherwise the needle must be whole words of exactly one name.
  */
 export function matchWorkspace<T extends { workspace: Workspace } | Workspace>(
@@ -142,20 +142,20 @@ export function hasWords(name: string, needle: string): boolean {
   return false;
 }
 
-export function closePipelines<T extends { label: string; slug?: string | undefined }>(bolts: T[], word: string): T[] {
+export function closePipelines<T extends { label: string; slug?: string | undefined }>(pipelines: T[], word: string): T[] {
   const typed = slugify(word);
   if (!typed) return [];
   const allowed = typed.length <= 3 ? 0 : typed.length <= 6 ? 1 : 2;
-  const startsLike = (bolt: T) => {
-    const parts = pipelineSlug(bolt).split("-");
+  const startsLike = (pipeline: T) => {
+    const parts = pipelineSlug(pipeline).split("-");
     return parts.some((_, at) => parts.slice(at).join("-").startsWith(typed));
   };
-  const spelledLike = (bolt: T) => {
-    const slug = pipelineSlug(bolt);
+  const spelledLike = (pipeline: T) => {
+    const slug = pipelineSlug(pipeline);
     return allowed > 0 && [slug, ...slug.split("-")].some((part) => typoDistance(part, typed) <= allowed);
   };
-  const started = bolts.filter(startsLike);
-  return started.length > 0 ? started : bolts.filter(spelledLike);
+  const started = pipelines.filter(startsLike);
+  return started.length > 0 ? started : pipelines.filter(spelledLike);
 }
 
 function typoDistance(a: string, b: string): number {
@@ -177,8 +177,8 @@ function typoDistance(a: string, b: string): number {
 
 export const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-export function pipelineSlug(bolt: { label: string; slug?: string | undefined }): string {
-  return bolt.slug || slugify(bolt.label);
+export function pipelineSlug(pipeline: { label: string; slug?: string | undefined }): string {
+  return pipeline.slug || slugify(pipeline.label);
 }
 
 export function slugify(value: string): string {

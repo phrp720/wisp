@@ -50,7 +50,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
   // can arrive faster than React re-renders, and each must see what the one before did.
   const [wsIndex, setWsIndex, wsRef] = useLatest(0);
   const [pipelineIndex, setPipelineIndex, pipelineRef] = useLatest(0);
-  const [focus, setFocus, focusRef] = useLatest<Focus>(initial && startsOnPipelines(initial) ? "bolts" : "workspaces");
+  const [focus, setFocus, focusRef] = useLatest<Focus>(initial && startsOnPipelines(initial) ? "pipelines" : "workspaces");
   const [view, setView, viewRef] = useLatest<View>({ kind: "browse" });
   const [message, setMessage, messageRef] = useLatest<string | undefined>(undefined);
   const [tick, setTick] = useState(0);
@@ -116,17 +116,17 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
   useEffect(() => {
     if (!active || active.dryRun) return;
     if (loggedRun.current?.title !== active.title || loggedRun.current?.read !== active.read) {
-      if (!active.done) record(`ran ${active.bolt}`, "info");
+      if (!active.done) record(`ran ${active.pipeline}`, "info");
     }
     if (active.done && !(loggedRun.current === active || (loggedRun.current?.done && loggedRun.current.title === active.title && loggedRun.current.read === active.read))) {
       const failed = active.steps.find((step) => step.result && !step.result.ok && !step.result.skipped);
       const up = active.steps.some((step) => (step.target.kind === "command" && !step.target.finishes) || step.target.kind === "compose");
       if (active.result?.cancelled) {
-        record(`${active.bolt} was cancelled${failed?.result?.error ? `: ${failed.result.error}` : ""}`, "info");
+        record(`${active.pipeline} was cancelled${failed?.result?.error ? `: ${failed.result.error}` : ""}`, "info");
         loggedRun.current = active;
         return;
       }
-      record(active.stopped ? `${active.bolt} stopped — ${active.stopped}` : failed || active.error ? `${active.bolt} failed${failed ? ` at ${failed.target.label}` : ""}` : `${active.bolt} ${up ? "is up" : "finished"}`, active.stopped || failed || active.error ? "bad" : "good");
+      record(active.stopped ? `${active.pipeline} stopped — ${active.stopped}` : failed || active.error ? `${active.pipeline} failed${failed ? ` at ${failed.target.label}` : ""}` : `${active.pipeline} ${up ? "is up" : "finished"}`, active.stopped || failed || active.error ? "bad" : "good");
     }
     loggedRun.current = active;
   }, [active, record]);
@@ -134,8 +134,8 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
   const reads = useMemo(() => (library ? ordered(library) : []), [library]);
   const workspaceNames = useMemo(() => new Map(reads.map((read) => [read.workspace.file, read.workspace.name])), [reads]);
   const current = reads[Math.min(wsIndex, Math.max(0, reads.length - 1))];
-  const bolts = current?.workspace.bolts ?? [];
-  const bolt = bolts[Math.min(pipelineIndex, Math.max(0, bolts.length - 1))];
+  const pipelines = current?.workspace.pipelines ?? [];
+  const pipeline = pipelines[Math.min(pipelineIndex, Math.max(0, pipelines.length - 1))];
   const [checked, setChecked] = useState<{ read: WorkspaceRead; diagnostics: Diagnostic[] }>();
   const formOpen = useRef(false);
   const setFormOpen = useCallback((busy: boolean) => {
@@ -154,7 +154,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
       live = false;
     };
   }, [current, services]);
-  const inBox = active && current && bolt && active.read.workspace.file === current.workspace.file && active.bolt === bolt.label && (!active.done || runPinned) ? active : undefined;
+  const inBox = active && current && pipeline && active.read.workspace.file === current.workspace.file && active.pipeline === pipeline.label && (!active.done || runPinned) ? active : undefined;
 
   const reload = useCallback(
     async (keep?: string) => {
@@ -175,11 +175,11 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
     [services],
   );
 
-  // First load: start on the project you are standing in, with its bolts in focus — the
+  // First load: start on the project you are standing in, with its pipelines in focus — the
   // same answer bare `wisp` gives on the command line, one keypress from running.
   useEffect(() => {
     void (initial ? Promise.resolve(initial) : reload()).then(async (next) => {
-      if (next && startsOnPipelines(next)) setFocus("bolts");
+      if (next && startsOnPipelines(next)) setFocus("pipelines");
       // Opened in a project that has no file yet: offer to set it up, right here.
       if (next && !next.here) {
         const suggestion = await services.suggestSetup().catch(() => undefined);
@@ -197,13 +197,13 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
   }, [spinning]);
 
   // Containers of every compose file a trusted workspace starts: watched like runs, so a
-  // database that dies says so, and a bolt knows whether its services are up.
+  // database that dies says so, and a pipeline knows whether its services are up.
   const files = useMemo(() => [...new Set(reads.flatMap((read) => composeFiles(read.workspace)))], [reads]);
   const panesOpen = view.kind === "processes";
   const [runs, setRuns] = useRuns(services, view.kind, notify, expected);
   const { containers, dockerError } = useContainers(services, files, panesOpen, notify, expected);
   const stats = useContainerStats(services, panesOpen, containers);
-  // Past runs, for the last result beside each bolt and the recent runs under them.
+  // Past runs, for the last result beside each pipeline and the recent runs under them.
   const { recent, webhooksFailing } = useRecent(services, active?.done, view.kind === "settings");
 
   const paneItems: PaneItem[] =
@@ -213,7 +213,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
           // it is done it is History's — kept here only while you are reading its output.
           groupPanes(active && (!active.done || watchingDone.current) ? [{ type: "current" }] : [], visibleRuns(runs, view.all), containers.filter((container) => view.all || container.state === "running" || container.state === "restarting" || container.exitCode !== 0), reads, recent),
           view.query ?? "",
-          active?.bolt,
+          active?.pipeline,
         )
       : [];
   const processIndex =
@@ -256,16 +256,16 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
 
 
   /**
-   * Run steps — a whole bolt, or a retry of part of one — showing each as it goes. The
+   * Run steps — a whole pipeline, or a retry of part of one — showing each as it goes. The
    * progress is kept in `active`, whichever screen is showing.
    */
   const selectPipeline = useCallback(
     (read: WorkspaceRead, label: string) => {
       const workspaceAt = reads.findIndex((candidate) => candidate.workspace.file === read.workspace.file);
       if (workspaceAt >= 0) setWsIndex(workspaceAt);
-      const pipelineAt = read.workspace.bolts.findIndex((entry) => entry.label === label);
+      const pipelineAt = read.workspace.pipelines.findIndex((entry) => entry.label === label);
       if (pipelineAt >= 0) setPipelineIndex(pipelineAt);
-      setFocus("bolts");
+      setFocus("pipelines");
     },
     [reads, setWsIndex, setPipelineIndex, setFocus],
   );
@@ -282,13 +282,13 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
       // One run at a time on this screen. Say so, rather than let ⏎ do nothing.
       if (busy.current) {
         const going = activeRef.current;
-        setMessage(`${going ? `"${going.bolt}"` : "A run"} is still starting. Run another once it's done`);
+        setMessage(`${going ? `"${going.pipeline}"` : "A run"} is still starting. Run another once it's done`);
         return;
       }
       busy.current = true;
       const controller = new AbortController();
       abort.current = controller;
-      setActive({ title, read, bolt: label, dryRun, steps: [], done: false, output: [], started: [] });
+      setActive({ title, read, pipeline: label, dryRun, steps: [], done: false, output: [], started: [] });
       selectPipeline(read, label);
       setRunPinned(true);
       setView({ kind: "browse" });
@@ -346,7 +346,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
         if (questions.length === 0) return begin(read, label, dryRun, start, title, values);
         pendingRun.current = () => void begin(read, label, dryRun, start, title, values);
         showPipeline();
-        setView({ kind: "confirm-run", file: read.workspace.file, bolt: label, question: questions.join(" ") });
+        setView({ kind: "confirm-run", file: read.workspace.file, pipeline: label, question: questions.join(" ") });
       };
       const questionsWith = (values: Record<string, string>) => (dryRun ? Promise.resolve([]) : services.questions(read, label, values).catch(() => []));
       const [specs, questions] = await Promise.all([recorded ? Promise.resolve([]) : services.inputs(read, label).catch(() => []), questionsWith(recorded ?? {})]);
@@ -355,14 +355,14 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
       if (dryRun) return ask(Object.fromEntries(specs.flatMap((spec) => (spec.default ? [[spec.name, spec.default]] : []))));
       pendingInputs.current = (values) => void ask(values);
       showPipeline();
-      setView({ kind: "run-inputs", file: read.workspace.file, workspace: read.workspace.name, bolt: label, specs });
+      setView({ kind: "run-inputs", file: read.workspace.file, workspace: read.workspace.name, pipeline: label, specs });
     },
     [services, begin, selectPipeline, setView],
   );
 
   const runPipeline = useCallback(
     async (read: WorkspaceRead, label: string, dryRun: boolean) => {
-      // Not half a run: a bolt with steps waiting for trust asks first. A dry run still goes
+      // Not half a run: a pipeline with steps waiting for trust asks first. A dry run still goes
       // ahead, since showing what would be skipped is its point.
       if (!dryRun && waitingForTrust(read, label).length > 0) return setView({ kind: "trust", read, then: label });
       await launch(read, label, dryRun, (callbacks) => services.run(read, label, callbacks), `${read.workspace.name} ${glyphs.arrow} ${label}`);
@@ -378,10 +378,10 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
     if (steps.length === 0) return setMessage("Nothing failed — there is nothing to retry");
     await launch(
       last.read,
-      last.bolt,
+      last.pipeline,
       false,
-      (callbacks) => services.retry(last.read, steps, last.bolt, callbacks),
-      `${last.read.workspace.name} ${glyphs.arrow} ${last.bolt} — retrying ${steps.length === 1 ? "1 step" : `${steps.length} steps`}`,
+      (callbacks) => services.retry(last.read, steps, last.pipeline, callbacks),
+      `${last.read.workspace.name} ${glyphs.arrow} ${last.pipeline} — retrying ${steps.length === 1 ? "1 step" : `${steps.length} steps`}`,
       last.result.inputs ?? {},
     );
   }, [services, glyphs.arrow, launch]);
@@ -406,7 +406,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
   // Activity opens on what is running, or — when nothing is — on what ran.
   const history_ = (): View => ({ kind: "history" });
   /**
-   * Stop a bolt, and with `deps` the bolts it needed. Asked first when it needed any: stopping
+   * Stop a pipeline, and with `deps` the pipelines it needed. Asked first when it needed any: stopping
    * Work on web alone leaves the database up, which is right when something else uses it and
    * a surprise when nothing does.
    */
@@ -425,17 +425,17 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
   const askStop = (read: WorkspaceRead, target: Pipeline) => {
     const needs = flow(read, target).filter((name) => name !== target.label);
     if (needs.length === 0) return stopPipeline(read, target, false);
-    // Other bolts with something up that need the same ones: stopping those would break them.
+    // Other pipelines with something up that need the same ones: stopping those would break them.
     const sharedWith = reads.flatMap((other) =>
-      other.workspace.bolts
-        .filter((candidate) => candidate.label !== target.label && runs.some((run) => run.alive && run.workspace === other.workspace.file && run.bolt === candidate.label))
+      other.workspace.pipelines
+        .filter((candidate) => candidate.label !== target.label && runs.some((run) => run.alive && run.workspace === other.workspace.file && run.pipeline === candidate.label))
         .filter((candidate) => flow(other, candidate).some((name) => needs.includes(name) && name !== candidate.label))
         .map((candidate) => candidate.label),
     );
-    setView({ kind: "stop-bolt", file: read.workspace.file, bolt: target.label, needs, sharedWith });
+    setView({ kind: "stop-pipeline", file: read.workspace.file, pipeline: target.label, needs, sharedWith });
   };
 
-  /** 1–4 go straight to a panel, as lazygit's numbers do: workspaces, bolts, running, history. */
+  /** 1–4 go straight to a panel, as lazygit's numbers do: workspaces, pipelines, running, history. */
   const jump = (input: string): boolean => {
     if (input === "1") return setView({ kind: "browse" }), true;
     if (input === "2") return setView(activity()), true;
@@ -460,8 +460,8 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
     const wsIndex = wsRef.current;
     const pipelineIndex = pipelineRef.current;
     const current = reads[Math.min(wsIndex, Math.max(0, reads.length - 1))];
-    const bolts = current?.workspace.bolts ?? [];
-    const bolt = bolts[Math.min(pipelineIndex, Math.max(0, bolts.length - 1))];
+    const pipelines = current?.workspace.pipelines ?? [];
+    const pipeline = pipelines[Math.min(pipelineIndex, Math.max(0, pipelines.length - 1))];
     if (messageRef.current) setMessage(undefined);
 
     if (view.kind === "search") {
@@ -474,13 +474,13 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
         if (!hit) return;
         const read = reads[hit.workspace] as WorkspaceRead;
         setWsIndex(hit.workspace);
-        if (hit.bolt) {
-          setPipelineIndex(Math.max(0, read.workspace.bolts.findIndex((entry) => entry.label === hit.bolt)));
-          setFocus("bolts");
-          void runPipeline(read, hit.bolt, false);
+        if (hit.pipeline) {
+          setPipelineIndex(Math.max(0, read.workspace.pipelines.findIndex((entry) => entry.label === hit.pipeline)));
+          setFocus("pipelines");
+          void runPipeline(read, hit.pipeline, false);
         } else {
           setPipelineIndex(0);
-          setFocus("bolts");
+          setFocus("pipelines");
           setView({ kind: "browse" });
         }
         return;
@@ -537,10 +537,10 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
       const at = processIndex;
       const { focus: _focus, ...rest } = view;
       const item = list[at];
-      // A bolt: stop all of it, restart it, or go into its first task.
+      // A pipeline: stop all of it, restart it, or go into its first task.
       if (item?.type === "group") {
         const read = reads.find((candidate) => candidate.workspace.file === item.group.workspace);
-        const pipelineDef = read?.workspace.bolts.find((entry) => entry.label === item.group.bolt);
+        const pipelineDef = read?.workspace.pipelines.find((entry) => entry.label === item.group.pipeline);
         if (key.return) return setView({ ...rest, index: at + 1, scroll: 0 });
         if (input === "x" && read && pipelineDef) return askStop(read, pipelineDef);
         if (input === "r" && read && pipelineDef) {
@@ -565,7 +565,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
       if (item?.type === "current") {
         const run = activeRef.current;
         if (key.return && run) {
-          selectPipeline(run.read, run.bolt);
+          selectPipeline(run.read, run.pipeline);
           setRunPinned(true);
           return setView({ kind: "browse" });
         }
@@ -642,13 +642,13 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
       return;
     }
 
-    // Browsing. A run in the selected bolt's box takes the keys that act on it.
+    // Browsing. A run in the selected pipeline's box takes the keys that act on it.
     if (inBox) {
       if (input === "x" && !inBox.done) return stopActive("you stopped it");
       if (input === "r" && inBox.done && inBox.result && retryPlan(inBox.result).length > 0) return void retryFailed();
       if (input === "p") return setView(activity(inBox.done ? (startedBy(inBox) ?? "current") : "current"));
       if (key.escape && inBox.done) return setRunPinned(false);
-      if (key.return && inBox.done && focus === "bolts") return setRunPinned(false);
+      if (key.return && inBox.done && focus === "pipelines") return setRunPinned(false);
     }
     if (input === "?") return setView({ kind: "help" });
     if (input === "N") return setView({ kind: "new-workspace" });
@@ -661,7 +661,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
       return;
     }
 
-    if (key.tab || key.rightArrow || input === "l") return setFocus(key.tab && focus === "bolts" ? "workspaces" : "bolts");
+    if (key.tab || key.rightArrow || input === "l") return setFocus(key.tab && focus === "pipelines" ? "workspaces" : "pipelines");
     if (key.leftArrow || (key.shift && key.tab)) return setFocus("workspaces");
 
     const up = key.upArrow || input === "k";
@@ -673,13 +673,13 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
         setPipelineIndex(0);
         return;
       }
-      if (key.return) return setFocus("bolts");
+      if (key.return) return setFocus("pipelines");
     } else if (up || down) {
-      return setPipelineIndex(clamp(pipelineIndex + (up ? -1 : 1), bolts.length));
+      return setPipelineIndex(clamp(pipelineIndex + (up ? -1 : 1), pipelines.length));
     }
 
     if (!current) return;
-    // Editing, without JSON: e opens the bolt editor, a adds a bolt, N a workspace of
+    // Editing, without JSON: e opens the pipeline editor, a adds a pipeline, N a workspace of
     // your own. E hands the file itself to your editor, for those who want it.
     if (input === "E") return void edit(current);
     if (input === "e" && focus === "workspaces") {
@@ -687,41 +687,41 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
       return setView({ kind: "edit-workspace", file, name, icon: icon ?? "", notes: notes ?? "", personal, local: Boolean(local) });
     }
     if (input === "e") {
-      if (!bolt) return setView({ kind: "new-bolt", file: current.workspace.file, workspace: current.workspace.name });
-      return setView({ kind: "editor", file: current.workspace.file, bolt: bolt.label });
+      if (!pipeline) return setView({ kind: "new-pipeline", file: current.workspace.file, workspace: current.workspace.name });
+      return setView({ kind: "editor", file: current.workspace.file, pipeline: pipeline.label });
     }
-    if (input === "a") return setView({ kind: "new-bolt", file: current.workspace.file, workspace: current.workspace.name });
-    // D deletes what is selected: a workspace on the left, a bolt on the right.
+    if (input === "a") return setView({ kind: "new-pipeline", file: current.workspace.file, workspace: current.workspace.name });
+    // D deletes what is selected: a workspace on the left, a pipeline on the right.
     if (input === "D" && focus === "workspaces") {
       return setView({ kind: "delete-workspace", file: current.workspace.file, name: current.workspace.name, personal: current.workspace.personal });
     }
-    if (input === "D" && bolt) return setView({ kind: "delete-bolt", file: current.workspace.file, bolt: bolt.label });
+    if (input === "D" && pipeline) return setView({ kind: "delete-pipeline", file: current.workspace.file, pipeline: pipeline.label });
     if (input === "d" || input === "u") return setDetailScroll((top) => Math.max(0, Math.min(detailLimit.current, top + (input === "d" ? 5 : -5))));
     if (input === "v") return setShowGraph((on) => !on);
     if (input === "s") return setView(webhooksFailing > 0 ? { kind: "settings", start: "notifications" } : { kind: "settings" });
-    if ((input === "K" || input === "J") && bolt && focus === "bolts") {
+    if ((input === "K" || input === "J") && pipeline && focus === "pipelines") {
       const by = input === "K" ? -1 : 1;
       savedAt.current = Date.now();
       void services.editing
-        .movePipeline(current.workspace.file, bolt.label, by)
+        .movePipeline(current.workspace.file, pipeline.label, by)
         .then(() => reload(current.workspace.file))
-        .then(() => setPipelineIndex(Math.max(0, Math.min(bolts.length - 1, pipelineIndex + by))))
+        .then(() => setPipelineIndex(Math.max(0, Math.min(pipelines.length - 1, pipelineIndex + by))))
         .catch((error: unknown) => setMessage(describe(error)));
       return;
     }
-    if (input === "x" && bolt) return askStop(current, bolt);
-    if (input === "R" && bolt) {
+    if (input === "x" && pipeline) return askStop(current, pipeline);
+    if (input === "R" && pipeline) {
       const restart = true;
       void services
-        .down(current, bolt)
+        .down(current, pipeline)
         .then(async (result) => {
           for (const run of result.stopped) expected.current.add(run.id);
           const torn = result.teardown ? ` · teardown ${result.teardown.ok ? "done" : "failed"}` : "";
-          say(`${bolt.label}: stopped ${result.stopped.length}${torn}`);
+          say(`${pipeline.label}: stopped ${result.stopped.length}${torn}`);
           setRuns(await services.runs());
           if (restart) {
             if (result.stopped.length > 0) await new Promise((done) => setTimeout(done, 500));
-            await runPipeline(current, bolt.label, false);
+            await runPipeline(current, pipeline.label, false);
           }
         })
         .catch((error: unknown) => setMessage(describe(error)));
@@ -731,12 +731,12 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
       if (needsTrust(current)) return setView({ kind: "trust", read: current });
       return setMessage(current.workspace.trusted ? "already trusted" : "nothing here needs trust");
     }
-    if ((key.return && focus === "bolts") || input === "c") {
-      if (!bolt) {
+    if ((key.return && focus === "pipelines") || input === "c") {
+      if (!pipeline) {
         if (input === "c") return setMessage("no pipelines yet: a adds one");
-        return setView({ kind: "new-bolt", file: current.workspace.file, workspace: current.workspace.name });
+        return setView({ kind: "new-pipeline", file: current.workspace.file, workspace: current.workspace.name });
       }
-      void runPipeline(current, bolt.label, input === "c");
+      void runPipeline(current, pipeline.label, input === "c");
     }
   }, { isActive: !SELF_DRIVEN.has(view.kind) }, keys);
 
@@ -758,7 +758,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
     if (event.y === 0) {
       if (event.kind !== "click" || !(TABS_CLICKABLE.has(view.kind) || ((view.kind === "editor" || view.kind === "settings") && !formOpen.current))) return false;
       const tab = headerTabAt(event.x, glyphs, runningStatus(glyphs, runningCount, failing)?.text ?? "", webhookWarning(glyphs, webhooksFailing));
-      if (tab === "bolts" && view.kind !== "browse") setView({ kind: "browse" });
+      if (tab === "pipelines" && view.kind !== "browse") setView({ kind: "browse" });
       if (tab === "running" && view.kind !== "processes") setView(activity());
       if (tab === "history" && view.kind !== "history") setView(history_());
       if (tab === "webhooks") setView({ kind: "settings", start: "notifications" });
@@ -809,8 +809,8 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
         }
         return true;
       }
-      // The selected workspace's bolts. A click selects one; ⏎ runs it, as ever.
-      const list = reads[Math.min(wsRef.current, reads.length - 1)]?.workspace.bolts ?? [];
+      // The selected workspace's pipelines. A click selects one; ⏎ runs it, as ever.
+      const list = reads[Math.min(wsRef.current, reads.length - 1)]?.workspace.pipelines ?? [];
       if (list.length === 0) return event.kind === "wheel";
       const { items, offset, split, topHeight } = pipelineWindow(list, pipelineRef.current, bodyHeight);
       if (event.kind === "wheel") {
@@ -818,13 +818,13 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
           setDetailScroll((top) => Math.max(0, Math.min(detailLimit.current, top + event.by * 3)));
           return true;
         }
-        setFocus("bolts");
+        setFocus("pipelines");
         setPipelineIndex(clamp(pipelineRef.current + event.by, list.length));
         return true;
       }
       const at = y - FIRST_PIPELINE_LINE;
       if (at >= 0 && at < items.length) {
-        setFocus("bolts");
+        setFocus("pipelines");
         setPipelineIndex(offset + at);
       }
       return true;
@@ -843,16 +843,16 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
       .catch((error: unknown) => setMessage(describe(error)));
   }
 
-  function deletePipeline(asked: Extract<View, { kind: "delete-bolt" }>, yes: boolean) {
+  function deletePipeline(asked: Extract<View, { kind: "delete-pipeline" }>, yes: boolean) {
     setView({ kind: "browse" });
     if (!yes) return;
     savedAt.current = Date.now();
     void services.editing
-      .removePipeline(asked.file, asked.bolt)
+      .removePipeline(asked.file, asked.pipeline)
       .then(() => reload(asked.file))
       .then(() => {
         setPipelineIndex(Math.max(0, pipelineIndex - 1));
-        say(`Deleted "${asked.bolt}"`);
+        say(`Deleted "${asked.pipeline}"`);
       })
       .catch((error: unknown) => setMessage(describe(error)));
   }
@@ -871,7 +871,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
         running={runningCount}
         failing={failing}
         webhooksFailing={webhooksFailing}
-        tab={view.kind === "processes" || (view.kind === "help" && view.back?.kind === "processes") ? "running" : view.kind === "history" ? "history" : "bolts"}
+        tab={view.kind === "processes" || (view.kind === "help" && view.back?.kind === "processes") ? "running" : view.kind === "history" ? "history" : "pipelines"}
       />
 
       {loadError ? (
@@ -907,7 +907,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
               const file = await services.setUp(view.suggestion, chosen);
               const next = await reload(file);
               const read = next ? ordered(next).find((entry) => entry.workspace.file === file) : undefined;
-              setFocus("bolts");
+              setFocus("pipelines");
               // Its commands are its own until you say otherwise — straight to that question.
               if (read && needsTrust(read)) setView({ kind: "trust", read });
               else setView({ kind: "browse" });
@@ -922,12 +922,12 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
         <PipelineEditor
           onSaving={() => (savedAt.current = Date.now())}
           file={view.file}
-          bolt={view.bolt}
+          pipeline={view.pipeline}
           workspace={(() => {
             const owner = reads.find((read) => read.workspace.file === view.file)?.workspace;
             return owner ? `${owner.icon && glyphs.border === "round" ? `${owner.icon} ` : ""}${owner.name}` : undefined;
           })()}
-          others={(reads.find((read) => read.workspace.file === view.file)?.workspace.bolts ?? []).map((entry) => entry.label).filter((label) => label !== view.bolt)}
+          others={(reads.find((read) => read.workspace.file === view.file)?.workspace.pipelines ?? []).map((entry) => entry.label).filter((label) => label !== view.pipeline)}
           adding={Boolean(view.adding)}
           editing={services.editing}
           glyphs={glyphs}
@@ -941,14 +941,14 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
             savedAt.current = Date.now();
             void reload(view.file).then((next) => {
               const read = next ? ordered(next).find((entry) => entry.workspace.file === view.file) : undefined;
-              const at = read?.workspace.bolts.findIndex((entry) => entry.label === label) ?? -1;
+              const at = read?.workspace.pipelines.findIndex((entry) => entry.label === label) ?? -1;
               if (at >= 0) setPipelineIndex(at);
             });
-            if (label !== view.bolt) setView({ ...view, bolt: label });
+            if (label !== view.pipeline) setView({ ...view, pipeline: label });
           }}
           onMessage={setMessage}
         />
-      ) : view.kind === "new-bolt" ? (
+      ) : view.kind === "new-pipeline" ? (
         <Form
           title={`A new pipeline in ${view.workspace}`}
           intro="A pipeline is one thing you do — 'Work on the API', 'Run the tests', 'Back up the database'. You'll add its steps next."
@@ -968,9 +968,9 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
             }
             const next = await reload(view.file);
             const read = next ? ordered(next).find((entry) => entry.workspace.file === view.file) : undefined;
-            setPipelineIndex(Math.max(0, read?.workspace.bolts.findIndex((entry) => entry.label === label) ?? 0));
-            setFocus("bolts");
-            setView({ kind: "editor", file: view.file, bolt: label, adding: true });
+            setPipelineIndex(Math.max(0, read?.workspace.pipelines.findIndex((entry) => entry.label === label) ?? 0));
+            setFocus("pipelines");
+            setView({ kind: "editor", file: view.file, pipeline: label, adding: true });
             return undefined;
           }}
         />
@@ -992,9 +992,9 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
             }
             await reload(file);
             setPipelineIndex(0);
-            setFocus("bolts");
-            // Straight to its first bolt: a workspace is only as useful as what it runs.
-            setView({ kind: "new-bolt", file, workspace: values["name"]?.trim() ?? "" });
+            setFocus("pipelines");
+            // Straight to its first pipeline: a workspace is only as useful as what it runs.
+            setView({ kind: "new-pipeline", file, workspace: values["name"]?.trim() ?? "" });
             return undefined;
           }}
         />
@@ -1039,9 +1039,9 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
           // read them again: the next run uses the new choice, without restarting Wisp.
           void reload(current?.workspace.file);
         }} />
-      ) : view.kind === "stop-bolt" ? (
+      ) : view.kind === "stop-pipeline" ? (
         <Box flexDirection="column" height={bodyHeight} borderStyle={glyphs.border} borderColor={TONE.busy} paddingX={1}>
-          <Text bold>{`Stop ${view.bolt}?`}</Text>
+          <Text bold>{`Stop ${view.pipeline}?`}</Text>
           <Text> </Text>
           <Text wrap="wrap">{`It needed ${view.needs.join(" and ")} — ${view.needs.length === 1 ? "that keeps" : "those keep"} running unless you stop ${view.needs.length === 1 ? "it" : "them"} too.`}</Text>
           {view.sharedWith.length > 0 ? (
@@ -1050,11 +1050,11 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
           <Text> </Text>
           <Choice
             yes={`Also stop ${view.needs.join(", ")}`}
-            no={`Only ${view.bolt}`}
+            no={`Only ${view.pipeline}`}
             danger={view.sharedWith.length > 0}
             onAnswer={(deps) => {
               const read = reads.find((candidate) => candidate.workspace.file === view.file);
-              const target = read?.workspace.bolts.find((entry) => entry.label === view.bolt);
+              const target = read?.workspace.pipelines.find((entry) => entry.label === view.pipeline);
               setView({ kind: "browse" });
               if (read && target) stopPipeline(read, target, deps);
             }}
@@ -1077,7 +1077,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
           onRetry={(entry) => {
             const read = reads.find((candidate) => candidate.workspace.file === entry.workspace);
             if (!read) return setMessage(`${entry.workspaceName} is not in the list any more`);
-            const label = entry.bolt.replace(/ \((retry|down)\)$/, "");
+            const label = entry.pipeline.replace(/ \((retry|down)\)$/, "");
             void services
               .planRetry(read, entry)
               .then((steps) =>
@@ -1088,7 +1088,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
           onRerun={(entry) => {
             const read = reads.find((candidate) => candidate.workspace.file === entry.workspace);
             if (!read) return setMessage(`${entry.workspaceName} is not in the list any more`);
-            void runPipeline(read, entry.bolt.replace(/ \((retry|down)\)$/, ""), false);
+            void runPipeline(read, entry.pipeline.replace(/ \((retry|down)\)$/, ""), false);
           }}
         />
       ) : view.kind === "trust" ? (
@@ -1116,7 +1116,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
       ) : view.kind === "processes" ? (
         <PanesPanel items={paneItems} activity={events} history={recent} query={view.query ?? ""} typing={Boolean(view.typing)} runs={runs} containers={containers} active={active} tick={tick} stats={stats} dockerError={dockerError} all={view.all} index={processIndex} log={shownLog} scroll={view.scroll} full={view.full} tab={view.tab} reads={reads} logQuery={view.logQuery} logTyping={view.logTyping} glyphs={glyphs} height={bodyHeight} columns={columns} />
       ) : view.kind === "help" ? (
-        <HelpPanel glyphs={glyphs} height={bodyHeight} tab={view.back?.kind === "processes" ? "running" : "bolts"} />
+        <HelpPanel glyphs={glyphs} height={bodyHeight} tab={view.back?.kind === "processes" ? "running" : "pipelines"} />
       ) : view.kind === "search" ? (
         <SearchPanel hits={search(reads, view.query)} index={view.index} query={view.query} glyphs={glyphs} height={bodyHeight} />
       ) : reads.length === 0 ? (
@@ -1140,8 +1140,8 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
           {current ? (
             <WorkspacePanel
               confirming={
-                view.kind === "delete-bolt"
-                  ? { question: `Delete "${view.bolt}"?`, yes: "Delete", onAnswer: (yes) => deletePipeline(view, yes) }
+                view.kind === "delete-pipeline"
+                  ? { question: `Delete "${view.pipeline}"?`, yes: "Delete", onAnswer: (yes) => deletePipeline(view, yes) }
                   : view.kind === "confirm-run"
                     ? {
                         question: view.question,
@@ -1164,7 +1164,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
                 view.kind === "run-inputs"
                   ? (room: number) => (
                       <Form
-                              title={`Run "${view.bolt}" in ${view.workspace}`}
+                              title={`Run "${view.pipeline}" in ${view.workspace}`}
                               intro="It needs these before it runs."
                               fields={view.specs.map((spec) =>
                                 spec.choices
@@ -1209,7 +1209,7 @@ export function App({ services, glyphs = defaultGlyphs(), size, mouse, initial }
               here={current.workspace.file === library.here}
               width={columns - workspaceListWidth(columns) - 4}
               pipelineIndex={pipelineIndex}
-              focused={focus === "bolts"}
+              focused={focus === "pipelines"}
               glyphs={glyphs}
               height={bodyHeight}
               runs={runs}
@@ -1233,5 +1233,5 @@ function startedBy(run: RunState): string | undefined {
 
 function startsOnPipelines(library: Library): boolean {
   const first = ordered(library)[0];
-  return Boolean(library.here && first?.workspace.file === library.here && first.workspace.bolts.length > 0);
+  return Boolean(library.here && first?.workspace.file === library.here && first.workspace.pipelines.length > 0);
 }

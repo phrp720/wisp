@@ -57,9 +57,9 @@ afterEach(async () => {
 describe("one word", () => {
   it("is a pipeline of the project you are in, by a whole word, its slug or its name", async () => {
     standIn(wisp);
-    expect((await resolveRun("cli", undefined, undefined)).bolt).toBe("cli");
+    expect((await resolveRun("cli", undefined, undefined)).pipeline).toBe("cli");
     expect((await resolveRun("work-on-the-cli", undefined, undefined)).read.workspace.name).toBe("Wisp");
-    expect((await resolveRun("document", undefined, undefined)).bolt).toBe("document");
+    expect((await resolveRun("document", undefined, undefined)).pipeline).toBe("document");
   });
 
   it("is never part of a word, and says which it might have meant", async () => {
@@ -96,9 +96,9 @@ describe("one word", () => {
 describe("two words", () => {
   it("are a workspace and its pipeline, from anywhere", async () => {
     standIn(outside);
-    const { read, bolt } = await resolveRun("mira", "deploy", undefined);
+    const { read, pipeline } = await resolveRun("mira", "deploy", undefined);
     expect(read.workspace.name).toBe("Mira");
-    expect(bolt).toBe("deploy");
+    expect(pipeline).toBe("deploy");
   });
 });
 
@@ -115,7 +115,7 @@ describe("wisp pick without a terminal", () => {
     await pick.run(["wisp"], { json: true });
     const shown = JSON.parse(printed.join("\n")) as { name: string; pipelines: { label: string; slug: string; notes?: string }[] };
     expect(shown.name).toBe("Wisp");
-    expect(shown.pipelines.map((bolt) => [bolt.slug, bolt.notes ?? ""])).toEqual([
+    expect(shown.pipelines.map((pipeline) => [pipeline.slug, pipeline.notes ?? ""])).toEqual([
       ["work-on-the-cli", "The CLI in watch mode"],
       ["documentation", ""],
       ["document", ""],

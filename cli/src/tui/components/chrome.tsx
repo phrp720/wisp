@@ -19,7 +19,7 @@ function typingHint(view: View): string | undefined {
 }
 
 /** The three screens, as tabs along the top: the one you are on, and the key for each. */
-export type Tab = "bolts" | "running" | "history";
+export type Tab = "pipelines" | "running" | "history";
 
 export function Header({ services, glyphs, columns, here, running, failing, webhooksFailing = 0, tab }: { services: Services; glyphs: Glyphs; columns: number; here?: string | undefined; running: number; failing: string[]; webhooksFailing?: number; tab: Tab }) {
   const { environment } = services;
@@ -35,7 +35,7 @@ export function Header({ services, glyphs, columns, here, running, failing, webh
             {glyphs.border === "round" ? "🔮 " : ""}wisp
           </Text>
           {"   "}
-          <TabLabel number="1" title="Pipelines" on={tab === "bolts"} />
+          <TabLabel number="1" title="Pipelines" on={tab === "pipelines"} />
           {"   "}
           <TabLabel number="2" title="Running" on={tab === "running"} />
           {/* The Running tab says how things are: how many are up, or what needs you. */}
@@ -75,7 +75,7 @@ export function webhookWarning(glyphs: Glyphs, failing: number): string {
  */
 export function headerTabAt(x: number, glyphs: Glyphs, status: string, warning = ""): Tab | "webhooks" | undefined {
   let at = 1 + (glyphs.border === "round" ? 3 : 0) + "wisp".length + 3;
-  for (const [tab, width] of [["bolts", "1 Pipelines".length], ["running", "2 Running".length + status.length], ["history", "3 History".length], ["webhooks", warning.length]] as const) {
+  for (const [tab, width] of [["pipelines", "1 Pipelines".length], ["running", "2 Running".length + status.length], ["history", "3 History".length], ["webhooks", warning.length]] as const) {
     if (width > 0 && x >= at && x < at + width) return tab;
     at += width + 3;
   }
@@ -94,16 +94,16 @@ export function Footer({ view, message, notice, hint, columns = 0 }: { view: Vie
   const keys: Record<View["kind"], string> = {
     browse: "⏎ run · e edit · a add · x stop · / search · ? keys · q quit",
     editor: "",
-    "new-bolt": "",
+    "new-pipeline": "",
     "new-workspace": "",
     "edit-workspace": "",
-    "delete-bolt": `Its steps go too; what it started keeps running · ${ASK_KEYS}`,
+    "delete-pipeline": `Its steps go too; what it started keeps running · ${ASK_KEYS}`,
     "confirm-run": `y or ← ⏎ runs it · esc cancels`,
     "run-inputs": "",
     "delete-workspace": view.kind === "delete-workspace" && view.personal
       ? `Its file and pipelines go; what it started keeps running · ${ASK_KEYS}`
       : `Deletes ${view.kind === "delete-workspace" ? tildify(view.file) : ".wisp.json"} for good; what it started keeps running · ${ASK_KEYS}`,
-    "stop-bolt": "",
+    "stop-pipeline": "",
     settings: "",
     setup: "",
     search: "type to search · ↑↓ choose · ⏎ run · esc back",

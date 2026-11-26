@@ -37,15 +37,15 @@ export interface RunCallbacks {
 export interface Services {
   environment: Environment;
   load(): Promise<Library>;
-  run(read: WorkspaceRead, bolt: string, callbacks: RunCallbacks): Promise<SwitchResult>;
-  /** The failed part of a past run, planned against the bolt as it is now. */
+  run(read: WorkspaceRead, pipeline: string, callbacks: RunCallbacks): Promise<SwitchResult>;
+  /** The failed part of a past run, planned against the pipeline as it is now. */
   planRetry(read: WorkspaceRead, entry: HistoryEntry): Promise<PlannedStep[]>;
-  questions(read: WorkspaceRead, bolt: string, values?: Record<string, string>): Promise<string[]>;
-  inputs(read: WorkspaceRead, bolt: string): Promise<InputSpec[]>;
+  questions(read: WorkspaceRead, pipeline: string, values?: Record<string, string>): Promise<string[]>;
+  inputs(read: WorkspaceRead, pipeline: string): Promise<InputSpec[]>;
   /** Run part of a plan again — the steps that failed, and what they kept from running. */
   retry(read: WorkspaceRead, steps: PlannedStep[], label: string, callbacks: RunCallbacks): Promise<SwitchResult>;
-  /** Stop what a bolt started and run its teardown; with `deps`, the bolts it needed too. */
-  down(read: WorkspaceRead, bolt: Pipeline, options?: { deps?: boolean }): Promise<DownResult>;
+  /** Stop what a pipeline started and run its teardown; with `deps`, the pipelines it needed too. */
+  down(read: WorkspaceRead, pipeline: Pipeline, options?: { deps?: boolean }): Promise<DownResult>;
   history(): Promise<HistoryEntry[]>;
   forgetRuns(ids: string[]): Promise<void>;
   readLog(path: string): Promise<string>;
@@ -108,23 +108,23 @@ export interface SettingsService {
 
 /** The edits the TUI's forms make — the core's, passed in so a test can watch them. */
 export interface Editing {
-  bolt(file: string, bolt: string): Promise<RawPipeline>;
+  pipeline(file: string, pipeline: string): Promise<RawPipeline>;
   addPipeline(file: string, label: string): Promise<void>;
-  renamePipeline(file: string, bolt: string, label: string): Promise<void>;
-  setPipelineNotes(file: string, bolt: string, notes: string): Promise<void>;
-  setSlug(file: string, bolt: string, slug: string): Promise<void>;
+  renamePipeline(file: string, pipeline: string, label: string): Promise<void>;
+  setPipelineNotes(file: string, pipeline: string, notes: string): Promise<void>;
+  setSlug(file: string, pipeline: string, slug: string): Promise<void>;
   setWorkspaceDetails(file: string, details: { name: string; icon: string; notes: string }): Promise<void>;
-  removePipeline(file: string, bolt: string): Promise<void>;
-  movePipeline(file: string, bolt: string, by: -1 | 1): Promise<void>;
-  setKeepGoing(file: string, bolt: string, keepGoing: boolean): Promise<void>;
-  setConfirm(file: string, bolt: string, confirm: string | boolean): Promise<void>;
-  setInput(file: string, bolt: string, previous: string | undefined, name: string, input: RawInput): Promise<void>;
-  removeInput(file: string, bolt: string, name: string): Promise<void>;
-  addStep(file: string, bolt: string, step: RawStep, at?: number): Promise<void>;
-  replaceStep(file: string, bolt: string, index: number, step: RawStep): Promise<void>;
-  removeStep(file: string, bolt: string, index: number): Promise<void>;
-  moveStep(file: string, bolt: string, index: number, by: -1 | 1): Promise<number>;
-  setAfter(file: string, bolt: string, index: number, on: number[]): Promise<void>;
+  removePipeline(file: string, pipeline: string): Promise<void>;
+  movePipeline(file: string, pipeline: string, by: -1 | 1): Promise<void>;
+  setKeepGoing(file: string, pipeline: string, keepGoing: boolean): Promise<void>;
+  setConfirm(file: string, pipeline: string, confirm: string | boolean): Promise<void>;
+  setInput(file: string, pipeline: string, previous: string | undefined, name: string, input: RawInput): Promise<void>;
+  removeInput(file: string, pipeline: string, name: string): Promise<void>;
+  addStep(file: string, pipeline: string, step: RawStep, at?: number): Promise<void>;
+  replaceStep(file: string, pipeline: string, index: number, step: RawStep): Promise<void>;
+  removeStep(file: string, pipeline: string, index: number): Promise<void>;
+  moveStep(file: string, pipeline: string, index: number, by: -1 | 1): Promise<number>;
+  setAfter(file: string, pipeline: string, index: number, on: number[]): Promise<void>;
   createPersonalWorkspace(name: string): Promise<string>;
   /** Delete one of your own workspaces' files. */
   removePersonalWorkspace(file: string): Promise<void>;
@@ -138,8 +138,8 @@ export interface SetupSuggestion {
   name: string;
   /** What it found, in words: "package.json — pnpm dev". */
   found: string[];
-  /** What it would add: each bolt, and what it does step by step. */
-  bolts: { label: string; steps: string[] }[];
+  /** What it would add: each pipeline, and what it does step by step. */
+  pipelines: { label: string; steps: string[] }[];
   contents: string;
 }
 
@@ -154,14 +154,14 @@ export function ordered(library: Library): WorkspaceRead[] {
 export interface SearchHit {
   /** Index into the ordered workspaces. */
   workspace: number;
-  /** A bolt label, or nothing for the workspace itself. */
-  bolt?: string;
+  /** A pipeline label, or nothing for the workspace itself. */
+  pipeline?: string;
   label: string;
   score: number;
 }
 
 /**
- * Fuzzy search over workspaces and their bolts, the way a picker should work: the letters
+ * Fuzzy search over workspaces and their pipelines, the way a picker should work: the letters
  * in order, anywhere, with consecutive runs and word starts counting for more. "acapi"
  * finds "Acme › Work on api".
  */
@@ -174,12 +174,12 @@ export function search(reads: WorkspaceRead[], query: string): SearchHit[] {
     const own = score(name, needle);
     if (own !== undefined) hits.push({ workspace: index, label: name, score: own });
 
-    for (const bolt of read.workspace.bolts) {
-      const label = `${name} › ${bolt.label}`;
-      // The bolt alone counts most — it is what you are looking for — but the workspace
+    for (const pipeline of read.workspace.pipelines) {
+      const label = `${name} › ${pipeline.label}`;
+      // The pipeline alone counts most — it is what you are looking for — but the workspace
       // name helps tell two "Work on api"s apart.
-      const value = Math.max(score(bolt.label, needle) ?? -Infinity, (score(label, needle) ?? -Infinity) - 1);
-      if (value !== -Infinity) hits.push({ workspace: index, bolt: bolt.label, label, score: value + 1 });
+      const value = Math.max(score(pipeline.label, needle) ?? -Infinity, (score(label, needle) ?? -Infinity) - 1);
+      if (value !== -Infinity) hits.push({ workspace: index, pipeline: pipeline.label, label, score: value + 1 });
     }
   });
 

@@ -1,4 +1,4 @@
-/** The main screen: workspaces on the left, the selected one's bolts on the right; and search. */
+/** The main screen: workspaces on the left, the selected one's pipelines on the right; and search. */
 
 import { Box, Text } from "ink";
 import { Fragment, type ReactNode } from "react";
@@ -71,7 +71,7 @@ export function WorkspaceList(props: { reads: WorkspaceRead[]; index: number; he
   );
 }
 
-/** How wide the workspace list is, the bolts panel taking the rest. */
+/** How wide the workspace list is, the pipelines panel taking the rest. */
 export function workspaceListWidth(columns: number): number {
   return Math.min(32, Math.max(18, Math.floor(columns * 0.28)));
 }
@@ -92,23 +92,23 @@ export function workspaceRows(reads: WorkspaceRead[], here: string | undefined, 
   return windowed(rows, selectedRow, height - 3).items;
 }
 
-/** The line of the bolts panel its first bolt is on, counted from the panel's top border. */
+/** The line of the pipelines panel its first pipeline is on, counted from the panel's top border. */
 export const FIRST_PIPELINE_LINE = 5;
 
 const HEAD = 6;
 
-export function pipelineWindow<T>(bolts: T[], pipelineIndex: number, height: number, asking = false): { items: T[]; offset: number; split: boolean; topHeight: number; stepRoom: number } {
-  if (height >= 18 && bolts.length > 0) {
-    const rows = Math.max(1, Math.min(bolts.length, Math.floor(height / 2) - HEAD));
-    return { ...windowed(bolts, pipelineIndex, rows), split: true, topHeight: HEAD + rows + (asking ? 1 : 0), stepRoom: 0 };
+export function pipelineWindow<T>(pipelines: T[], pipelineIndex: number, height: number, asking = false): { items: T[]; offset: number; split: boolean; topHeight: number; stepRoom: number } {
+  if (height >= 18 && pipelines.length > 0) {
+    const rows = Math.max(1, Math.min(pipelines.length, Math.floor(height / 2) - HEAD));
+    return { ...windowed(pipelines, pipelineIndex, rows), split: true, topHeight: HEAD + rows + (asking ? 1 : 0), stepRoom: 0 };
   }
   const listRoom = Math.max(2, height - HEAD - 2);
-  const rows = Math.max(1, Math.min(bolts.length, Math.ceil(listRoom / 2)));
-  return { ...windowed(bolts, pipelineIndex, rows), split: false, topHeight: height, stepRoom: Math.max(1, listRoom - rows - (asking ? 1 : 0)) };
+  const rows = Math.max(1, Math.min(pipelines.length, Math.ceil(listRoom / 2)));
+  return { ...windowed(pipelines, pipelineIndex, rows), split: false, topHeight: height, stepRoom: Math.max(1, listRoom - rows - (asking ? 1 : 0)) };
 }
 
 function takenDown(entry: HistoryEntry): boolean {
-  return / \(down\)$/.test(entry.bolt);
+  return / \(down\)$/.test(entry.pipeline);
 }
 
 interface PipelineState {
@@ -139,13 +139,13 @@ export function WorkspacePanel(props: {
   const { read, reads, pipelineIndex, focused, glyphs, height, width = 80, here = false, runs, containers, history, confirming, scroll = 0, scrollLimit, instead, graph = true } = props;
   const problems = (props.diagnostics ?? read.diagnostics).filter((entry) => entry.level !== "note" && entry.at !== "trust");
   const problemsOf = (entry: Pipeline) => problems.filter((problem) => problem.pipeline?.toLowerCase() === entry.label.toLowerCase());
-  const fileProblems = problems.filter((problem) => !problem.pipeline || !read.workspace.bolts.some((entry) => entry.label.toLowerCase() === problem.pipeline?.toLowerCase()));
-  const lastRun = (label: string) => history.find((entry) => baseLabel(entry.bolt) === label && !takenDown(entry));
-  const latest = (label: string) => history.find((entry) => baseLabel(entry.bolt) === label);
+  const fileProblems = problems.filter((problem) => !problem.pipeline || !read.workspace.pipelines.some((entry) => entry.label.toLowerCase() === problem.pipeline?.toLowerCase()));
+  const lastRun = (label: string) => history.find((entry) => baseLabel(entry.pipeline) === label && !takenDown(entry));
+  const latest = (label: string) => history.find((entry) => baseLabel(entry.pipeline) === label);
   const { workspace } = read;
-  const bolts = workspace.bolts;
-  const selected = bolts[Math.min(pipelineIndex, Math.max(0, bolts.length - 1))];
-  const { items: shownPipelines, offset, split, topHeight, stepRoom } = pipelineWindow(bolts, pipelineIndex, height, Boolean(confirming));
+  const pipelines = workspace.pipelines;
+  const selected = pipelines[Math.min(pipelineIndex, Math.max(0, pipelines.length - 1))];
+  const { items: shownPipelines, offset, split, topHeight, stepRoom } = pipelineWindow(pipelines, pipelineIndex, height, Boolean(confirming));
 
   const stateOf = (entry: Pipeline): PipelineState | undefined => {
     const status = pipelineStatus(workspace, entry, runs, containers);
@@ -204,7 +204,7 @@ export function WorkspacePanel(props: {
   );
 
   const list =
-    bolts.length === 0 ? (
+    pipelines.length === 0 ? (
       <>
         <Text bold={focused}>
           {focused ? glyphs.pointer : " "} <Text color={focused ? undefined : "magenta"} inverse={focused}>+ add a pipeline</Text>
@@ -238,7 +238,7 @@ export function WorkspacePanel(props: {
   const details = selected ? (
     <PipelineDetails
       read={read}
-      bolt={selected}
+      pipeline={selected}
       state={stateOf(selected)}
       last={lastRun(selected.label)}
       here={here}
@@ -287,7 +287,7 @@ export function WorkspacePanel(props: {
 
 function PipelineDetails(props: {
   read: WorkspaceRead;
-  bolt: Pipeline;
+  pipeline: Pipeline;
   state: PipelineState | undefined;
   last: HistoryEntry | undefined;
   here: boolean;
@@ -303,23 +303,23 @@ function PipelineDetails(props: {
   width: number;
   graph: boolean;
 }) {
-  const { read, bolt, state, last, here, glyphs, full, room, reads, runs, containers, scroll, scrollLimit, problems, width } = props;
-  const notes = bolt.notes ? twoLines(bolt.notes, full ? width : width - 2) : [];
-  const inputNames = (bolt.inputs ?? []).map((input) => input.name);
+  const { read, pipeline, state, last, here, glyphs, full, room, reads, runs, containers, scroll, scrollLimit, problems, width } = props;
+  const notes = pipeline.notes ? twoLines(pipeline.notes, full ? width : width - 2) : [];
+  const inputNames = (pipeline.inputs ?? []).map((input) => input.name);
   const { workspace } = read;
-  const nodes = planGraph(read, bolt, glyphs, { runs, containers, last });
+  const nodes = planGraph(read, pipeline, glyphs, { runs, containers, last });
   const plan = full && props.graph ? nodes : [];
   const live = nodes.some((node) => node.state === "running");
-  const together = !hasEdges(nodes) && bolt.steps.every((step) => step.kind !== "pipeline") ? nodes.length : 0;
-  const needs = flow(read, bolt);
-  const neededBy = usedBy(read, bolt);
-  const typed = here ? shortest(bolt, workspace.bolts, true) : `${slugify(workspace.name)} ${shortest(bolt, workspace.bolts)}`;
+  const together = !hasEdges(nodes) && pipeline.steps.every((step) => step.kind !== "pipeline") ? nodes.length : 0;
+  const needs = flow(read, pipeline);
+  const neededBy = usedBy(read, pipeline);
+  const typed = here ? shortest(pipeline, workspace.pipelines, true) : `${slugify(workspace.name)} ${shortest(pipeline, workspace.pipelines)}`;
 
   const problemLines = problems.length > 0 ? problems.reduce((sum, problem) => sum + 1 + (problem.hint ? 1 : 0), 0) + 1 : 0;
   const above = (full ? 1 + notes.length + (needs.length > 1 ? 1 : 0) + 2 : notes.length + 1) + problemLines;
   const bottom = full ? 3 + (inputNames.length > 0 ? 1 : 0) : 0;
   const drawn = fitGraph(plan, width, Number.POSITIVE_INFINITY, glyphs);
-  const steps = stepLines({ read, bolt, reads, runs, containers, glyphs, after: !drawn });
+  const steps = stepLines({ read, pipeline, reads, runs, containers, glyphs, after: !drawn });
   const lines = drawn
     ? [
         { key: "graph-above", node: <Text> </Text> },
@@ -337,7 +337,7 @@ function PipelineDetails(props: {
   const below = lines.length - top - fit;
 
   const facts = [
-    bolt.confirm ? `asks first: ${bolt.confirm}` : "",
+    pipeline.confirm ? `asks first: ${pipeline.confirm}` : "",
     last ? (last.running ? `running now, #${last.number ?? ""}` : `last run ${last.interrupted ? "!" : last.ok ? glyphs.ok : glyphs.fail} #${last.number ?? ""} ${since(last.startedAt)}`) : "never run yet",
     neededBy.length > 0 ? `needed by ${neededBy.join(", ")}` : "",
   ]
@@ -348,8 +348,8 @@ function PipelineDetails(props: {
     <>
       {full ? (
         <Text wrap="truncate-end">
-          <Text color={TONE.accent}>{glyphs.bolt}</Text>
-          <Text bold color={bolt.color}>{bolt.label}</Text>
+          <Text color={TONE.accent}>{glyphs.pipeline}</Text>
+          <Text bold color={pipeline.color}>{pipeline.label}</Text>
           {state ? <Text color={state.color} dimColor={state.dim ?? false}>{`   ${state.text}`}</Text> : null}
         </Text>
       ) : null}
@@ -372,7 +372,7 @@ function PipelineDetails(props: {
         <Box flexDirection="column" paddingLeft={full ? 0 : 2} flexShrink={0}>
           {problems.map((problem, at) => (
             <Box key={`${problem.at}:${at}`} flexDirection="column">
-              <Text color={problem.level === "error" ? "red" : "yellow"} wrap="wrap">{`${problem.level === "error" ? glyphs.fail : "!"} ${problem.pipeline && problem.pipeline.toLowerCase() === bolt.label.toLowerCase() ? "" : "In the file: "}${problem.message}`}</Text>
+              <Text color={problem.level === "error" ? "red" : "yellow"} wrap="wrap">{`${problem.level === "error" ? glyphs.fail : "!"} ${problem.pipeline && problem.pipeline.toLowerCase() === pipeline.label.toLowerCase() ? "" : "In the file: "}${problem.message}`}</Text>
               {problem.hint ? <Text dimColor wrap="wrap">{`  ${problem.hint}`}</Text> : null}
             </Box>
           ))}
@@ -383,7 +383,7 @@ function PipelineDetails(props: {
         <Text dimColor>{full ? "It has no steps yet — press e to add some." : "  It has no steps yet — press e to add some."}</Text>
       ) : (
         <Box flexDirection="column" paddingLeft={full ? 0 : 2} flexShrink={0}>
-          <Text dimColor>{live ? (last ? `Running now, from #${last.number ?? ""}:` : "Running now:") : together > 1 ? `When you run it, these ${together} run at the same time${bolt.keepGoing ? ", and it keeps going if one fails" : ""}:` : bolt.keepGoing ? "When you run it, it will (and keep going if a step fails):" : "When you run it, it will:"}</Text>
+          <Text dimColor>{live ? (last ? `Running now, from #${last.number ?? ""}:` : "Running now:") : together > 1 ? `When you run it, these ${together} run at the same time${pipeline.keepGoing ? ", and it keeps going if one fails" : ""}:` : pipeline.keepGoing ? "When you run it, it will (and keep going if a step fails):" : "When you run it, it will:"}</Text>
           {lines.slice(top, top + fit).map((line) => (
             <Box key={line.key}>{line.node}</Box>
           ))}
@@ -446,9 +446,9 @@ export function SearchPanel({ hits, index, query, glyphs, height }: { hits: Sear
       {items.map((hit, position) => {
         const selected = offset + position === index;
         return (
-          <Text key={`${hit.workspace}:${hit.bolt ?? ""}`} wrap="truncate-end" inverse={selected}>
+          <Text key={`${hit.workspace}:${hit.pipeline ?? ""}`} wrap="truncate-end" inverse={selected}>
             {selected ? glyphs.pointer : " "} {hit.label}
-            {hit.bolt ? null : <Text dimColor> workspace</Text>}
+            {hit.pipeline ? null : <Text dimColor> workspace</Text>}
           </Text>
         );
       })}

@@ -14,9 +14,9 @@ import { spell } from "../terminal/spells.js";
 import { TONE } from "../terminal/tones.js";
 
 /**
- * The Running list, structured: the run in progress first, then each workspace's bolts with
- * their pipeline under them — in the order the bolt's last run went: what it waited for and
- * opened, the bolts it needed, and what it started, which shows live.
+ * The Running list, structured: the run in progress first, then each workspace's pipelines with
+ * their pipeline under them — in the order the pipeline's last run went: what it waited for and
+ * opened, the pipelines it needed, and what it started, which shows live.
  */
 export function groupPanes(head: PaneItem[], runs: RunStatus[], containers: Container[], reads: WorkspaceRead[], history: HistoryEntry[] = []): PaneItem[] {
   const groups = new Map<string, { group: PaneGroup; members: PaneItem[] }>();
@@ -28,64 +28,64 @@ export function groupPanes(head: PaneItem[], runs: RunStatus[], containers: Cont
   const nameOf = (file: string, fallback: string) => reads.find((read) => read.workspace.file === file)?.workspace.name ?? fallback;
 
   for (const run of runs) {
-    const bolt = run.bolt;
-    const key = `${run.workspace}#${bolt ?? ""}`;
-    add({ key, workspace: run.workspace, workspaceName: nameOf(run.workspace, run.workspaceName), ...(bolt ? { bolt } : {}), title: bolt ?? "Not from a pipeline" }, { type: "run", run, group: key });
+    const pipeline = run.pipeline;
+    const key = `${run.workspace}#${pipeline ?? ""}`;
+    add({ key, workspace: run.workspace, workspaceName: nameOf(run.workspace, run.workspaceName), ...(pipeline ? { pipeline } : {}), title: pipeline ?? "Not from a pipeline" }, { type: "run", run, group: key });
   }
   for (const container of containers) {
-    // The bolt whose compose step starts this file is the container's owner.
-    let owner: { read: WorkspaceRead; bolt: string } | undefined;
+    // The pipeline whose compose step starts this file is the container's owner.
+    let owner: { read: WorkspaceRead; pipeline: string } | undefined;
     for (const read of reads) {
-      for (const bolt of read.workspace.bolts) {
-        if (bolt.steps.some((step) => step.kind === "compose" && step.file === container.file)) owner = owner ?? { read, bolt: bolt.label };
+      for (const pipeline of read.workspace.pipelines) {
+        if (pipeline.steps.some((step) => step.kind === "compose" && step.file === container.file)) owner = owner ?? { read, pipeline: pipeline.label };
       }
     }
-    const key = owner ? `${owner.read.workspace.file}#${owner.bolt}` : `compose#${container.project}`;
+    const key = owner ? `${owner.read.workspace.file}#${owner.pipeline}` : `compose#${container.project}`;
     add(
       owner
-        ? { key, workspace: owner.read.workspace.file, workspaceName: owner.read.workspace.name, bolt: owner.bolt, title: owner.bolt }
+        ? { key, workspace: owner.read.workspace.file, workspaceName: owner.read.workspace.name, pipeline: owner.pipeline, title: owner.pipeline }
         : { key, workspaceName: container.project, title: `${container.project} (docker compose)` },
       { type: "container", container, group: key },
     );
   }
 
   for (const { group } of [...groups.values()]) {
-    if (!group.bolt || !group.workspace) continue;
-    const latest = history.find((candidate) => candidate.workspace === group.workspace && !candidate.bolt.endsWith(" (down)") && allSteps(candidate).some((step) => (step.bolt ?? baseLabel(candidate.bolt)) === group.bolt));
-    const caller = latest && baseLabel(latest.bolt);
-    if (!latest || !caller || caller === group.bolt) continue;
+    if (!group.pipeline || !group.workspace) continue;
+    const latest = history.find((candidate) => candidate.workspace === group.workspace && !candidate.pipeline.endsWith(" (down)") && allSteps(candidate).some((step) => (step.pipeline ?? baseLabel(candidate.pipeline)) === group.pipeline));
+    const caller = latest && baseLabel(latest.pipeline);
+    if (!latest || !caller || caller === group.pipeline) continue;
     const key = `${group.workspace}#${caller}`;
-    if (!groups.has(key)) groups.set(key, { group: { key, workspace: group.workspace, workspaceName: group.workspaceName, bolt: caller, title: caller }, members: [] });
+    if (!groups.has(key)) groups.set(key, { group: { key, workspace: group.workspace, workspaceName: group.workspaceName, pipeline: caller, title: caller }, members: [] });
   }
 
   for (const found of groups.values()) {
     found.members = pipeline(found.group, found.members, history);
     const from = found.members.find((member) => member.type === "step");
-    if (from?.type === "step" && baseLabel(from.entry.bolt) === found.group.bolt && from.entry.number) found.group.number = from.entry.number;
+    if (from?.type === "step" && baseLabel(from.entry.pipeline) === found.group.pipeline && from.entry.number) found.group.number = from.entry.number;
   }
   nestNeededPipelines(groups, history);
 
-  // Within a workspace, its bolts by name, and what no bolt started last.
+  // Within a workspace, its pipelines by name, and what no pipeline started last.
   const ordered = [...groups.values()].sort(
     (left, right) =>
       left.group.workspaceName.localeCompare(right.group.workspaceName) ||
-      Number(!left.group.bolt) - Number(!right.group.bolt) ||
+      Number(!left.group.pipeline) - Number(!right.group.pipeline) ||
       left.group.title.localeCompare(right.group.title),
   );
   return [...head, ...ordered.flatMap(({ group, members }) => [{ type: "group" as const, group }, ...members])];
 }
 
 /**
- * A bolt that came up only because another bolt needed it is part of that run, the way
+ * A pipeline that came up only because another pipeline needed it is part of that run, the way
  * GitHub shows a called workflow inside the run that called it: its containers and commands
- * move under the "⚡ Services" line of the bolt that needed it, and its own group goes.
+ * move under the "⚡ Services" line of the pipeline that needed it, and its own group goes.
  * Run on its own since, it keeps its own place.
  */
 function nestNeededPipelines(groups: Map<string, { group: PaneGroup; members: PaneItem[] }>, history: HistoryEntry[]): void {
   for (const [key, found] of groups) {
-    const { bolt, workspace } = found.group;
-    if (!bolt || !workspace || !groups.has(key)) continue;
-    const entry = history.find((candidate) => candidate.workspace === workspace && baseLabel(candidate.bolt) === bolt);
+    const { pipeline, workspace } = found.group;
+    if (!pipeline || !workspace || !groups.has(key)) continue;
+    const entry = history.find((candidate) => candidate.workspace === workspace && baseLabel(candidate.pipeline) === pipeline);
     if (!entry) continue;
     for (const member of [...found.members]) {
       if (member.type !== "step" || member.step.kind !== "pipeline" || member.entry !== entry) continue;
@@ -94,7 +94,7 @@ function nestNeededPipelines(groups: Map<string, { group: PaneGroup; members: Pa
       if (!needed || neededKey === key) continue;
       // Only when this run is the newest that touched it: run on its own later, it's its own.
       const latest = history.find(
-        (candidate) => candidate.workspace === workspace && (baseLabel(candidate.bolt) === member.step.label || candidate.steps.some((step) => step.bolt === member.step.label)),
+        (candidate) => candidate.workspace === workspace && (baseLabel(candidate.pipeline) === member.step.label || candidate.steps.some((step) => step.pipeline === member.step.label)),
       );
       if (latest !== entry) continue;
       const inside = needed.members.filter((item) => item.type === "run" || item.type === "container").map((item) => ({ ...item, group: key, depth: 2 }));
@@ -107,14 +107,14 @@ function nestNeededPipelines(groups: Map<string, { group: PaneGroup; members: Pa
 }
 
 /**
- * A bolt's members in pipeline order. Its last run in History gives the order and the
- * finished steps; what is running takes the place of the step that started it. A bolt it
+ * A pipeline's members in pipeline order. Its last run in History gives the order and the
+ * finished steps; what is running takes the place of the step that started it. A pipeline it
  * needed is one line, however many steps it had — it has its own place in the list.
  */
 export function pipeline(group: PaneGroup, members: PaneItem[], history: HistoryEntry[]): PaneItem[] {
-  if (!group.bolt || !group.workspace) return members;
-  const owns = (entry: HistoryEntry, step: HistoryStep) => (step.bolt ?? baseLabel(entry.bolt)) === group.bolt;
-  const entry = history.find((candidate) => candidate.workspace === group.workspace && !candidate.bolt.endsWith(" (down)") && (baseLabel(candidate.bolt) === group.bolt || allSteps(candidate).some((step) => owns(candidate, step))));
+  if (!group.pipeline || !group.workspace) return members;
+  const owns = (entry: HistoryEntry, step: HistoryStep) => (step.pipeline ?? baseLabel(entry.pipeline)) === group.pipeline;
+  const entry = history.find((candidate) => candidate.workspace === group.workspace && !candidate.pipeline.endsWith(" (down)") && (baseLabel(candidate.pipeline) === group.pipeline || allSteps(candidate).some((step) => owns(candidate, step))));
   if (!entry) return members;
 
   const left = [...members];
@@ -125,19 +125,19 @@ export function pipeline(group: PaneGroup, members: PaneItem[], history: History
   };
   const ordered: PaneItem[] = [];
   const needed = new Set<string>();
-  // The run was this bolt's own, or it came up as another bolt's dependency: only then are
-  // the other bolts in that run ones it needed, rather than its siblings.
-  const own = baseLabel(entry.bolt) === group.bolt;
+  // The run was this pipeline's own, or it came up as another pipeline's dependency: only then are
+  // the other pipelines in that run ones it needed, rather than its siblings.
+  const own = baseLabel(entry.pipeline) === group.pipeline;
   const all = allSteps(entry);
   all.forEach((step, index) => {
     if (!owns(entry, step)) {
       if (!own) return;
-      // A step of a bolt this one needed: one line for that bolt, where it ran — its output
+      // A step of a pipeline this one needed: one line for that pipeline, where it ran — its output
       // the last thing it printed.
-      const name = step.bolt ?? "";
+      const name = step.pipeline ?? "";
       if (!name || needed.has(name)) return;
       needed.add(name);
-      const its = all.filter((candidate) => candidate.bolt === name);
+      const its = all.filter((candidate) => candidate.pipeline === name);
       const done = its.filter((candidate) => !candidate.state);
       const printed = [...its].reverse().find((candidate) => candidate.log && candidate.state !== "waiting")?.log;
       const state = its.some((candidate) => candidate.state === "running") ? "running" : done.length === 0 ? "waiting" : undefined;
@@ -165,10 +165,10 @@ export function pipeline(group: PaneGroup, members: PaneItem[], history: History
 }
 
 /**
- * The Running list narrowed to a search. A bolt that matches keeps all of its tasks; a task
- * that matches keeps its bolt, so you still see where it belongs, and so does a task inside
- * a bolt this one needed keep that bolt's line ("⚡ Services" over postgres). The run in
- * progress stays when its bolt matches.
+ * The Running list narrowed to a search. A pipeline that matches keeps all of its tasks; a task
+ * that matches keeps its pipeline, so you still see where it belongs, and so does a task inside
+ * a pipeline this one needed keep that pipeline's line ("⚡ Services" over postgres). The run in
+ * progress stays when its pipeline matches.
  */
 export function filterPanes(items: PaneItem[], query: string, running?: string): PaneItem[] {
   if (!query.trim()) return items;
@@ -213,26 +213,26 @@ export function filterPanes(items: PaneItem[], query: string, running?: string):
   return items.filter((item) => keep.has(item));
 }
 
-/** The bolt a group in the Running list stands for. */
+/** The pipeline a group in the Running list stands for. */
 export function groupPipeline(items: PaneItem[], key: string): string | undefined {
   const found = items.find((item): item is PaneItem & { type: "group" } => item.type === "group" && item.group.key === key);
-  return found?.group.bolt;
+  return found?.group.pipeline;
 }
 
 /**
- * Which run started a task, as History numbers it: " #4" under its own bolt, or
- * " from Work on web #2" when another bolt's run brought it up as a dependency. `long`
- * always names the bolt. Nothing while that run is still going and not in History yet.
+ * Which run started a task, as History numbers it: " #4" under its own pipeline, or
+ * " from Work on web #2" when another pipeline's run brought it up as a dependency. `long`
+ * always names the pipeline. Nothing while that run is still going and not in History yet.
  */
-export function startedBy(run: RunStatus, history: HistoryEntry[], bolt: string | undefined, long = false): string {
+export function startedBy(run: RunStatus, history: HistoryEntry[], pipeline: string | undefined, long = false): string {
   const entry = run.historyId ? history.find((candidate) => candidate.id === run.historyId) : undefined;
   if (!entry?.number) return "";
-  const name = entry.bolt.replace(/ \((retry|down)\)$/, "");
-  return !long && name === bolt ? ` #${entry.number}` : ` from ${name} #${entry.number}`;
+  const name = entry.pipeline.replace(/ \((retry|down)\)$/, "");
+  return !long && name === pipeline ? ` #${entry.number}` : ` from ${name} #${entry.number}`;
 }
 
-/** The tasks under a bolt in the Running list. */
-/** Everything under a bolt in the Running list: its pipeline's steps and what is running. */
+/** The tasks under a pipeline in the Running list. */
+/** Everything under a pipeline in the Running list: its pipeline's steps and what is running. */
 export function allMembers(items: PaneItem[], key: string): PaneItem[] {
   return items.filter((item) => (item.type === "run" || item.type === "container" || item.type === "step") && item.group === key);
 }
@@ -241,7 +241,7 @@ export function groupMembers(items: PaneItem[], key: string): (PaneItem & { type
   return items.filter((item): item is PaneItem & { type: "run" | "container" } => (item.type === "run" || item.type === "container") && item.group === key);
 }
 
-/** How many of a bolt's tasks are up, and how many are in trouble. */
+/** How many of a pipeline's tasks are up, and how many are in trouble. */
 export function groupTally(items: PaneItem[], key: string): { up: number; bad: number; total: number } {
   const members = groupMembers(items, key);
   const up = members.filter((item) => (item.type === "run" ? item.run.alive : item.container.state === "running")).length;
@@ -261,7 +261,7 @@ export function paneKey(item: PaneItem): string {
 export type PaneRow = { key: string; kind: "gap" | "heading"; text: string } | { key: string; kind: "item"; at: number };
 
 /**
- * The Running list, line by line: each workspace's heading before its bolts, and the items.
+ * The Running list, line by line: each workspace's heading before its pipelines, and the items.
  * Drawn from this, and clicks are matched against it, so the two can't disagree.
  */
 export function paneRows(items: PaneItem[], active: RunState | undefined): PaneRow[] {
@@ -443,7 +443,7 @@ export function cleanLines(log: string): string[] {
   return lines;
 }
 
-/** The next row with a log of its own, going `by` from `at`: bolt rows have none, so they are passed over. */
+/** The next row with a log of its own, going `by` from `at`: pipeline rows have none, so they are passed over. */
 export function nextWithLog(items: PaneItem[], at: number, by: 1 | -1): number {
   for (let next = at + by; next >= 0 && next < items.length; next += by) {
     if ((items[next] as PaneItem).type !== "group") return next;
@@ -461,7 +461,7 @@ export const TAB_TITLE: Record<PaneTab, string> = { logs: "Logs", info: "Info", 
 /**
  * The tabs of the panel beside the list, for the selected row. A command has its logs, what
  * it is, and the times it ran before; a container its logs and what it is. Anything else (a
- * bolt, a finished step) has one view, and no tabs.
+ * pipeline, a finished step) has one view, and no tabs.
  */
 export function tabsOf(item: PaneItem | undefined): PaneTab[] {
   if (item?.type === "run") return ["logs", "info", "runs"];

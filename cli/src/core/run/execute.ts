@@ -19,10 +19,10 @@ import { type PlannedStep, fillPlan, planPipeline, stagesOf } from "./plan.js";
 import { resolvePipeline } from "./targets.js";
 
 /**
- * Run a bolt and report what happened to each step.
+ * Run a pipeline and report what happened to each step.
  *
  * Steps run one after another, so the order written is the order things appear. A failure
- * stops the run — the tests failing must not be followed by the deploy — unless the bolt
+ * stops the run — the tests failing must not be followed by the deploy — unless the pipeline
  * the failed step belongs to says to keep going.
  */
 export async function switchToWorkspace(
@@ -30,14 +30,14 @@ export async function switchToWorkspace(
   options: SwitchOptions = {},
   deps: RunDeps = {},
 ): Promise<SwitchResult> {
-  const bolt = options.bolt ? resolvePipeline(workspace, options.bolt) : undefined;
+  const pipeline = options.pipeline ? resolvePipeline(workspace, options.pipeline) : undefined;
 
-  const steps: PlannedStep[] = bolt ? fillPlan(await planPipeline(workspace, bolt), options.inputs ?? {}) : [];
-  const result = await runPlan(workspace, steps, { ...options, label: bolt?.label ?? "" }, deps);
-  return { ...result, ...(bolt ? { bolt } : {}) };
+  const steps: PlannedStep[] = pipeline ? fillPlan(await planPipeline(workspace, pipeline), options.inputs ?? {}) : [];
+  const result = await runPlan(workspace, steps, { ...options, label: pipeline?.label ?? "" }, deps);
+  return { ...result, ...(pipeline ? { pipeline } : {}) };
 }
 
-/** Run a plan already made — a bolt's steps, or its `down` steps. */
+/** Run a plan already made — a pipeline's steps, or its `down` steps. */
 export async function runPlan(
   workspace: Workspace,
   steps: PlannedStep[],
@@ -76,19 +76,19 @@ export async function runPlan(
   options.onPlan?.(
     steps.map((step) => step.target),
     waitsOn,
-    steps.map((step) => (step.bolt && step.bolt !== base ? (step.target.workspace ? `${step.target.workspace} › ${step.bolt}` : step.bolt) : undefined)),
+    steps.map((step) => (step.pipeline && step.pipeline !== base ? (step.target.workspace ? `${step.target.workspace} › ${step.pipeline}` : step.pipeline) : undefined)),
   );
 
   const owned = (result: TargetResult, at: number): HistoryStep => {
-    const owner = steps[at]?.bolt;
+    const owner = steps[at]?.pipeline;
     const waits = waitsOn[at] ?? [];
-    return { ...toHistoryStep(result), stage: stageAt[at] ?? 1, at, ...(waits.length > 0 ? { waits } : {}), ...(owner && owner !== options.label.replace(/ \((retry|down)\)$/, "") ? { bolt: owner } : {}) };
+    return { ...toHistoryStep(result), stage: stageAt[at] ?? 1, at, ...(waits.length > 0 ? { waits } : {}), ...(owner && owner !== options.label.replace(/ \((retry|down)\)$/, "") ? { pipeline: owner } : {}) };
   };
   const entry = (done: { ok: boolean; running: boolean }): HistoryEntry => ({
     id: historyId as string,
     workspace: workspace.file,
     workspaceName: workspace.name,
-    bolt: options.label,
+    pipeline: options.label,
     ...(options.trigger ? { trigger: options.trigger } : {}),
     ...(inputs ? { inputs } : {}),
     startedAt: startedAt.toISOString(),
@@ -190,12 +190,12 @@ export async function runPlan(
   if (!dryRun && steps.length > 0) {
     const failed = finished.find((result) => !result.ok && !result.skipped);
     const previous = (await listHistory({ workspace: workspace.file }).catch(() => [])).find(
-      (other) => other.id !== historyId && !other.running && !other.cancelled && baseLabel(other.bolt) === baseLabel(options.label),
+      (other) => other.id !== historyId && !other.running && !other.cancelled && baseLabel(other.pipeline) === baseLabel(options.label),
     );
     const notified = await notifyRunEnd(
       {
         ok,
-        bolt: options.label,
+        pipeline: options.label,
         workspace: workspace.name,
         workspaceFile: workspace.file,
         ...(cancelled ? { cancelled: true } : {}),

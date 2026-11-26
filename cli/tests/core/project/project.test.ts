@@ -60,7 +60,7 @@ describe("the simplest file", () => {
 
     expect(diagnostics.filter((entry) => entry.level !== "note")).toEqual([]);
     expect(workspace.name).toBe("acme");
-    const steps = collectPipelineTargets(workspace, workspace.bolts[0]!);
+    const steps = collectPipelineTargets(workspace, workspace.pipelines[0]!);
     expect(steps.map((step) => [step.kind, step.value])).toEqual([
       ["folder", "/work/acme/apps/api"],
       ["link", "http://localhost:3000"],
@@ -76,7 +76,7 @@ describe("the simplest file", () => {
     });
     expect(workspace.folders).toHaveLength(1);
     expect(diagnostics).toEqual([]);
-    expect(workspace.bolts[0]!.steps).toEqual(workspace.bolts[1]!.steps);
+    expect(workspace.pipelines[0]!.steps).toEqual(workspace.pipelines[1]!.steps);
   });
 });
 
@@ -101,7 +101,7 @@ describe("per-OS values", () => {
   it("skips an asset declared for other systems, with a note rather than an error", () => {
     const { workspace, diagnostics } = read(file, { os: "win32" });
     expect(workspace.apps).toEqual([]);
-    expect(workspace.bolts[0]!.steps).toEqual([]);
+    expect(workspace.pipelines[0]!.steps).toEqual([]);
     expect(diagnostics.every((entry) => entry.level === "note")).toBe(true);
   });
 
@@ -138,7 +138,7 @@ describe("commands and trust", () => {
     const untrusted = read(main);
     expect(untrusted.workspace.commands).toEqual([]);
     expect(untrusted.withheld.map((item) => item.id)).toEqual(["command:dev"]);
-    expect(untrusted.workspace.bolts[0]!.steps).toEqual([expect.objectContaining({ kind: "asset", id: "command:dev" })]);
+    expect(untrusted.workspace.pipelines[0]!.steps).toEqual([expect.objectContaining({ kind: "asset", id: "command:dev" })]);
 
     const trusted = read(main, { trust: "trusted" });
     expect(trusted.workspace.commands).toHaveLength(1);
@@ -210,7 +210,7 @@ describe("slugs", () => {
         { label: "Up", steps: [] },
       ],
     });
-    expect(workspace.bolts.map((pipeline) => pipeline.slug)).toEqual(["up", undefined, undefined]);
+    expect(workspace.pipelines.map((pipeline) => pipeline.slug)).toEqual(["up", undefined, undefined]);
     expect(diagnostics).toContainEqual(expect.objectContaining({ level: "warning", message: '"Ship It!" is not a slug, so it is ignored' }));
     expect(diagnostics).toContainEqual(expect.objectContaining({ level: "warning", message: '"Start the whole stack" and "Up" both answer to up' }));
   });
@@ -265,9 +265,9 @@ describe("pipelines", () => {
         { label: "web", steps: [{ pipeline: "nope" }] },
       ],
     });
-    expect(workspace.bolts[0]!.steps).toEqual([
-      { kind: "pipeline", bolt: "db", name: "db" },
-      { kind: "pipeline", bolt: "web", after: ["db"] },
+    expect(workspace.pipelines[0]!.steps).toEqual([
+      { kind: "pipeline", pipeline: "db", name: "db" },
+      { kind: "pipeline", pipeline: "web", after: ["db"] },
     ]);
     expect(diagnostics).toContainEqual(expect.objectContaining({ level: "error", message: expect.stringContaining('"wisp use <its .wisp.json> cache"') }));
     expect(diagnostics).toContainEqual(expect.objectContaining({ message: expect.stringContaining('"nope"') }));
@@ -285,7 +285,7 @@ describe("pipelines", () => {
 
   it("warns about a key a pipeline does not know, like the old job, and ignores it", () => {
     const { workspace, diagnostics } = read({ pipelines: [{ label: "Check", job: true, steps: [] }] });
-    expect(workspace.bolts[0]).not.toHaveProperty("job");
+    expect(workspace.pipelines[0]).not.toHaveProperty("job");
     expect(diagnostics).toContainEqual(expect.objectContaining({ level: "warning", at: "pipelines[0].job" }));
   });
 
@@ -293,7 +293,7 @@ describe("pipelines", () => {
     const { workspace, declaredCommands, diagnostics } = read({
       pipelines: [{ label: "Check", keepGoing: true, steps: [{ run: "pnpm test", finishes: true }, { run: "pnpm build", finishes: true, background: true }] }],
     });
-    expect(workspace.bolts[0]!.keepGoing).toBe(true);
+    expect(workspace.pipelines[0]!.keepGoing).toBe(true);
     expect(declaredCommands.map((command) => command.finishes)).toEqual([true, true]);
     expect(diagnostics).toContainEqual(expect.objectContaining({ level: "warning", at: "pipelines[0].steps[1].background" }));
   });
@@ -307,7 +307,7 @@ describe("pipelines", () => {
         { label: "Odd", confirm: 3, steps: [] },
       ],
     });
-    expect(workspace.bolts.map((bolt) => bolt.confirm)).toEqual(["Deploy to production?", 'Run "Restore"?', undefined, undefined]);
+    expect(workspace.pipelines.map((pipeline) => pipeline.confirm)).toEqual(["Deploy to production?", 'Run "Restore"?', undefined, undefined]);
     expect(diagnostics).toContainEqual(expect.objectContaining({ level: "warning", at: "pipelines[3].confirm" }));
   });
 
@@ -322,7 +322,7 @@ describe("pipelines", () => {
         },
       ],
     });
-    expect(workspace.bolts[0]!.inputs).toEqual([
+    expect(workspace.pipelines[0]!.inputs).toEqual([
       { name: "env", ask: "Deploy where?", choices: ["staging", "production"], default: "staging" },
       { name: "tag", ask: "tag" },
       { name: "region", ask: "region", choices: ["eu"] },
@@ -352,7 +352,7 @@ describe("pipelines", () => {
         { label: "Twice", steps: [{ run: "a", label: "x" }, { run: "b", label: "x" }, { run: "c", after: "x" }] },
       ],
     });
-    const [check, typo, loop, twice] = workspace.bolts;
+    const [check, typo, loop, twice] = workspace.pipelines;
     expect(check!.steps.map((step) => step.after)).toEqual([undefined, ["install"], ["install"], ["lint", "test"]]);
     expect(check!.broken).toBeUndefined();
     expect(typo!.broken).toMatch(/"Typo" can't run: waits for "nope", but no step has that label/);
@@ -363,7 +363,7 @@ describe("pipelines", () => {
 
   it("refuses a second pipeline of the same name", () => {
     const { workspace, diagnostics } = read({ pipelines: [{ label: "x", steps: [] }, { label: "X", steps: [] }] });
-    expect(workspace.bolts).toHaveLength(1);
+    expect(workspace.pipelines).toHaveLength(1);
     expect(diagnostics).toContainEqual(expect.objectContaining({ level: "error", at: "pipelines[1].label" }));
   });
 });
@@ -386,8 +386,8 @@ describe("the local override", () => {
       },
     );
     expect(workspace.name).toBe("Acme (mine)");
-    expect(workspace.bolts.map((bolt) => bolt.label)).toEqual(["api", "mine"]);
-    expect(workspace.bolts[0]!.steps).toHaveLength(2);
+    expect(workspace.pipelines.map((pipeline) => pipeline.label)).toEqual(["api", "mine"]);
+    expect(workspace.pipelines[0]!.steps).toHaveLength(2);
     expect(diagnostics).toEqual([]);
   });
 
@@ -518,8 +518,8 @@ describe("checkProject", () => {
 
 describe("an unknown key holding a list, in a file with no pipelines", () => {
   it("suggests pipelines", () => {
-    const { diagnostics } = read({ name: "Shop", bolts: [{ label: "Check", steps: [] }] });
-    expect(diagnostics.find((entry) => entry.at === "bolts")?.hint).toMatch(/^Did you mean "pipelines"\?/);
+    const { diagnostics } = read({ name: "Shop", tasks: [{ label: "Check", steps: [] }] });
+    expect(diagnostics.find((entry) => entry.at === "tasks")?.hint).toMatch(/^Did you mean "pipelines"\?/);
   });
 
   it("does not, once the file has pipelines", () => {

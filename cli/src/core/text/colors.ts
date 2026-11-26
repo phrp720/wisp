@@ -1,5 +1,5 @@
 /**
- * Colours for bolts and workspaces, picked so each is told apart at a glance.
+ * Colours for pipelines and workspaces, picked so each is told apart at a glance.
  *
  * A fixed set first — chosen to be readable on dark and light terminals alike, and far
  * enough apart that no two are confused — taken in random order, never one already in
@@ -45,7 +45,7 @@ export function pickColor(used: (string | undefined)[], random: () => number = M
   return taken.has(color) ? hslToHex((best + 7) % 360, 0.75, 0.6) : color;
 }
 
-/** Several colours at once, none repeating — for a file with many new bolts. */
+/** Several colours at once, none repeating — for a file with many new pipelines. */
 export function pickColors(count: number, used: (string | undefined)[] = [], random: () => number = Math.random): string[] {
   const picked: string[] = [];
   for (let at = 0; at < count; at += 1) picked.push(pickColor([...used, ...picked], random));

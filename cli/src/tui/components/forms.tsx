@@ -27,7 +27,7 @@ export interface FormProps {
   intro?: string;
   fields: FieldSpec[];
   initial?: Record<string, string>;
-  /** What the button at the bottom says: "Add step", "Create bolt", "Save". */
+  /** What the button at the bottom says: "Add step", "Create pipeline", "Save". */
   submitLabel?: string;
   /** What it will do with the values as they are now — shown as they are typed. */
   preview?: (values: Record<string, string>) => string | undefined;
@@ -496,7 +496,7 @@ function useChoice(danger: boolean, onAnswer: (yes: boolean) => void, onCancel?:
   const answered = useRef(false);
   // The key that answers is the dialog's alone. Every screen hears each key; answering at
   // once would close the dialog before the screen behind it hears the same ⏎, and it would
-  // act on it too — run the bolt under the dialog. So the answer lands after the key is done.
+  // act on it too — run the pipeline under the dialog. So the answer lands after the key is done.
   const answer = (yes: boolean) => {
     if (answered.current) return;
     answered.current = true;

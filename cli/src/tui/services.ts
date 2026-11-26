@@ -12,7 +12,7 @@ import { listRuns, restartRun, stopRun, tail } from "../core/system/processes.js
 import { containerAction, containerLogs, containerStats, composeContainers, DockerUnavailable } from "../core/system/docker.js";
 import { describe as describeError } from "../core/errors.js";
 import { PROJECT_FILE, checkProject, findProjectFile } from "../core/project/index.js";
-import { bolts as draftPipelines, draftProject, writeProjectDraft } from "../core/init/scaffold.js";
+import { pipelines as draftPipelines, draftProject, writeProjectDraft } from "../core/init/scaffold.js";
 import { downPipeline, inputsFor, planRetry, questionsFor, resolvePipeline, runPlan, switchToWorkspace } from "../core/run/index.js";
 import { forgetHistory, listHistory } from "../core/history.js";
 import { changesSinceTrust, trustProject } from "../core/trust.js";
@@ -49,12 +49,12 @@ export function realServices(hooks: { suspend: () => void; resume: () => void })
       return { reads, unreadable, ...(here ? { here } : {}) };
     },
 
-    async run(read, bolt, callbacks) {
+    async run(read, pipeline, callbacks) {
       if (!read.workspace.personal && !callbacks.dryRun) await recordProject(read.workspace.file).catch(() => undefined);
       return switchToWorkspace(
         read.workspace,
         {
-          bolt,
+          pipeline,
           trigger: "tui",
           dryRun: callbacks.dryRun,
           ...(callbacks.inputs ? { inputs: callbacks.inputs } : {}),
@@ -85,11 +85,11 @@ export function realServices(hooks: { suspend: () => void; resume: () => void })
       ),
 
     planRetry: (read, entry) => planRetry(read.workspace, entry),
-    questions: (read, bolt, values = {}) => questionsFor(read.workspace, resolvePipeline(read.workspace, bolt), values),
-    inputs: (read, bolt) => inputsFor(read.workspace, resolvePipeline(read.workspace, bolt)),
+    questions: (read, pipeline, values = {}) => questionsFor(read.workspace, resolvePipeline(read.workspace, pipeline), values),
+    inputs: (read, pipeline) => inputsFor(read.workspace, resolvePipeline(read.workspace, pipeline)),
 
-    down: (read, bolt, options = {}) =>
-      downPipeline(read.workspace, bolt, options.deps ? { deps: true } : {}),
+    down: (read, pipeline, options = {}) =>
+      downPipeline(read.workspace, pipeline, options.deps ? { deps: true } : {}),
 
     history: () => listHistory(),
     forgetRuns: async (ids) => void (await forgetHistory({ ids })),
@@ -179,7 +179,7 @@ export function realServices(hooks: { suspend: () => void; resume: () => void })
     },
 
     editing: {
-      bolt: edit.readPipeline,
+      pipeline: edit.readPipeline,
       addPipeline: edit.addPipeline,
       renamePipeline: edit.renamePipeline,
       setPipelineNotes: edit.setPipelineNotes,
@@ -218,16 +218,16 @@ export function realServices(hooks: { suspend: () => void; resume: () => void })
   };
 }
 
-/** What the setup checklist shows for a draft: what was found, and each bolt step by step. */
+/** What the setup checklist shows for a draft: what was found, and each pipeline step by step. */
 export function setupSuggestion(dir: string, draft: Awaited<ReturnType<typeof draftProject>>): SetupSuggestion {
   const detected = draft.detected;
   return {
     dir,
     name: detected.name,
     found: detected.sources,
-    bolts: draftPipelines(detected).map((bolt) => ({
-      label: bolt.label,
-      steps: bolt.steps.map((step) =>
+    pipelines: draftPipelines(detected).map((pipeline) => ({
+      label: pipeline.label,
+      steps: pipeline.steps.map((step) =>
         typeof step["compose"] === "string" && detected.compose
           ? `start Docker services: ${detected.compose.services.map((service) => service.name).join(", ")} — and wait until they're healthy`
           : describeDraftStep(step),

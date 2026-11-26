@@ -11,7 +11,7 @@ import type { InputSpec, StepKind, SwitchResult, SwitchTarget, TargetResult, Wor
 import { describeWait } from "../core/system/wait.js";
 import { type SetupSuggestion } from "./model.js";
 
-export type Focus = "workspaces" | "bolts";
+export type Focus = "workspaces" | "pipelines";
 
 export interface StepState {
   target: SwitchTarget;
@@ -22,7 +22,7 @@ export interface StepState {
 export type View =
   | { kind: "browse" }
   | { kind: "search"; query: string; index: number }
-  /** `then`: the bolt you pressed ⏎ on, run as soon as you say yes. */
+  /** `then`: the pipeline you pressed ⏎ on, run as soon as you say yes. */
   | { kind: "trust"; read: WorkspaceRead; then?: string }
   | {
       kind: "processes";
@@ -45,19 +45,19 @@ export type View =
     }
   | { kind: "help"; back?: View }
   | { kind: "history" }
-  /** `adding`: straight to choosing its first step — a bolt was just made. */
-  | { kind: "editor"; file: string; bolt: string; adding?: boolean }
-  | { kind: "new-bolt"; file: string; workspace: string }
+  /** `adding`: straight to choosing its first step — a pipeline was just made. */
+  | { kind: "editor"; file: string; pipeline: string; adding?: boolean }
+  | { kind: "new-pipeline"; file: string; workspace: string }
   | { kind: "new-workspace" }
   | { kind: "edit-workspace"; file: string; name: string; icon: string; notes: string; personal: boolean; local: boolean }
-  | { kind: "delete-bolt"; file: string; bolt: string }
-  | { kind: "confirm-run"; file: string; bolt: string; question: string }
-  | { kind: "run-inputs"; file: string; workspace: string; bolt: string; specs: InputSpec[] }
+  | { kind: "delete-pipeline"; file: string; pipeline: string }
+  | { kind: "confirm-run"; file: string; pipeline: string; question: string }
+  | { kind: "run-inputs"; file: string; workspace: string; pipeline: string; specs: InputSpec[] }
   | { kind: "delete-workspace"; file: string; name: string; personal: boolean }
   /** Your own settings: the app for folders and files, where commands run. */
   | { kind: "settings"; start?: "notifications" }
-  /** Stopping a bolt that needed others: those too, or only it? */
-  | { kind: "stop-bolt"; file: string; bolt: string; needs: string[]; sharedWith: string[] }
+  /** Stopping a pipeline that needed others: those too, or only it? */
+  | { kind: "stop-pipeline"; file: string; pipeline: string; needs: string[]; sharedWith: string[] }
   | { kind: "setup"; suggestion: SetupSuggestion };
 
 /** Views that read the keyboard themselves: forms, the editor, confirmations. */
@@ -73,14 +73,14 @@ const TAKES_ITS_OWN_KEYS: Record<View["kind"], boolean> = {
   processes: false,
   help: false,
   editor: true,
-  "new-bolt": true,
+  "new-pipeline": true,
   "new-workspace": true,
   "edit-workspace": true,
-  "delete-bolt": true,
+  "delete-pipeline": true,
   "confirm-run": true,
   "run-inputs": true,
   "delete-workspace": true,
-  "stop-bolt": true,
+  "stop-pipeline": true,
   settings: true,
   setup: true,
   history: true,
@@ -94,9 +94,9 @@ export const SELF_DRIVEN = new Set(Object.entries(TAKES_ITS_OWN_KEYS).filter(([,
  */
 export interface RunState {
   title: string;
-  /** The workspace and bolt, so a retry knows what it is retrying. */
+  /** The workspace and pipeline, so a retry knows what it is retrying. */
   read: WorkspaceRead;
-  bolt: string;
+  pipeline: string;
   dryRun: boolean;
   steps: StepState[];
   waits?: number[][];
@@ -133,28 +133,28 @@ export type PaneTab = "logs" | "info" | "runs";
 
 /** One row of the panes: a command Wisp runs, or a container Docker runs for it. */
 export type PaneItem =
-  /** `depth` 2: inside a bolt another bolt needed, shown under that bolt's line. */
+  /** `depth` 2: inside a pipeline another pipeline needed, shown under that pipeline's line. */
   | { type: "run"; run: RunStatus; group: string; depth?: number }
   | { type: "container"; container: Container; group: string; depth?: number }
   | { type: "current" }
   | { type: "group"; group: PaneGroup }
   /**
-   * A step of the bolt's last run that is not something running — a wait, a link, a build,
-   * a bolt it needed — so the list reads as the pipeline it is, in order.
+   * A step of the pipeline's last run that is not something running — a wait, a link, a build,
+   * a pipeline it needed — so the list reads as the pipeline it is, in order.
    */
   | { type: "step"; step: HistoryStep & { state?: StepProgress }; entry: HistoryEntry; index: number; group: string; depth?: number };
 
 /**
- * A bolt in the Running list, with what it started under it — the way Dockge shows a stack
- * with its containers. Commands go under the bolt that started them; containers under the
- * bolt whose compose step starts them; anything else under its workspace.
+ * A pipeline in the Running list, with what it started under it — the way Dockge shows a stack
+ * with its containers. Commands go under the pipeline that started them; containers under the
+ * pipeline whose compose step starts them; anything else under its workspace.
  */
 export interface PaneGroup {
   key: string;
-  /** The workspace file, to find the bolt again for stopping or restarting it. */
+  /** The workspace file, to find the pipeline again for stopping or restarting it. */
   workspace?: string;
   workspaceName: string;
-  bolt?: string;
+  pipeline?: string;
   title: string;
   /** The run its pipeline comes from, as History numbers it: kept here, so a filter that hides the steps keeps it. */
   number?: number;
@@ -215,8 +215,8 @@ export function stepLabel(target: SwitchTarget): string {
 
 export function counts(read: WorkspaceRead): string {
   const { workspace } = read;
-  const bolts = workspace.bolts.length;
-  return `${bolts} pipeline${bolts === 1 ? "" : "s"}`;
+  const pipelines = workspace.pipelines.length;
+  return `${pipelines} pipeline${pipelines === 1 ? "" : "s"}`;
 }
 
 export function needsTrust(read: WorkspaceRead): boolean {

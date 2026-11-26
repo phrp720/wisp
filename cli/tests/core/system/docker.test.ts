@@ -70,7 +70,7 @@ describe("a step that needs Docker while Docker is down", () => {
       { file: join(dir, ".wisp.json"), personal: false, trust: "trusted", os: "darwin" },
     ).workspace;
     const started = Date.now();
-    const result = await switchToWorkspace(ws, { bolt: "Tools db" }, { platform, environment, defaults: {} });
+    const result = await switchToWorkspace(ws, { pipeline: "Tools db" }, { platform, environment, defaults: {} });
     expect(Date.now() - started).toBeLessThan(3000);
     expect(result.ok).toBe(false);
     expect(result.targets[0]).toMatchObject({ ok: false, error: DOCKER_DOWN });
@@ -83,7 +83,7 @@ describe("a step that needs Docker while Docker is down", () => {
       { main: { pipelines: [{ label: "Two", steps: [{ run: "echo docker one >/dev/null; true || docker ps", label: "one", finishes: true }, { run: "true || docker images", label: "two", finishes: true, after: "one" }] }] } },
       { file: join(dir, ".wisp.json"), personal: false, trust: "trusted", os: "darwin" },
     ).workspace;
-    const result = await switchToWorkspace(ws, { bolt: "Two" }, { platform, environment, defaults: {} });
+    const result = await switchToWorkspace(ws, { pipeline: "Two" }, { platform, environment, defaults: {} });
     expect(result.ok).toBe(true);
     expect(result.targets.map((target) => target.ok)).toEqual([true, true]);
     expect((await readFile(calls, "utf8")).trim().split("\n")).toEqual(["version --format {{.Server.Version}}"]);
@@ -108,7 +108,7 @@ esac`;
   it("cancels the run when you stop one of its containers on the Running tab, naming the service", async () => {
     await fakeDocker(compose);
     setTimeout(() => void containerAction("db-1", "stop"), 300);
-    const result = await switchToWorkspace(workspace(), { bolt: "Database" }, { platform, environment, defaults: {} });
+    const result = await switchToWorkspace(workspace(), { pipeline: "Database" }, { platform, environment, defaults: {} });
     expect(result).toMatchObject({ ok: false, cancelled: true });
     expect(result.targets[0]).toMatchObject({ ok: false, cancelled: true, error: "you stopped postgres" });
     expect(result.targets[1]).toMatchObject({ skipped: true, note: "not reached — the run was cancelled" });
@@ -121,7 +121,7 @@ esac`;
       { file: join(dir, ".wisp.json"), personal: false, trust: "trusted", os: "darwin" },
     ).workspace;
     setTimeout(() => void containerAction("db-1", "stop"), 400);
-    const result = await switchToWorkspace(ws, { bolt: "Database" }, { platform, environment, defaults: {} });
+    const result = await switchToWorkspace(ws, { pipeline: "Database" }, { platform, environment, defaults: {} });
     expect(result).toMatchObject({ ok: false, cancelled: true });
     expect(result.targets[0]).toMatchObject({ ok: true });
     expect(result.targets[1]).toMatchObject({ ok: false, cancelled: true, error: "you stopped postgres" });
@@ -131,7 +131,7 @@ esac`;
     await fakeDocker(compose);
     await containerAction("db-1", "stop");
     await new Promise((done) => setTimeout(done, 20));
-    const result = await switchToWorkspace(workspace(), { bolt: "Database" }, { platform, environment, defaults: {} });
+    const result = await switchToWorkspace(workspace(), { pipeline: "Database" }, { platform, environment, defaults: {} });
     expect(result.ok).toBe(false);
     expect(result.cancelled).toBeUndefined();
     expect(result.targets[0]?.cancelled).toBeUndefined();

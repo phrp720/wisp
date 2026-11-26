@@ -94,18 +94,18 @@ export async function guessName(from: string = process.cwd()): Promise<string> {
 }
 
 /**
- * Only the bolts chosen, by name. A kept bolt that needed one left out no longer asks for
+ * Only the pipelines chosen, by name. A kept pipeline that needed one left out no longer asks for
  * it: "Work on api" without "Services" just starts the api.
  */
 export function choosePipelines(all: DraftPipeline[], only?: string[]): DraftPipeline[] {
   if (!only) return all;
   const wanted = new Set(only.map((name) => name.trim().toLowerCase()));
-  const kept = all.filter((bolt) => wanted.has(bolt.label.toLowerCase()));
-  const names = new Set(kept.map((bolt) => bolt.label));
+  const kept = all.filter((pipeline) => wanted.has(pipeline.label.toLowerCase()));
+  const names = new Set(kept.map((pipeline) => pipeline.label));
   const left = (step: Step) => typeof step["pipeline"] === "string" && !names.has(step["pipeline"]);
-  return kept.map((bolt) => {
-    const gone = new Set(bolt.steps.filter(left).flatMap((step) => [step["label"], step["pipeline"]].filter((name) => typeof name === "string").map((name) => (name as string).toLowerCase())));
-    return { ...bolt, steps: bolt.steps.filter((step) => !left(step)).map((step) => withoutAfter(step, gone)) };
+  return kept.map((pipeline) => {
+    const gone = new Set(pipeline.steps.filter(left).flatMap((step) => [step["label"], step["pipeline"]].filter((name) => typeof name === "string").map((name) => (name as string).toLowerCase())));
+    return { ...pipeline, steps: pipeline.steps.filter((step) => !left(step)).map((step) => withoutAfter(step, gone)) };
   });
 }
 
@@ -120,7 +120,7 @@ function withoutAfter(step: Step, gone: Set<string>): Step {
 
 /**
  * Write a drafted project file. Refuses to overwrite unless asked: clobbering someone's
- * carefully arranged bolts because they typed `init` twice is not a recoverable mistake.
+ * carefully arranged pipelines because they typed `init` twice is not a recoverable mistake.
  */
 export function emptyProject(from: string = process.cwd(), name?: string): Pick<ProjectDraft, "file" | "contents"> {
   const root = resolve(expandHome(from));
@@ -552,8 +552,8 @@ export interface DraftPipeline {
   down?: Step[];
 }
 
-/** The bolts a person would write after reading the same files. */
-export function bolts(detected: Detected, random: () => number = Math.random): DraftPipeline[] {
+/** The pipelines a person would write after reading the same files. */
+export function pipelines(detected: Detected, random: () => number = Math.random): DraftPipeline[] {
   const out: DraftPipeline[] = [];
   const services = detected.compose?.services ?? [];
 
@@ -590,7 +590,7 @@ export function bolts(detected: Detected, random: () => number = Math.random): D
     out.push({ label: "Check", steps: detected.checks.map((check) => ({ run: check.run, ...(check.cwd ? { cwd: check.cwd } : {}), label: check.cwd ? `${check.label} (${check.cwd})` : check.label, finishes: true })) });
   }
 
-  // Nothing to run at all: the old, plain draft — a bolt per area, opening it with the repo.
+  // Nothing to run at all: the old, plain draft — a pipeline per area, opening it with the repo.
   const links = detected.links.map((link) => ({ url: link.url, label: link.label }));
   if (out.length === 0) {
     const repo = links[0];
@@ -606,9 +606,9 @@ export function bolts(detected: Detected, random: () => number = Math.random): D
   }
 
   // A colour each, none the same, so the list reads at a glance.
-  const kept = out.filter((bolt) => bolt.steps.length > 0);
+  const kept = out.filter((pipeline) => pipeline.steps.length > 0);
   const colors = pickColors(kept.length, [], random);
-  return kept.map((bolt, at) => ({ label: bolt.label, color: colors[at] as string, steps: bolt.steps, ...(bolt.down ? { down: bolt.down } : {}) }));
+  return kept.map((pipeline, at) => ({ label: pipeline.label, color: colors[at] as string, steps: pipeline.steps, ...(pipeline.down ? { down: pipeline.down } : {}) }));
 }
 
 function composeFileName(detected: Detected): string {
@@ -621,7 +621,7 @@ function format(detected: Detected, only?: string[]): string {
     // in any editor that reads JSON Schema.
     ["$schema", PROJECT_SCHEMA_URL],
     ["name", detected.name],
-    ["pipelines", choosePipelines(bolts(detected), only)],
+    ["pipelines", choosePipelines(pipelines(detected), only)],
   ]);
 }
 
@@ -629,7 +629,7 @@ function format(detected: Detected, only?: string[]): string {
  * A project file as JSON a person would have typed.
  *
  * `JSON.stringify` spreads every asset across four lines and runs the sections together.
- * A project file is read in review, so it is laid out by hand: one asset per line, a bolt
+ * A project file is read in review, so it is laid out by hand: one asset per line, a pipeline
  * per block with one step per line, a blank line between sections. Empty lists are left
  * out, so a project with no links does not commit `"links": []`.
  */
@@ -666,13 +666,13 @@ export function formatProjectFile(sections: [key: string, value: unknown][]): st
 }
 
 /**
- * One bolt as a block: its name and settings first, then one step per line. Every field
+ * One pipeline as a block: its name and settings first, then one step per line. Every field
  * is kept, in the order written — the file may hold what a person added by hand.
  */
-function pipelineBlock(bolt: DraftPipeline & Record<string, unknown>): string {
-  const keys = ["label", ...Object.keys(bolt).filter((key) => key !== "label" && key !== "steps" && key !== "down"), "steps", ...("down" in bolt ? ["down"] : [])];
+function pipelineBlock(pipeline: DraftPipeline & Record<string, unknown>): string {
+  const keys = ["label", ...Object.keys(pipeline).filter((key) => key !== "label" && key !== "steps" && key !== "down"), "steps", ...("down" in pipeline ? ["down"] : [])];
   const lines = keys.map((key) => {
-    const value = bolt[key];
+    const value = pipeline[key];
     if (key === "steps") {
       const steps = (Array.isArray(value) ? value : []) as unknown[];
       return steps.length === 0 ? `      "steps": []` : `      "steps": [\n${steps.map((step) => `        ${inline(step)}`).join(",\n")}\n      ]`;

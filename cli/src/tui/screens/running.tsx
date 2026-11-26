@@ -57,7 +57,7 @@ export function PanesPanel(props: {
   const tab = shownTab(item, props.tab);
   const { lines, filtering, matched, room: logRoom, total } = logWindow({ item, tab: props.tab, log, logQuery, logTyping, height });
   const outputWidth = (full ? columns : columns - listWidth) - 4;
-  const live = item?.type === "current" && active && tab !== "info" && tab !== "runs" ? fitGraph(liveGraph(active, glyphs.bolt), outputWidth, graphBudget(logRoom), glyphs) : undefined;
+  const live = item?.type === "current" && active && tab !== "info" && tab !== "runs" ? fitGraph(liveGraph(active, glyphs.pipeline), outputWidth, graphBudget(logRoom), glyphs) : undefined;
   const room = Math.max(1, logRoom - (live ? live.height + 1 : 0));
   const end = Math.max(room, total - scroll);
   // Scrolled back: said where it can't be cut off. The tab bar has room; a long command in the header may not.
@@ -66,7 +66,7 @@ export function PanesPanel(props: {
   const shownMatches = matched?.slice(Math.max(0, end - room), end);
   const numberWidth = String(lines.length).length;
 
-  // Rows for the list: workspace headings, each bolt, then its pipeline — one line a step,
+  // Rows for the list: workspace headings, each pipeline, then its pipeline — one line a step,
   // in the order its run went, with how each one is doing on the right.
   const list = paneList({ items, active, index, height, searching: Boolean(typing || query), activity: activity.length });
   const width = listWidth - 4;
@@ -106,7 +106,7 @@ export function PanesPanel(props: {
         0,
         null,
         <Text>
-          {entry.group.bolt ? `${glyphs.bolt}${entry.group.title}` : entry.group.title}
+          {entry.group.pipeline ? `${glyphs.pipeline}${entry.group.title}` : entry.group.title}
           {number ? <Text dimColor bold={false}>{` #${number}`}</Text> : null}
         </Text>,
         state.text,
@@ -124,11 +124,11 @@ export function PanesPanel(props: {
       ) : (
         <Text color={TONE.up}>{glyphs.ok}</Text>
       );
-      return line(selected, 0, mark, `${glyphs.bolt}${active.bolt}`, active.stopped ? "stopped" : now ? describeStep(now.target, true) : active.done ? (failed ? "failed" : "done") : waitingWords(glyphs, Math.floor(width * 0.45)), failed || active.stopped ? TONE.failed : undefined);
+      return line(selected, 0, mark, `${glyphs.pipeline}${active.pipeline}`, active.stopped ? "stopped" : now ? describeStep(now.target, true) : active.done ? (failed ? "failed" : "done") : waitingWords(glyphs, Math.floor(width * 0.45)), failed || active.stopped ? TONE.failed : undefined);
     }
     if (entry.type === "step") {
       const step = entry.step;
-      const label = step.kind === "pipeline" ? `${glyphs.bolt}${step.label}` : shortStep(step);
+      const label = step.kind === "pipeline" ? `${glyphs.pipeline}${step.label}` : shortStep(step);
       if (step.state === "running") return line(selected, entry.depth ?? 1, <Text color={TONE.accent}>{glyphs.running[tick % glyphs.running.length]}</Text>, label, "running");
       if (step.state === "waiting") return line(selected, entry.depth ?? 1, <Text dimColor>{glyphs.pending}</Text>, label, "waiting", "gray");
       const mark = step.skipped ? <Text dimColor>{glyphs.skip}</Text> : step.ok ? <Text color={TONE.up}>{glyphs.ok}</Text> : <Text color={TONE.failed}>{glyphs.fail}</Text>;
@@ -156,7 +156,7 @@ export function PanesPanel(props: {
   const header =
     item?.type === "current" && active ? (
       <Text wrap="truncate-end">
-        <Text bold>{active.bolt}</Text>
+        <Text bold>{active.pipeline}</Text>
         <Text dimColor>{`  ${active.outputOf ? `output of ${active.outputOf}  ` : ""}`}</Text>
         {!active.done ? <Text color={TONE.accent}>running — x stops it</Text> : active.stopped ? <Text color="red">stopped</Text> : <Text dimColor>finished — ⏎ for its steps</Text>}
       </Text>
@@ -184,7 +184,7 @@ export function PanesPanel(props: {
       <Text wrap="truncate-end">
         <Text bold>{item.step.kind === "pipeline" ? item.step.label : describeHistoryStep(item.step)}</Text>
         {item.step.skipped ? <Text dimColor>{"  not reached"}</Text> : item.step.ok ? <Text color={TONE.up}>{`  ${glyphs.ok} done`}</Text> : <Text color={TONE.failed}>{`  ${glyphs.fail} failed`}</Text>}
-        <Text dimColor>{`  in ${baseLabel(item.entry.bolt)} #${item.entry.number ?? ""} · ${since(item.entry.startedAt)}`}</Text>
+        <Text dimColor>{`  in ${baseLabel(item.entry.pipeline)} #${item.entry.number ?? ""} · ${since(item.entry.startedAt)}`}</Text>
       </Text>
     ) : (
       <Text bold>Output</Text>
@@ -279,7 +279,7 @@ export function PanesPanel(props: {
 }
 
 /**
- * A bolt selected in the Running list. The list beside it already says how each step is
+ * A pipeline selected in the Running list. The list beside it already says how each step is
  * doing; this says what each of its commands and containers actually is, and what keys do.
  */
 export function GroupSummary({ items, group }: { items: PaneItem[]; group: PaneGroup; history: HistoryEntry[]; stats: Map<string, ContainerStats>; glyphs: Glyphs }) {
@@ -302,7 +302,7 @@ export function GroupSummary({ items, group }: { items: PaneItem[]; group: PaneG
       )}
       <Text> </Text>
       <Text dimColor>
-        {group.bolt ? `x stops all of ${group.bolt} · r restarts it · ↓ to a step for its output` : "Not started by a pipeline — choose one to stop it or see its output."}
+        {group.pipeline ? `x stops all of ${group.pipeline} · r restarts it · ↓ to a step for its output` : "Not started by a pipeline — choose one to stop it or see its output."}
       </Text>
     </Box>
   );

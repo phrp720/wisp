@@ -4,7 +4,7 @@ import { createPersonalWorkspace } from "../../core/edit.js";
 import { tildify } from "../../core/paths.js";
 import { WispError } from "../../core/errors.js";
 import { PROJECT_FILE, findProjectFile } from "../../core/project/index.js";
-import { bolts as draftPipelines, draftProject, emptyProject, guessName, writeProjectDraft } from "../../core/init/scaffold.js";
+import { pipelines as draftPipelines, draftProject, emptyProject, guessName, writeProjectDraft } from "../../core/init/scaffold.js";
 import { slugify } from "../../core/workspaces.js";
 
 import { cyan, dim, green, yellow } from "../lib/format.js";
@@ -98,7 +98,7 @@ export const init: CommandDef<{ force?: boolean; yes?: boolean; print?: boolean;
       if (suggestion.found.length > 0) console.log(dim(`Found: ${suggestion.found.join(" · ")}`));
       const chosen = await checklist(
         "Which pipelines should Wisp set up?",
-        suggestion.bolts.map((bolt) => ({ label: bolt.label, hint: bolt.steps.join(", then ") })),
+        suggestion.pipelines.map((pipeline) => ({ label: pipeline.label, hint: pipeline.steps.join(", then ") })),
       );
       if (!chosen) {
         console.log(dim("Nothing written."));

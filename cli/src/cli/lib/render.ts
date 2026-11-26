@@ -39,7 +39,7 @@ function shown(target: { kind: SwitchTarget["kind"]; value: string }): string {
 }
 
 /**
- * A workspace's bolts, with what each one does when `expand` asks for it.
+ * A workspace's pipelines, with what each one does when `expand` asks for it.
  *
  * What it will actually do, not what it names: a step waiting for trust is shown as
  * waiting, rather than counted as if it would run or left out as if it did not exist.
@@ -47,37 +47,37 @@ function shown(target: { kind: SwitchTarget["kind"]; value: string }): string {
 export function printPipelines(workspace: Workspace, expand = false, withheld: Withheld[] = [], runs: RunStatus[] = []): void {
   const held = new Map(withheld.map((item) => [item.id, item]));
 
-  for (const bolt of workspace.bolts) {
-    const steps = collectPipelineTargets(workspace, bolt);
-    const waiting = bolt.steps.flatMap((step) => {
+  for (const pipeline of workspace.pipelines) {
+    const steps = collectPipelineTargets(workspace, pipeline);
+    const waiting = pipeline.steps.flatMap((step) => {
       const id = step.kind === "asset" ? step.id : step.kind === "compose" ? `compose:${step.file}` : undefined;
       return id && held.has(id) ? [held.get(id) as Withheld] : [];
     });
     const size = steps.length === 0 && waiting.length > 0 ? yellow(`${plural(waiting.length, "step")} waiting for trust`) : dim(plural(steps.length, "step"));
     const note = steps.length > 0 && waiting.length > 0 ? yellow(` · ${waiting.length} waiting for trust`) : "";
-    const asks = bolt.confirm ? dim(" · asks first") : "";
-    console.log(`  ${upMark(workspace, bolt, runs)}${bold(bolt.label)} ${cyan(pipelineSlug(bolt))} ${size}${asks}${note}`);
-    if (bolt.notes) console.log(`    ${dim(bolt.notes)}`);
+    const asks = pipeline.confirm ? dim(" · asks first") : "";
+    console.log(`  ${upMark(workspace, pipeline, runs)}${bold(pipeline.label)} ${cyan(pipelineSlug(pipeline))} ${size}${asks}${note}`);
+    if (pipeline.notes) console.log(`    ${dim(pipeline.notes)}`);
     if (!expand) continue;
     steps.forEach((step, at) => {
       console.log(`  ${dim(String(at + 1).padStart(3))} ${dim(kindLabel(step.kind))} ${step.label}${step.after ? dim(` · after ${step.after.join(", ")}`) : ""}`);
     });
     for (const item of waiting) console.log(`    ${dim(kindLabel(item.kind))} ${dim(item.label)} ${yellow("(not trusted)")}`);
-    const down = collectDownTargets(workspace, bolt);
+    const down = collectDownTargets(workspace, pipeline);
     if (down.length > 0) console.log(dim(`    down: ${down.map((step) => step.label).join(", ")}`));
   }
 }
 
-/** `● ` when all of a bolt's commands are running, `◐ ` when some are, nothing otherwise. */
-export function upMark(workspace: Workspace, bolt: Workspace["bolts"][number], runs: RunStatus[]): string {
+/** `● ` when all of a pipeline's commands are running, `◐ ` when some are, nothing otherwise. */
+export function upMark(workspace: Workspace, pipeline: Workspace["pipelines"][number], runs: RunStatus[]): string {
   if (runs.length === 0) return "";
-  const { commands, running } = pipelineStatus(workspace, bolt, runs);
+  const { commands, running } = pipelineStatus(workspace, pipeline, runs);
   if (commands === 0 || running === 0) return "";
   return running === commands ? green("● ") : yellow("◐ ");
 }
 
 /**
- * What to run, when a command needed a bolt and was not given one. Ends on a line that
+ * What to run, when a command needed a pipeline and was not given one. Ends on a line that
  * can be pasted, naming the workspace whenever the workspace was named.
  */
 export const COMMAND_WORDS: ReadonlySet<string> = new Set(["agents", "check", "completion", "doctor", "down", "help", "history", "hook", "init", "lint", "list", "logs", "ls", "notify", "open-with", "pick", "ps", "rename", "restart", "run", "scan", "show", "spec", "status", "stop", "trust", "use"]);
@@ -85,14 +85,14 @@ export const COMMAND_WORDS: ReadonlySet<string> = new Set(["agents", "check", "c
 const FILLER = new Set(["a", "an", "and", "at", "by", "for", "from", "in", "into", "it", "my", "of", "off", "on", "or", "our", "the", "to", "up", "with"]);
 
 /**
- * A short word that still names this bolt among the ones it sits with: the last word that
+ * A short word that still names this pipeline among the ones it sits with: the last word that
  * means something, since a label names its object last ("Work on storefront"). Typed on its
  * own (`alone`), it never suggests a command's name, which `wisp <word>` would run instead.
  */
-export function shortest(bolt: Pipeline, among: Pipeline[] = [], alone = false): string {
-  if (bolt.slug) return alone && COMMAND_WORDS.has(bolt.slug) ? `use ${bolt.slug}` : bolt.slug;
-  const others = among.filter((candidate) => candidate.id !== bolt.id);
-  const slug = slugify(bolt.label);
+export function shortest(pipeline: Pipeline, among: Pipeline[] = [], alone = false): string {
+  if (pipeline.slug) return alone && COMMAND_WORDS.has(pipeline.slug) ? `use ${pipeline.slug}` : pipeline.slug;
+  const others = among.filter((candidate) => candidate.id !== pipeline.id);
+  const slug = slugify(pipeline.label);
   const words = slug.split("-").filter((word) => word && !FILLER.has(word)).reverse();
 
   for (const word of words) {

@@ -55,16 +55,16 @@ export const use: CommandDef<UseOptions> = {
 
   async run([first, second], options) {
     const resolved = await resolveRun(first, second, undefined);
-    const { bolt, workspaceRef } = resolved;
+    const { pipeline, workspaceRef } = resolved;
     let { read } = resolved;
     let { workspace } = read;
     const mode: RunMode = options.inline ? "inline" : options.detach ? "background" : options.window ? "terminal" : "auto";
 
-    if (!bolt) {
+    if (!pipeline) {
       const prefix = workspaceRef ? `${workspaceRef} ` : "";
       throw new WispError(
-        workspace.bolts.length > 0
-          ? `Name a pipeline of ${workspace.name}: ${workspace.bolts.map((entry) => `\`wisp ${prefix}${pipelineSlug(entry)}\``).join(", ")}`
+        workspace.pipelines.length > 0
+          ? `Name a pipeline of ${workspace.name}: ${workspace.pipelines.map((entry) => `\`wisp ${prefix}${pipelineSlug(entry)}\``).join(", ")}`
           : `${workspace.name} has no pipelines yet`,
         "NO_PIPELINE",
       );
@@ -73,7 +73,7 @@ export const use: CommandDef<UseOptions> = {
     // Not half a run: when steps it needs wait for trust, ask (at a terminal) or stop, and
     // start nothing. A dry run goes ahead, since showing what would be skipped is its point.
     if (!options.dryRun && !options.skipUntrusted) {
-      const waitLabel = pipelineLabel(workspace, bolt);
+      const waitLabel = pipelineLabel(workspace, pipeline);
       const waiting = waitingForTrust(read, waitLabel);
       if (waiting.length > 0) {
         const needs = `"${waitLabel}" needs ${plural(waiting.length, "thing")} this file isn't allowed to run yet`;
@@ -102,9 +102,9 @@ export const use: CommandDef<UseOptions> = {
       }
     }
 
-    const last = options.retry ? await lastRun(workspace, pipelineLabel(workspace, bolt)) : undefined;
+    const last = options.retry ? await lastRun(workspace, pipelineLabel(workspace, pipeline)) : undefined;
     if (last && (options.input ?? []).length > 0) throw new WispError("A retry runs with the values its run had: leave out --input", "INVALID_INPUT");
-    const inputs = await beforeRun(workspace, resolvePipeline(workspace, bolt), options, last ? (last.inputs ?? {}) : undefined);
+    const inputs = await beforeRun(workspace, resolvePipeline(workspace, pipeline), options, last ? (last.inputs ?? {}) : undefined);
     if (!inputs) {
       console.log(dim("Nothing ran."));
       process.exitCode = 1;
@@ -115,7 +115,7 @@ export const use: CommandDef<UseOptions> = {
     if (!workspace.personal && !options.dryRun) await recordProject(workspace.file).catch(() => undefined);
 
     const json = options.json ?? false;
-    const label = pipelineLabel(workspace, bolt);
+    const label = pipelineLabel(workspace, pipeline);
     if (!json) {
       const prefix = options.dryRun ? yellow("dry run") : green("running");
       console.log(`${prefix} ${title(workspace)} ${dim("·")} ${bold(label)}`);
@@ -154,15 +154,15 @@ export const use: CommandDef<UseOptions> = {
             },
           }),
     };
-    const result = last ? await retryLast(workspace, label, last, runOptions) : await switchToWorkspace(workspace, { ...runOptions, ...(bolt ? { bolt } : {}) });
+    const result = last ? await retryLast(workspace, label, last, runOptions) : await switchToWorkspace(workspace, { ...runOptions, ...(pipeline ? { pipeline } : {}) });
 
-    const untrusted = waitingForTrust(read, result.bolt?.label ?? label);
+    const untrusted = waitingForTrust(read, result.pipeline?.label ?? label);
 
     if (json) {
       if (!result.ok) process.exitCode = 1;
       return emitJson({
         workspace: workspace.name,
-        pipeline: result.bolt?.label,
+        pipeline: result.pipeline?.label,
         ok: result.ok,
         ...(result.cancelled ? { cancelled: true } : {}),
         dryRun: result.dryRun,
@@ -175,14 +175,14 @@ export const use: CommandDef<UseOptions> = {
     }
 
     if (result.targets.length === 0) {
-      if (result.bolt) {
+      if (result.pipeline) {
         if (result.dryRun && untrusted.length > 0) {
           console.log(dim("  every step waits for `wisp trust`. Once allowed, it would run:"));
           for (const item of untrusted) console.log(`  ${dim(kindLabel(item.kind))} ${showNamed(item.label, tildify(item.value))}`);
           console.log(dim("  `wisp check` shows the whole file, `wisp trust` allows it"));
           return;
         }
-        // A bolt that resolved to nothing ran nothing. Say why, rather than listing bolts as
+        // A pipeline that resolved to nothing ran nothing. Say why, rather than listing pipelines as
         // if the name had been wrong — and fail, so a script or an agent notices.
         console.log(dim(untrusted.length > 0 ? "  nothing ran — every step waits for `wisp trust` (see `wisp check`)" : "  nothing ran — this pipeline has no steps here"));
         process.exitCode = 1;
@@ -215,7 +215,7 @@ export const use: CommandDef<UseOptions> = {
 
     // One line that says how it went and what to do next — not two that say the same.
     const failedAt = result.targets.find((target) => !target.ok && !target.skipped);
-    const name = result.bolt?.label ?? label;
+    const name = result.pipeline?.label ?? label;
     const total = result.targets.reduce((sum, target) => sum + (target.durationMs ?? 0), 0);
     if (result.cancelled) {
       console.error(`\n${dim("⊘")} ${bold(name)} was cancelled${failedAt?.error ? dim(`: ${failedAt.error}`) : ""}${result.historyId ? dim(` · \`wisp history ${result.historyId}\``) : ""}`);
@@ -234,20 +234,20 @@ export const use: CommandDef<UseOptions> = {
 };
 
 function pipelineLabel(workspace: Workspace, ref: string): string {
-  // The bolt's own name, not the word typed for it: `wisp api` runs "Work on api".
-  const exact = workspace.bolts.find((bolt) => bolt.id === ref || bolt.label === ref);
+  // The pipeline's own name, not the word typed for it: `wisp api` runs "Work on api".
+  const exact = workspace.pipelines.find((pipeline) => pipeline.id === ref || pipeline.label === ref);
   if (exact) return exact.label;
-  return matchPipeline(workspace, ref).bolt?.label ?? ref;
+  return matchPipeline(workspace, ref).pipeline?.label ?? ref;
 }
 
 /**
- * Run again what failed last time, and what that kept from running — not the whole bolt.
- * Matched step by step against the bolt as it is now, so a bolt edited since is refused
+ * Run again what failed last time, and what that kept from running — not the whole pipeline.
+ * Matched step by step against the pipeline as it is now, so a pipeline edited since is refused
  * rather than half-matched.
  */
 async function lastRun(workspace: Workspace, label: string): Promise<HistoryEntry> {
-  const [last] = (await listHistory({ workspace: workspace.file, bolt: label })).filter((entry) =>
-    !entry.running && entry.bolt.replace(/ \(retry\)$/, "").toLowerCase() === label.toLowerCase(),
+  const [last] = (await listHistory({ workspace: workspace.file, pipeline: label })).filter((entry) =>
+    !entry.running && entry.pipeline.replace(/ \(retry\)$/, "").toLowerCase() === label.toLowerCase(),
   );
   if (!last) throw new WispError(`"${label}" has not run yet — run it whole first`, "NOTHING_TO_RETRY");
   return last;
@@ -273,14 +273,14 @@ function formatMs(ms: number): string {
 }
 
 function printPlan(plan: PlannedStep[], targets: TargetResult[]): void {
-  const bolts = new Set(plan.map((step) => `${step.workspace.file}#${step.bolt}`));
+  const pipelines = new Set(plan.map((step) => `${step.workspace.file}#${step.pipeline}`));
   let heading: string | undefined;
   targets.forEach((target, at) => {
     const step = plan[at] as PlannedStep;
-    const indent = bolts.size > 1 ? "  " : "";
-    if (bolts.size > 1 && step.bolt !== heading) {
-      heading = step.bolt;
-      console.log(`  ${dim("⚡")}${bold(step.bolt)}${step.target.workspace ? dim(` (${step.target.workspace})`) : ""}`);
+    const indent = pipelines.size > 1 ? "  " : "";
+    if (pipelines.size > 1 && step.pipeline !== heading) {
+      heading = step.pipeline;
+      console.log(`  ${dim("⚡")}${bold(step.pipeline)}${step.target.workspace ? dim(` (${step.target.workspace})`) : ""}`);
     }
     const after = target.after ? dim(` · after ${target.after.join(", ")}`) : "";
     console.log(`${indent}${dim(String(at + 1).padStart(3))}${resultLine(target).slice(1)}${after}`);

@@ -27,7 +27,7 @@ export interface HistoryScreenProps {
   onJump?: (input: string) => void;
   /** Run the failed part of this run again. */
   onRetry: (entry: HistoryEntry) => void;
-  /** Run the whole bolt again. */
+  /** Run the whole pipeline again. */
   onRerun: (entry: HistoryEntry) => void;
   onHint?: (hint: string) => void;
   names?: ReadonlyMap<string, string>;
@@ -35,17 +35,17 @@ export interface HistoryScreenProps {
   onToggleGraph?: () => void;
 }
 
-/** A bolt in the sidebar: the filter, like a workflow in a CI's list. */
+/** A pipeline in the sidebar: the filter, like a workflow in a CI's list. */
 export interface PipelineFilter {
   key: string;
   workspace?: string;
   workspaceName?: string;
-  bolt?: string;
+  pipeline?: string;
   count: number;
 }
 
 /**
- * History, laid out the way a CI lays out its runs: bolts on the left to filter by, the
+ * History, laid out the way a CI lays out its runs: pipelines on the left to filter by, the
  * runs of the chosen ones on the right — numbered, with their commit and what started
  * them — and, opening one, its summary, its pipeline drawn as a graph, and its steps with
  * their logs expanding in place.
@@ -56,7 +56,7 @@ export function HistoryScreen(props: HistoryScreenProps) {
   const entries = useMemo(() => recorded && (names ? withWorkspaceNames(recorded, names) : recorded), [recorded, names]);
   const [filterIndex, setFilterIndex] = useState(0);
   const [runIndex, setRunIndex] = useState(0);
-  const [focus, setFocus] = useState<"bolts" | "runs">("runs");
+  const [focus, setFocus] = useState<"pipelines" | "runs">("runs");
   const [open, setOpen] = useState<string>();
   const [query, setQuery] = useState("");
   const [typing, setTyping] = useState(false);
@@ -84,27 +84,27 @@ export function HistoryScreen(props: HistoryScreenProps) {
   const shown = useMemo(
     () =>
       (entries ?? [])
-        .filter((entry) => !filter?.bolt || (entry.workspace === filter.workspace && baseLabel(entry.bolt) === filter.bolt))
+        .filter((entry) => !filter?.pipeline || (entry.workspace === filter.workspace && baseLabel(entry.pipeline) === filter.pipeline))
         .filter((entry) => matchesAll(query, ...searchText(entry))),
     [entries, filter, query],
   );
   const run = shown[Math.min(runIndex, Math.max(0, shown.length - 1))];
   const opened = open ? entries?.find((entry) => entry.id === open) : undefined;
 
-  // Clicks: a bolt on the left filters, a run on the right is chosen, and a click on the
+  // Clicks: a pipeline on the left filters, a run on the right is chosen, and a click on the
   // chosen run opens it, as ⏎ does. The wheel moves through the list under it.
   useMouse((event) => {
     if (!entries || entries.length === 0 || event.y >= height) return false;
     if (event.x < historySideWidth(columns)) {
       if (event.kind === "wheel") {
-        setFocus("bolts");
+        setFocus("pipelines");
         setFilterIndex((at) => Math.max(0, Math.min(filters.length - 1, at + event.by)));
         setRunIndex(0);
         return true;
       }
       const line = filterLines(filters, filterIndex, height)[event.y - 2];
       if (line?.kind === "filter") {
-        setFocus("bolts");
+        setFocus("pipelines");
         if (line.at !== filterIndex) setRunIndex(0);
         setFilterIndex(line.at);
       }
@@ -168,7 +168,7 @@ export function HistoryScreen(props: HistoryScreenProps) {
       if (run && input === "R") return onRerun(run);
       if (key.escape || input === "q" || input === "h") return onClose();
 
-      if (focus === "bolts") {
+      if (focus === "pipelines") {
         if (key.upArrow || input === "k") {
           setFilterIndex((at) => Math.max(0, at - 1));
           return setRunIndex(0);
@@ -180,7 +180,7 @@ export function HistoryScreen(props: HistoryScreenProps) {
         if (key.rightArrow || key.return || key.tab) return setFocus("runs");
         return;
       }
-      if (key.leftArrow || (key.shift && key.tab)) return setFocus("bolts");
+      if (key.leftArrow || (key.shift && key.tab)) return setFocus("pipelines");
       if (key.upArrow || input === "k") return setRunIndex((at) => Math.max(0, at - 1));
       if (key.downArrow || input === "j") return setRunIndex((at) => Math.min(shown.length - 1, at + 1));
       if (key.return && run) return setOpen(run.id);
@@ -192,14 +192,14 @@ export function HistoryScreen(props: HistoryScreenProps) {
     const finished = (list: HistoryEntry[]) => list.filter((entry) => !entry.running);
     if (focus === "runs") {
       if (!run || run.running) return;
-      return setForget({ ids: [run.id], title: `Delete run #${run.number ?? ""} of ${run.bolt}?`, detail: "Its steps and what they printed go with it", one: true });
+      return setForget({ ids: [run.id], title: `Delete run #${run.number ?? ""} of ${run.pipeline}?`, detail: "Its steps and what they printed go with it", one: true });
     }
-    const runs = finished((entries ?? []).filter((entry) => !filter?.bolt || (entry.workspace === filter.workspace && baseLabel(entry.bolt) === filter.bolt)));
+    const runs = finished((entries ?? []).filter((entry) => !filter?.pipeline || (entry.workspace === filter.workspace && baseLabel(entry.pipeline) === filter.pipeline)));
     if (runs.length === 0) return;
     const count = `${runs.length} run${runs.length === 1 ? "" : "s"}`;
     setForget({
       ids: runs.map((entry) => entry.id),
-      title: filter?.bolt ? `Clear the ${count} of ${filter.bolt}?` : `Clear all ${count}?`,
+      title: filter?.pipeline ? `Clear the ${count} of ${filter.pipeline}?` : `Clear all ${count}?`,
       detail: "Their steps and what they printed go with them; runs still going are kept",
       one: false,
     });
@@ -279,7 +279,7 @@ export function HistoryScreen(props: HistoryScreenProps) {
 
   return (
     <Box height={height}>
-      <Box flexDirection="column" width={sideWidth} flexShrink={0} borderStyle={glyphs.border} borderColor={focus === "bolts" ? TONE.accent : "gray"} paddingX={1} overflow="hidden">
+      <Box flexDirection="column" width={sideWidth} flexShrink={0} borderStyle={glyphs.border} borderColor={focus === "pipelines" ? TONE.accent : "gray"} paddingX={1} overflow="hidden">
         <Text bold>
           Pipelines
         </Text>
@@ -290,8 +290,8 @@ export function HistoryScreen(props: HistoryScreenProps) {
           return (
             <Box key={entry.key}>
               <Box flexGrow={1} minWidth={0}>
-                <Text wrap="truncate-end" inverse={selected && focus === "bolts"} bold={selected}>
-                  {selected ? glyphs.pointer : " "} {clip(entry.bolt ?? "All pipelines", sideWidth - 8 - String(entry.count).length)}
+                <Text wrap="truncate-end" inverse={selected && focus === "pipelines"} bold={selected}>
+                  {selected ? glyphs.pointer : " "} {clip(entry.pipeline ?? "All pipelines", sideWidth - 8 - String(entry.count).length)}
                 </Text>
               </Box>
               <Text dimColor>{`  ${entry.count}`}</Text>
@@ -302,7 +302,7 @@ export function HistoryScreen(props: HistoryScreenProps) {
 
       <Box flexDirection="column" flexGrow={1} flexShrink={1} minWidth={0} borderStyle={glyphs.border} borderColor={focus === "runs" ? TONE.accent : "gray"} paddingX={1} overflow="hidden">
         <Text>
-          <Text bold>{filter?.bolt ?? "All runs"}</Text>
+          <Text bold>{filter?.pipeline ?? "All runs"}</Text>
           <Text dimColor>{`  ${shown.length} run${shown.length === 1 ? "" : "s"}`}</Text>
         </Text>
         {forget && !forget.one ? (
@@ -314,7 +314,7 @@ export function HistoryScreen(props: HistoryScreenProps) {
         )}
         {shown.length === 0 ? <Text dimColor>{`No run matches “${query}”. esc clears it.`}</Text> : null}
         {runRows.map((entry, position, all) => {
-          const titleOf = (run: HistoryEntry) => (filter?.bolt ? 0 : run.bolt.length + 1) + `#${run.number ?? ""}`.length;
+          const titleOf = (run: HistoryEntry) => (filter?.pipeline ? 0 : run.pipeline.length + 1) + `#${run.number ?? ""}`.length;
           const titleWidth = Math.min(32, Math.max(0, ...all.map(titleOf)));
           const at = runOffset + position;
           const selected = at === runIndex && focus === "runs";
@@ -331,16 +331,16 @@ export function HistoryScreen(props: HistoryScreenProps) {
                 <Box flexGrow={1} minWidth={0}>
                   <Text wrap="truncate-end" color={doomed ? "red" : undefined}>
                     <Text bold={selected} color={doomed ? "red" : selected ? TONE.accent : undefined}>
-                      {selected ? glyphs.pointer : " "} <Mark ok={entry.ok} running={entry.running} interrupted={entry.interrupted} cancelled={entry.cancelled} glyphs={glyphs} /> {filter?.bolt ? "" : `${entry.bolt} `}
+                      {selected ? glyphs.pointer : " "} <Mark ok={entry.ok} running={entry.running} interrupted={entry.interrupted} cancelled={entry.cancelled} glyphs={glyphs} /> {filter?.pipeline ? "" : `${entry.pipeline} `}
                     </Text>
-                    <Text dimColor={!filter?.bolt} bold={selected && Boolean(filter?.bolt)} color={selected && filter?.bolt ? TONE.accent : undefined}>{`#${entry.number ?? ""}`}</Text>
+                    <Text dimColor={!filter?.pipeline} bold={selected && Boolean(filter?.pipeline)} color={selected && filter?.pipeline ? TONE.accent : undefined}>{`#${entry.number ?? ""}`}</Text>
                     {" ".repeat(Math.max(0, titleWidth - titleOf(entry)))}
                     {state ? <Text color={entry.cancelled ? "gray" : "cyan"}>{`  ${state}`}</Text> : null}
                     {failedAt ? <Text color="red">{`  at ${failedAt.label}`}</Text> : null}
                     {entry.git ? <Text color="yellow" dimColor>{`  ${entry.git.commit}`}</Text> : null}
                     {subject ? <Text dimColor>{` ${subject}`}</Text> : null}
                     {entry.trigger === "hook" ? <Text dimColor>{"  · git hook"}</Text> : null}
-                    {filter?.bolt ? null : <Text dimColor>{`${state || failedAt || entry.git || subject || entry.trigger === "hook" ? "  · " : "  "}${entry.workspaceName}`}</Text>}
+                    {filter?.pipeline ? null : <Text dimColor>{`${state || failedAt || entry.git || subject || entry.trigger === "hook" ? "  · " : "  "}${entry.workspaceName}`}</Text>}
                   </Text>
                 </Box>
                 <Box flexShrink={0}>
@@ -357,13 +357,13 @@ export function HistoryScreen(props: HistoryScreenProps) {
   );
 }
 
-/** How wide the bolts on the left are, the runs taking the rest. */
+/** How wide the pipelines on the left are, the runs taking the rest. */
 export function historySideWidth(columns: number): number {
   return Math.min(36, Math.max(22, Math.floor(columns * 0.27)));
 }
 
 /**
- * The bolts on the left that fit, line by line: a workspace's name before its first bolt.
+ * The pipelines on the left that fit, line by line: a workspace's name before its first pipeline.
  * Drawn from this, and clicks are matched against it.
  */
 export function filterLines(filters: PipelineFilter[], filterIndex: number, height: number): ({ kind: "heading"; key: string; text: string } | { kind: "filter"; at: number })[] {
@@ -371,7 +371,7 @@ export function filterLines(filters: PipelineFilter[], filterIndex: number, heig
   const lines: ({ kind: "heading"; key: string; text: string } | { kind: "filter"; at: number })[] = [];
   items.forEach((entry, position) => {
     const at = offset + position;
-    if (entry.bolt && (at === 0 || filters[at - 1]?.workspace !== entry.workspace)) lines.push({ kind: "heading", key: `h:${entry.key}`, text: (entry.workspaceName ?? "").toUpperCase() });
+    if (entry.pipeline && (at === 0 || filters[at - 1]?.workspace !== entry.workspace)) lines.push({ kind: "heading", key: `h:${entry.key}`, text: (entry.workspaceName ?? "").toUpperCase() });
     lines.push({ kind: "filter", at });
   });
   return lines;
@@ -558,7 +558,7 @@ function RunDetail(props: {
     }
   });
 
-  const graph = pipeline(entry, glyphs.bolt);
+  const graph = pipeline(entry, glyphs.pipeline);
   const fitted = showGraph ? fitGraph(graph, columns - 6, Number.POSITIVE_INFINITY, glyphs) : undefined;
   if (fitted) rows.unshift(...fitted.lines.map((_line, at) => ({ key: `graph${at}`, node: <GraphLine graph={fitted} at={at} glyphs={glyphs} /> })), { key: "graph-below", node: <Text> </Text> });
   const room = Math.max(3, height - 8 - (filtering || typing ? 1 : 0));
@@ -665,7 +665,7 @@ function RunDetail(props: {
     <Box flexDirection="column" height={height} borderStyle={glyphs.border} borderColor={entry.ok || entry.running || entry.cancelled ? "gray" : entry.interrupted ? "yellow" : "red"} paddingX={1} overflow="hidden">
       <Box ref={head} flexDirection="column" flexShrink={0}>
       <Text wrap="truncate-end">
-        <Mark ok={entry.ok} running={entry.running} interrupted={entry.interrupted} cancelled={entry.cancelled} glyphs={glyphs} /> <Text bold>{entry.bolt}</Text>
+        <Mark ok={entry.ok} running={entry.running} interrupted={entry.interrupted} cancelled={entry.cancelled} glyphs={glyphs} /> <Text bold>{entry.pipeline}</Text>
         <Text dimColor>{` #${entry.number ?? ""}`}</Text>
         <Text dimColor>{`   ${entry.workspaceName}`}</Text>
       </Text>
@@ -736,7 +736,7 @@ function Summary({ entry }: { entry: HistoryEntry }) {
 export function pipeline(entry: HistoryEntry, mark = ""): GraphNode[] {
   const steps = allSteps(entry);
   const stageOf = (step: HistoryStep, at: number) => step.stage ?? at + 1;
-  const ownerOf = (step: HistoryStep) => (step.bolt ? (step.workspace ? `${step.workspace} › ${step.bolt}` : step.bolt) : undefined);
+  const ownerOf = (step: HistoryStep) => (step.pipeline ? (step.workspace ? `${step.workspace} › ${step.pipeline}` : step.pipeline) : undefined);
   const after = steps.map(() => new Set<number>());
   const exact = steps.length > 0 && steps.every((step) => step.at !== undefined);
   if (exact) {
@@ -805,18 +805,18 @@ export function describeHistoryStep(step: HistoryStep): string {
   }
 }
 
-/** The sidebar: every bolt that has run, grouped by workspace, after "All bolts". */
+/** The sidebar: every pipeline that has run, grouped by workspace, after "All pipelines". */
 function pipelineFilters(entries: HistoryEntry[]): PipelineFilter[] {
   const byKey = new Map<string, PipelineFilter>();
   for (const entry of entries) {
-    const bolt = baseLabel(entry.bolt);
-    const key = `${entry.workspace}#${bolt}`;
+    const pipeline = baseLabel(entry.pipeline);
+    const key = `${entry.workspace}#${pipeline}`;
     const found = byKey.get(key);
     if (found) found.count += 1;
-    else byKey.set(key, { key, workspace: entry.workspace, workspaceName: entry.workspaceName, bolt, count: 1 });
+    else byKey.set(key, { key, workspace: entry.workspace, workspaceName: entry.workspaceName, pipeline, count: 1 });
   }
-  const bolts = [...byKey.values()].sort((left, right) => (left.workspaceName ?? "").localeCompare(right.workspaceName ?? "") || (left.bolt ?? "").localeCompare(right.bolt ?? ""));
-  return [{ key: "all", count: entries.length }, ...bolts];
+  const pipelines = [...byKey.values()].sort((left, right) => (left.workspaceName ?? "").localeCompare(right.workspaceName ?? "") || (left.pipeline ?? "").localeCompare(right.pipeline ?? ""));
+  return [{ key: "all", count: entries.length }, ...pipelines];
 }
 
 function totalMs(entry: HistoryEntry): number {
@@ -876,11 +876,11 @@ export function SearchLine({ query, typing }: { query: string; typing: boolean }
   );
 }
 
-/** What a run can be found by: its bolt, where, the commit, how it went and where it failed. */
+/** What a run can be found by: its pipeline, where, the commit, how it went and where it failed. */
 function searchText(entry: HistoryEntry): (string | undefined)[] {
   const failedAt = entry.steps.find((step) => !step.ok && !step.skipped);
   return [
-    entry.bolt,
+    entry.pipeline,
     `#${entry.number ?? ""}`,
     entry.workspaceName,
     entry.ok ? "passed success ok" : entry.cancelled ? "cancelled stopped" : "failed failure",

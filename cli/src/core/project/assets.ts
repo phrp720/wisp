@@ -58,7 +58,7 @@ export const APPS: AssetSpec<AppRef> = {
 /**
  * One section of assets, with ids derived from what they are and what they are called.
  *
- * `link:staging` rather than a UUID, so a bolt can name the asset the way a human would,
+ * `link:staging` rather than a UUID, so a pipeline can name the asset the way a human would,
  * and so the id is the same every time the file is read. The kind is part of the id: a
  * folder and a file may both be called `Spec`, and they are not the same asset.
  */
@@ -100,7 +100,7 @@ export function assets<T>(entries: Entry[], spec: AssetSpec<T>, ctx: Context): T
 
     const base = `${spec.kind}:${label.toLowerCase()}`;
     const fingerprint = JSON.stringify(written);
-    // The same thing listed inline in two bolts is one asset, not a duplicate to warn about.
+    // The same thing listed inline in two pipelines is one asset, not a duplicate to warn about.
     if (taken.has(base) && ctx.valueById.get(base) === fingerprint) {
       ctx.idsByAt.set(at, base);
       continue;

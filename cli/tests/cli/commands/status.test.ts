@@ -44,7 +44,7 @@ describe("wisp status --json", () => {
 
 describe("wisp status", () => {
   it("says the file had problems rather than that it has no pipelines yet", async () => {
-    await writeFile(join(dir, ".wisp.json"), JSON.stringify({ name: "Shop", bolts: [{ label: "Check", steps: [] }] }));
+    await writeFile(join(dir, ".wisp.json"), JSON.stringify({ name: "Shop", tasks: [{ label: "Check", steps: [] }] }));
     await status();
     const text = printed.join("\n");
     expect(text).toContain("No pipelines read from this file");

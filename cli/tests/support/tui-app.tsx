@@ -27,8 +27,8 @@ export function services(overrides: Partial<Services> = {}, library: Library = {
   return {
     environment: { os: "darwin", gui: true, ssh: false },
     load: async () => library,
-    run: async (target, bolt, callbacks) => {
-      const plan = target.workspace.bolts.find((entry) => entry.label === bolt)!;
+    run: async (target, pipeline, callbacks) => {
+      const plan = target.workspace.pipelines.find((entry) => entry.label === pipeline)!;
       const targets = plan.steps.map((step, index) => ({ kind: "folder" as const, id: `s${index}`, label: `step ${index}`, value: `step ${index}` }));
       callbacks.onPlan(targets);
       for (const step of targets) {
@@ -67,7 +67,7 @@ export function services(overrides: Partial<Services> = {}, library: Library = {
       setNotify: async (change) => ({ when: "failures", screen: true, webhooks: [], ...change }),
     },
     editing: {
-      bolt: async (_file, bolt) => ({ label: bolt, steps: [] }),
+      pipeline: async (_file, pipeline) => ({ label: pipeline, steps: [] }),
       addPipeline: async () => undefined,
       renamePipeline: async () => undefined,
       setPipelineNotes: async () => undefined,
@@ -82,7 +82,7 @@ export function services(overrides: Partial<Services> = {}, library: Library = {
       addStep: async () => undefined,
       replaceStep: async () => undefined,
       removeStep: async () => undefined,
-      moveStep: async (_file, _bolt, index, by) => index + by,
+      moveStep: async (_file, _pipeline, index, by) => index + by,
       setAfter: async () => undefined,
       createPersonalWorkspace: async () => "",
       removePersonalWorkspace: async () => undefined,

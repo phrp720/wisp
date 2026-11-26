@@ -16,9 +16,9 @@ export interface MultiplexerResult {
  * The commands that put an invocation in a new tmux window.
  *
  * Inside tmux, a window in the current session — next to where you are, without switching
- * to it: a bolt that starts three commands must not leave you staring at the last one's
+ * to it: a pipeline that starts three commands must not leave you staring at the last one's
  * output, or pull the TUI out from under you. Outside tmux, a detached `wisp` session
- * that collects every command, so on a server you can run a bolt, log out, and
+ * that collects every command, so on a server you can run a pipeline, log out, and
  * `tmux attach -t wisp` later to find it all still going.
  */
 export function tmuxPlan(invocation: Invocation, title: string, inside: boolean, sessionExists: boolean): string[][] {

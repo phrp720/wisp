@@ -44,7 +44,7 @@ export const pick: CommandDef<PickOptions> = {
     }
 
     if (!read) {
-      const reads = (await discoverWorkspaces()).reads.filter((entry) => entry.workspace.bolts.length > 0);
+      const reads = (await discoverWorkspaces()).reads.filter((entry) => entry.workspace.pipelines.length > 0);
       if (reads.length === 0) throw new WispError("No workspace has pipelines yet", "NOT_FOUND");
       const index = await choose(
         "Which workspace?",
@@ -60,27 +60,27 @@ export const pick: CommandDef<PickOptions> = {
     }
 
     const { workspace } = read;
-    if (workspace.bolts.length === 0) throw new WispError(`${workspace.name} has no pipelines yet`, "NO_PIPELINE");
+    if (workspace.pipelines.length === 0) throw new WispError(`${workspace.name} has no pipelines yet`, "NO_PIPELINE");
 
     const runs = await listRuns();
     const index = await choose(
       `Run which pipeline of ${workspace.name}?`,
-      workspace.bolts.map((bolt) => ({
-        label: bolt.label,
-        ...(upMark(workspace, bolt, runs) ? { mark: upMark(workspace, bolt, runs) } : {}),
-        slug: pipelineSlug(bolt),
-        ...(bolt.notes ? { hint: bolt.notes } : {}),
+      workspace.pipelines.map((pipeline) => ({
+        label: pipeline.label,
+        ...(upMark(workspace, pipeline, runs) ? { mark: upMark(workspace, pipeline, runs) } : {}),
+        slug: pipelineSlug(pipeline),
+        ...(pipeline.notes ? { hint: pipeline.notes } : {}),
       })),
     );
     if (index === undefined) return void console.log(dim("Nothing ran."));
 
-    const bolt = workspace.bolts[index];
-    if (!bolt) return;
+    const pipeline = workspace.pipelines[index];
+    if (!pipeline) return;
     const { json: _json, ...run } = options;
-    await use.run([workspace.file, bolt.label], run);
+    await use.run([workspace.file, pipeline.label], run);
 
     if (process.exitCode === 1) return;
-    const typed = here?.workspace.file === workspace.file ? pipelineSlug(bolt) : `${slugify(workspace.name)} ${pipelineSlug(bolt)}`;
+    const typed = here?.workspace.file === workspace.file ? pipelineSlug(pipeline) : `${slugify(workspace.name)} ${pipelineSlug(pipeline)}`;
     console.log(dim(`Next time: \`wisp ${typed}\``));
   },
 };

@@ -139,7 +139,7 @@ const STALE_LOCK_MS = 10_000;
 /**
  * Run `work` while holding a lock on `file`.
  *
- * Every `wisp` run records the project it used, so two terminals running bolts at once
+ * Every `wisp` run records the project it used, so two terminals running pipelines at once
  * would otherwise read the same config, each add their own entry, and the second write
  * would drop the first. A directory is the lock because creating one is atomic everywhere.
  */

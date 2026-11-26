@@ -28,7 +28,7 @@ export function RunProgress({ view, glyphs, height, tick, width = 80 }: { view: 
   const links = view.steps.filter((step) => step.result?.kind === "link" && step.result.note?.startsWith("no display"));
   const output = view.output.length > 0 && view.output[view.output.length - 1] === "" ? view.output.slice(0, -1) : view.output;
   const summary = view.done ? 2 + links.length : 0;
-  const live = fitGraph(liveGraph(view, glyphs.bolt), width, graphBudget(height - 3 - summary), glyphs);
+  const live = fitGraph(liveGraph(view, glyphs.pipeline), width, graphBudget(height - 3 - summary), glyphs);
   const stepRoom = Math.max(1, height - 3 - summary - (live ? live.height : 0));
   const outputRoom = output.length > 0 ? Math.max(0, Math.min(output.length, Math.floor((stepRoom - 1) / 2))) : 0;
   const { items } = windowed(view.steps, Math.max(0, view.steps.findIndex((step) => step.state === "running")), Math.max(1, stepRoom - (outputRoom ? outputRoom + 1 : 0)));
@@ -37,7 +37,7 @@ export function RunProgress({ view, glyphs, height, tick, width = 80 }: { view: 
     <>
       {/* The title stays where it is; the words that change go after it, cut first when it is long. */}
       <Text wrap="truncate-end">
-        <Text color={TONE.accent}>{glyphs.bolt}</Text>
+        <Text color={TONE.accent}>{glyphs.pipeline}</Text>
         <Text bold>
           {view.dryRun ? <Text color="yellow">checking </Text> : null}
           {view.title}
@@ -109,7 +109,7 @@ export function DiagnosticLine({ entry, glyphs }: { entry: Diagnostic; glyphs: G
   );
 }
 
-export function HelpPanel({ glyphs, height, tab = "bolts" }: { glyphs: Glyphs; height: number; tab?: "bolts" | "running" | "history" }) {
+export function HelpPanel({ glyphs, height, tab = "pipelines" }: { glyphs: Glyphs; height: number; tab?: "pipelines" | "running" | "history" }) {
   const anywhere: [string, [string, string][]] = [
     "Anywhere",
     [
@@ -151,7 +151,7 @@ export function HelpPanel({ glyphs, height, tab = "bolts" }: { glyphs: Glyphs; h
     anywhere,
   ];
   // Grouped by what you are doing, so the key you need is where you would look for it.
-  const bolts: [string, [string, string][]][] = [
+  const pipelines: [string, [string, string][]][] = [
     [
       "Run",
       [
@@ -194,7 +194,7 @@ export function HelpPanel({ glyphs, height, tab = "bolts" }: { glyphs: Glyphs; h
       ],
     ],
   ];
-  const sections = tab === "running" ? running : tab === "history" ? history : bolts;
+  const sections = tab === "running" ? running : tab === "history" ? history : pipelines;
   return (
     <Box flexDirection="column" height={height} borderStyle={glyphs.border} paddingX={1}>
       <Text bold>{tab === "running" ? "Keys on Running" : tab === "history" ? "Keys on History" : "Keys"}</Text>
