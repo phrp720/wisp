@@ -59,25 +59,25 @@ export async function maybeProject(): Promise<WorkspaceRead | undefined> {
 /**
  * What `wisp use <a> [b]` means.
  *
- * Two words are a workspace and a bolt. One word is a bolt of the project you are
- * standing in, and only that: a bolt of another project runs only when you name it.
+ * Two words are a workspace and a pipeline. One word is a pipeline of the project you are
+ * standing in, and only that: a pipeline of another project runs only when you name it.
  */
 export async function resolveRun(
   first: string | undefined,
   second: string | undefined,
   flag: string | undefined,
-): Promise<{ read: WorkspaceRead; bolt?: string; workspaceRef?: string }> {
-  const bolt = second ?? flag;
+): Promise<{ read: WorkspaceRead; pipeline?: string; workspaceRef?: string }> {
+  const pipeline = second ?? flag;
 
-  if (first && second) return { read: await workspaceFor(first), bolt, workspaceRef: first };
+  if (first && second) return { read: await workspaceFor(first), pipeline, workspaceRef: first };
 
   if (first && !flag && looksLikeFile(first)) return { read: await workspaceFor(first), workspaceRef: first };
 
   if (first && !flag) {
     const here = await maybeProject();
     if (here) {
-      const { bolt: match, candidates } = matchPipeline(here.workspace, first);
-      if (match) return { read: here, bolt: first };
+      const { pipeline: match, candidates } = matchPipeline(here.workspace, first);
+      if (match) return { read: here, pipeline: first };
       if (candidates.length > 1) {
         throw new WispError(
           `"${first}" matches several pipelines: ${candidates.map((candidate) => `${candidate.label} (${pipelineSlug(candidate)})`).join(", ")}`,
@@ -91,7 +91,7 @@ export async function resolveRun(
 
   return {
     read: await workspaceFor(first),
-    ...(bolt ? { bolt } : {}),
+    ...(pipeline ? { pipeline } : {}),
     ...(first ? { workspaceRef: first } : {}),
   };
 }
@@ -102,7 +102,7 @@ async function noPipelineHere(word: string, here: WorkspaceRead | undefined): Pr
   const workspace = matchWorkspace(word, others).match;
   const elsewhere = pipelinesEverywhere(word, others);
 
-  const close = closePipelines(here?.workspace.bolts ?? [], word);
+  const close = closePipelines(here?.workspace.pipelines ?? [], word);
 
   const said = here
     ? `${here.workspace.name} has no pipeline called "${word}".`
@@ -115,8 +115,8 @@ async function noPipelineHere(word: string, here: WorkspaceRead | undefined): Pr
     elsewhere.length > 0
       ? `Elsewhere: ${elsewhere.map((hit) => `\`wisp ${slugify(hit.read.workspace.name)} ${hit.slug}\``).join(", ")}.`
       : "",
-    close.length === 0 && !workspace && elsewhere.length === 0 && here && here.workspace.bolts.length > 0
-      ? `It has ${here.workspace.bolts.map((entry) => pipelineSlug(entry)).join(", ")}.`
+    close.length === 0 && !workspace && elsewhere.length === 0 && here && here.workspace.pipelines.length > 0
+      ? `It has ${here.workspace.pipelines.map((entry) => pipelineSlug(entry)).join(", ")}.`
       : "",
     !workspace && elsewhere.length === 0 && !here ? "`wisp list` shows your workspaces." : "",
   ].filter(Boolean);
@@ -128,16 +128,16 @@ export function emitJson(value: unknown): void {
 }
 
 /**
- * The bolts named `word` in every workspace: by name or slug when any is, else by the one
- * bolt in a workspace that the word is part of.
+ * The pipelines named `word` in every workspace: by name or slug when any is, else by the one
+ * pipeline in a workspace that the word is part of.
  */
 function pipelinesEverywhere(word: string, reads: WorkspaceRead[]): { read: WorkspaceRead; label: string; slug: string }[] {
   const needle = word.trim().toLowerCase();
   const hits = reads.flatMap((read) => {
-    const { bolt } = matchPipeline(read.workspace, word);
-    if (!bolt) return [];
-    const exact = bolt.label.toLowerCase() === needle || pipelineSlug(bolt) === slugify(word) || slugify(bolt.label) === slugify(word);
-    return [{ read, label: bolt.label, slug: pipelineSlug(bolt), exact }];
+    const { pipeline } = matchPipeline(read.workspace, word);
+    if (!pipeline) return [];
+    const exact = pipeline.label.toLowerCase() === needle || pipelineSlug(pipeline) === slugify(word) || slugify(pipeline.label) === slugify(word);
+    return [{ read, label: pipeline.label, slug: pipelineSlug(pipeline), exact }];
   });
   const exact = hits.filter((hit) => hit.exact);
   return (exact.length > 0 ? exact : hits).map(({ read, label, slug }) => ({ read, label, slug }));

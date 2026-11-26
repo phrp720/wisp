@@ -13,11 +13,11 @@ const INPUT_KEYS = new Set(["ask", "choices", "default"]);
 const DEFAULT_WAIT_TIMEOUT = 60;
 
 /**
- * Pipelines, with their steps: something to open or run, a wait, or another bolt to run first.
- * A bolt in the override replaces the project's bolt of the same name, which is how you
- * make a shared bolt your own.
+ * Pipelines, with their steps: something to open or run, a wait, or another pipeline to run first.
+ * A pipeline in the override replaces the project's pipeline of the same name, which is how you
+ * make a shared pipeline your own.
  */
-export function bolts(entries: Entry[], ctx: Context): Pipeline[] {
+export function pipelines(entries: Entry[], ctx: Context): Pipeline[] {
   const result: Pipeline[] = [];
   const index = new Map<string, number>();
   const skippedSteps = new Map<string, number>();
@@ -57,14 +57,14 @@ export function bolts(entries: Entry[], ctx: Context): Pipeline[] {
     }
     skippedSteps.set(id, skipped);
 
-    const bolt: Pipeline = { id, label, steps, ...(broken ? { broken: `"${label}" can't run: ${broken}` } : {}) };
+    const pipeline: Pipeline = { id, label, steps, ...(broken ? { broken: `"${label}" can't run: ${broken}` } : {}) };
     const notes = optionalString(entry["notes"]);
-    if (notes) bolt.notes = notes;
+    if (notes) pipeline.notes = notes;
     const slug = optionalString(entry["slug"]);
-    if (slug && SLUG.test(slug)) bolt.slug = slug;
+    if (slug && SLUG.test(slug)) pipeline.slug = slug;
     else if (slug) ctx.found.push({ level: "warning", at: `${at}.slug`, message: `"${slug}" is not a slug, so it is ignored`, hint: "Lowercase letters, digits and hyphens, like dev-stack" });
     const color = optionalString(entry["color"]);
-    if (color) bolt.color = color;
+    if (color) pipeline.color = color;
 
     for (const key of Object.keys(entry)) {
       if (PIPELINE_KEYS.has(key)) continue;
@@ -72,8 +72,8 @@ export function bolts(entries: Entry[], ctx: Context): Pipeline[] {
     }
 
     if (entry["confirm"] !== undefined) {
-      if (entry["confirm"] === true) bolt.confirm = `Run "${label}"?`;
-      else if (typeof entry["confirm"] === "string" && entry["confirm"].trim()) bolt.confirm = entry["confirm"].trim();
+      if (entry["confirm"] === true) pipeline.confirm = `Run "${label}"?`;
+      else if (typeof entry["confirm"] === "string" && entry["confirm"].trim()) pipeline.confirm = entry["confirm"].trim();
       else if (entry["confirm"] !== false) {
         ctx.found.push({ level: "warning", at: `${at}.confirm`, message: '"confirm" is the question to ask before it runs, or true — it is ignored' });
       }
@@ -81,9 +81,9 @@ export function bolts(entries: Entry[], ctx: Context): Pipeline[] {
 
     if (entry["inputs"] !== undefined) {
       const inputs = parseInputs(entry["inputs"], `${at}.inputs`, ctx);
-      if (inputs.length > 0) bolt.inputs = inputs;
+      if (inputs.length > 0) pipeline.inputs = inputs;
     }
-    const declared = new Set((bolt.inputs ?? []).map((input) => input.name));
+    const declared = new Set((pipeline.inputs ?? []).map((input) => input.name));
     const undeclared = (text: string, where: string, address?: string) => {
       const inAddress = new Set(address ? placeholders(address) : []);
       for (const name of new Set(placeholders(text))) {
@@ -93,7 +93,7 @@ export function bolts(entries: Entry[], ctx: Context): Pipeline[] {
         else ctx.found.push({ level: "warning", at: where, message: `{{${name}}} is not one of "${label}"'s inputs — it is left as written`, hint });
       }
     };
-    if (bolt.confirm) undeclared(bolt.confirm, `${at}.confirm`);
+    if (pipeline.confirm) undeclared(pipeline.confirm, `${at}.confirm`);
     for (const key of ["steps", "down"]) {
       const list = Array.isArray(entry[key]) ? (entry[key] as unknown[]) : [];
       list.forEach((step, position) => undeclared(JSON.stringify(step), `${at}.${key}[${position}]`, stepAddress(step)));
@@ -101,30 +101,30 @@ export function bolts(entries: Entry[], ctx: Context): Pipeline[] {
 
     if (entry["keepGoing"] !== undefined) {
       if (typeof entry["keepGoing"] === "boolean") {
-        if (entry["keepGoing"]) bolt.keepGoing = true;
+        if (entry["keepGoing"]) pipeline.keepGoing = true;
       } else {
         ctx.found.push({ level: "warning", at: `${at}.keepGoing`, message: '"keepGoing" must be true or false — it is ignored' });
       }
     }
 
-    // What `wisp down` runs after stopping what the bolt started: the teardown that is
+    // What `wisp down` runs after stopping what the pipeline started: the teardown that is
     // not a process Wisp can stop, like `docker compose stop`.
     if (entry["down"] !== undefined) {
       if (Array.isArray(entry["down"])) {
         const parsed = parseSteps(entry["down"] as unknown[], `${at}.down`, ctx);
         const down = parsed.steps;
-        if (parsed.broken && !bolt.broken) bolt.broken = `"${label}" can't be taken down: ${parsed.broken}`;
-        if (down.length > 0) bolt.down = down;
+        if (parsed.broken && !pipeline.broken) pipeline.broken = `"${label}" can't be taken down: ${parsed.broken}`;
+        if (down.length > 0) pipeline.down = down;
       } else {
         ctx.found.push({ level: "error", at: `${at}.down`, message: '"down" must be a list of steps — it was ignored' });
       }
     }
 
     if (existing !== undefined) {
-      result[existing] = bolt;
+      result[existing] = pipeline;
     } else {
       index.set(id, result.length);
-      result.push(bolt);
+      result.push(pipeline);
     }
   }
 
@@ -174,7 +174,7 @@ function parseInputs(value: unknown, at: string, ctx: Context): InputSpec[] {
   return specs;
 }
 
-/** One list of steps: a bolt's `steps` or its `down`. */
+/** One list of steps: a pipeline's `steps` or its `down`. */
 function parseSteps(listed: unknown[], at: string, ctx: Context): { steps: PipelineStep[]; skipped: number; broken?: string } {
   const steps: PipelineStep[] = [];
   let skipped = 0;
@@ -295,17 +295,17 @@ function specialStep(target: Record<string, unknown>, at: string, ctx: Context):
     return { kind: "compose", file, ...(services.length > 0 ? { services } : {}) };
   }
 
-  const bolt = optionalString(target["pipeline"]);
-  if (bolt) {
+  const pipeline = optionalString(target["pipeline"]);
+  if (pipeline) {
     if (target["workspace"] !== undefined) {
       ctx.found.push({
         level: "error",
         at,
-        message: `dropped: a pipeline step runs a pipeline of this file. To run "${bolt}" from another project, run it as a command: { "run": "wisp use <its .wisp.json> ${bolt}", "finishes": true }`,
+        message: `dropped: a pipeline step runs a pipeline of this file. To run "${pipeline}" from another project, run it as a command: { "run": "wisp use <its .wisp.json> ${pipeline}", "finishes": true }`,
       });
       return undefined;
     }
-    return { kind: "pipeline", bolt };
+    return { kind: "pipeline", pipeline };
   }
 
   ctx.found.push({
@@ -354,32 +354,32 @@ export function parseWait(value: unknown): WaitSpec | undefined {
 }
 
 /**
- * Dependencies within this file: each must name a bolt that exists, and no bolt may end
+ * Dependencies within this file: each must name a pipeline that exists, and no pipeline may end
  * up needing itself. Dependencies on other workspaces can only be checked when they run.
  */
-function checkSlugs(bolts: Pipeline[], ctx: Context): void {
+function checkSlugs(pipelines: Pipeline[], ctx: Context): void {
   const seen = new Map<string, string>();
-  for (const bolt of bolts) {
-    const slug = pipelineSlug(bolt);
+  for (const pipeline of pipelines) {
+    const slug = pipelineSlug(pipeline);
     const other = seen.get(slug);
-    if (other) ctx.found.push({ level: "warning", at: "pipelines", pipeline: bolt.label, message: `"${other}" and "${bolt.label}" both answer to ${slug}`, hint: 'Give one of them a different "slug": until then, neither runs by that name' });
-    else seen.set(slug, bolt.label);
+    if (other) ctx.found.push({ level: "warning", at: "pipelines", pipeline: pipeline.label, message: `"${other}" and "${pipeline.label}" both answer to ${slug}`, hint: 'Give one of them a different "slug": until then, neither runs by that name' });
+    else seen.set(slug, pipeline.label);
   }
 }
 
-function checkDependencies(bolts: Pipeline[], ctx: Context): void {
-  const byLabel = new Map(bolts.map((bolt) => [bolt.label.toLowerCase(), bolt]));
+function checkDependencies(pipelines: Pipeline[], ctx: Context): void {
+  const byLabel = new Map(pipelines.map((pipeline) => [pipeline.label.toLowerCase(), pipeline]));
 
-  for (const bolt of bolts) {
-    for (const step of bolt.steps) {
+  for (const pipeline of pipelines) {
+    for (const step of pipeline.steps) {
       if (step.kind !== "pipeline") continue;
-      if (!byLabel.has(step.bolt.toLowerCase())) {
+      if (!byLabel.has(step.pipeline.toLowerCase())) {
         ctx.found.push({
           level: "error",
           at: `pipelines`,
-          pipeline: bolt.label,
-          message: `"${bolt.label}" runs a pipeline called "${step.bolt}", which this file does not declare`,
-          hint: `Pick one of this file's pipelines, or add one called "${step.bolt}"`,
+          pipeline: pipeline.label,
+          message: `"${pipeline.label}" runs a pipeline called "${step.pipeline}", which this file does not declare`,
+          hint: `Pick one of this file's pipelines, or add one called "${step.pipeline}"`,
         });
       }
     }
@@ -389,10 +389,10 @@ function checkDependencies(bolts: Pipeline[], ctx: Context): void {
   const done = new Set<string>();
   const reported = new Set<string>();
 
-  const visit = (bolt: Pipeline, path: string[]): void => {
-    if (done.has(bolt.id)) return;
-    if (visiting.has(bolt.id)) {
-      const cycle = [...path.slice(path.indexOf(bolt.label)), bolt.label];
+  const visit = (pipeline: Pipeline, path: string[]): void => {
+    if (done.has(pipeline.id)) return;
+    if (visiting.has(pipeline.id)) {
+      const cycle = [...path.slice(path.indexOf(pipeline.label)), pipeline.label];
       const key = [...cycle].sort().join("|");
       if (!reported.has(key)) {
         reported.add(key);
@@ -406,15 +406,15 @@ function checkDependencies(bolts: Pipeline[], ctx: Context): void {
       }
       return;
     }
-    visiting.add(bolt.id);
-    for (const step of bolt.steps) {
+    visiting.add(pipeline.id);
+    for (const step of pipeline.steps) {
       if (step.kind !== "pipeline") continue;
-      const next = byLabel.get(step.bolt.toLowerCase());
-      if (next) visit(next, [...path, bolt.label]);
+      const next = byLabel.get(step.pipeline.toLowerCase());
+      if (next) visit(next, [...path, pipeline.label]);
     }
-    visiting.delete(bolt.id);
-    done.add(bolt.id);
+    visiting.delete(pipeline.id);
+    done.add(pipeline.id);
   };
 
-  for (const bolt of bolts) visit(bolt, []);
+  for (const pipeline of pipelines) visit(pipeline, []);
 }

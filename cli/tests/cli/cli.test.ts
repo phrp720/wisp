@@ -91,15 +91,15 @@ describe("shortest", () => {
     const shop = ["Work on storefront", "Deploy", "Back up the database"].map((label) => ({ id: label, label, steps: [] }));
     expect(shortest(shop[0]!, shop)).toBe("storefront");
     expect(shortest(shop[2]!, shop)).toBe("database");
-    const bolts = ["Work on core", "Work on the app", "Work on the CLI"].map((label) => ({ id: label, label, steps: [] }));
-    expect(shortest(bolts[0]!, bolts)).toBe("core");
-    expect(shortest(bolts[2]!, bolts)).toBe("cli");
+    const pipelines = ["Work on core", "Work on the app", "Work on the CLI"].map((label) => ({ id: label, label, steps: [] }));
+    expect(shortest(pipelines[0]!, pipelines)).toBe("core");
+    expect(shortest(pipelines[2]!, pipelines)).toBe("cli");
   });
 
   it("counts only whole words as a clash, and falls back to the slug", () => {
-    const bolts = ["Documentation", "Docs", "Work on api", "Work on api again"].map((label) => ({ id: label, label, steps: [] }));
-    expect(shortest(bolts[1]!, bolts)).toBe("docs");
-    expect(shortest(bolts[2]!, bolts)).toBe("work-on-api");
+    const pipelines = ["Documentation", "Docs", "Work on api", "Work on api again"].map((label) => ({ id: label, label, steps: [] }));
+    expect(shortest(pipelines[1]!, pipelines)).toBe("docs");
+    expect(shortest(pipelines[2]!, pipelines)).toBe("work-on-api");
   });
 
   it("suggests a pipeline's own slug first", () => {
@@ -109,10 +109,10 @@ describe("shortest", () => {
   });
 
   it("never suggests a command's name to type on its own", () => {
-    const bolts = ["Check", "Run the checks", "Work on api"].map((label) => ({ id: label, label, steps: [] }));
-    expect(shortest(bolts[0]!, bolts, true)).toBe("use check");
-    expect(shortest(bolts[0]!, bolts)).toBe("check");
-    expect(shortest(bolts[1]!, bolts, true)).toBe("checks");
+    const pipelines = ["Check", "Run the checks", "Work on api"].map((label) => ({ id: label, label, steps: [] }));
+    expect(shortest(pipelines[0]!, pipelines, true)).toBe("use check");
+    expect(shortest(pipelines[0]!, pipelines)).toBe("check");
+    expect(shortest(pipelines[1]!, pipelines, true)).toBe("checks");
   });
 
   it("knows every word that names a command", () => {

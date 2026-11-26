@@ -154,7 +154,7 @@ export const notify: CommandDef<{ test?: boolean; reveal?: boolean; json?: boole
 
     const problems = options.test
       ? await sendNotification(
-          { ok: false, bolt: "A test", workspace: "Wisp", failedStep: "nothing", error: "it's a test", durationMs: 0, watched: false },
+          { ok: false, pipeline: "A test", workspace: "Wisp", failedStep: "nothing", error: "it's a test", durationMs: 0, watched: false },
           { platform: getPlatform(), environment, settings: { ...settings, webhooks: settings.webhooks.map(({ url }) => ({ url })) } },
         )
       : undefined;

@@ -44,7 +44,7 @@ export function title(workspace: Workspace): string {
 }
 
 export function counts(workspace: Workspace): string {
-  return dim(workspace.bolts.length > 0 ? plural(workspace.bolts.length, "pipeline") : "no pipelines");
+  return dim(workspace.pipelines.length > 0 ? plural(workspace.pipelines.length, "pipeline") : "no pipelines");
 }
 
 export function plural(count: number, noun: string): string {

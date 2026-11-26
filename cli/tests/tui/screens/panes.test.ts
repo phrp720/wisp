@@ -34,13 +34,13 @@ const postgres: Container = {
   ports: ["5432"],
   exitCode: 0,
 };
-const web = { id: "aaaaaaaaaaaa", kind: "background", label: "web", command: "pnpm dev", workspace: file, workspaceName: "Shop", asset: "command:web", bolt: "Work on shop", pid: 1, startedAt: "2026-11-18T10:00:00Z", log: "/tmp/x.log", alive: true } as RunStatus;
+const web = { id: "aaaaaaaaaaaa", kind: "background", label: "web", command: "pnpm dev", workspace: file, workspaceName: "Shop", asset: "command:web", pipeline: "Work on shop", pid: 1, startedAt: "2026-11-18T10:00:00Z", log: "/tmp/x.log", alive: true } as RunStatus;
 
-const entry = (bolt: string, steps: HistoryEntry["steps"], startedAt: string): HistoryEntry => ({
-  id: bolt + startedAt,
+const entry = (pipeline: string, steps: HistoryEntry["steps"], startedAt: string): HistoryEntry => ({
+  id: pipeline + startedAt,
   workspace: file,
   workspaceName: "Shop",
-  bolt,
+  pipeline,
   startedAt,
   finishedAt: startedAt,
   ok: true,
@@ -49,7 +49,7 @@ const entry = (bolt: string, steps: HistoryEntry["steps"], startedAt: string): H
 const workRun = entry(
   "Work on shop",
   [
-    { kind: "compose", label: "postgres", value: "compose.yaml", ok: true, durationMs: 9000, bolt: "Services" },
+    { kind: "compose", label: "postgres", value: "compose.yaml", ok: true, durationMs: 9000, pipeline: "Services" },
     { kind: "command", label: "web", value: "pnpm dev", ok: true, durationMs: 1500 },
   ],
   "2026-11-18T10:00:00Z",
@@ -76,12 +76,12 @@ describe("the Running list", () => {
 
   it("shows the step a run is on and the ones still to come, not an older run's process in their place", () => {
     const going: HistoryEntry = {
-      ...entry("Work on shop", [{ kind: "compose", label: "postgres", value: "compose.yaml", ok: true, durationMs: 9000, bolt: "Services" }], "2026-11-18T12:00:00Z"),
+      ...entry("Work on shop", [{ kind: "compose", label: "postgres", value: "compose.yaml", ok: true, durationMs: 9000, pipeline: "Services" }], "2026-11-18T12:00:00Z"),
       ok: false,
       running: true,
       total: 3,
       pending: [
-        { kind: "command", label: "build", value: "pnpm build", ok: false, durationMs: 0, bolt: "Build", running: true, log: "/logs/2.log" },
+        { kind: "command", label: "build", value: "pnpm build", ok: false, durationMs: 0, pipeline: "Build", running: true, log: "/logs/2.log" },
         { kind: "command", label: "web", value: "pnpm dev", ok: false, durationMs: 0 },
       ],
     };
@@ -110,12 +110,12 @@ describe("the Running list", () => {
     const upRun = entry(
       "Up",
       [
-        { kind: "compose", label: "postgres", value: "compose.yaml", ok: true, durationMs: 9000, bolt: "Services" },
-        { kind: "command", label: "web", value: "pnpm dev", ok: true, durationMs: 1500, bolt: "Web" },
+        { kind: "compose", label: "postgres", value: "compose.yaml", ok: true, durationMs: 9000, pipeline: "Services" },
+        { kind: "command", label: "web", value: "pnpm dev", ok: true, durationMs: 1500, pipeline: "Web" },
       ],
       "2026-11-18T10:00:00Z",
     );
-    const items = groupPanes([], [{ ...web, bolt: "Web" }], [postgres], [withUp], [upRun]);
+    const items = groupPanes([], [{ ...web, pipeline: "Web" }], [postgres], [withUp], [upRun]);
     expect(titles(items)).toEqual(["group Up", " step Services", "  container postgres", " step Web", "  run web"]);
   });
 

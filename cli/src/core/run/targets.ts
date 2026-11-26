@@ -26,50 +26,50 @@ export function composeTarget(step: { file: string; services?: string[] }, actio
   };
 }
 
-/** Every compose file a workspace's bolts start — what the TUI watches containers for. */
+/** Every compose file a workspace's pipelines start — what the TUI watches containers for. */
 export function composeFiles(workspace: Workspace): string[] {
   if (!workspace.trusted) return [];
-  return [...new Set(workspace.bolts.flatMap((bolt) => bolt.steps.flatMap((step) => (step.kind === "compose" ? [step.file] : []))))];
+  return [...new Set(workspace.pipelines.flatMap((pipeline) => pipeline.steps.flatMap((step) => (step.kind === "compose" ? [step.file] : []))))];
 }
 
 /**
- * A bolt named by any distinctive part of its label.
+ * A pipeline named by any distinctive part of its label.
  *
  * Pipeline labels are written to be read ("API development"), which makes them the worst
  * thing to type. One rule: an exact id or label wins, and otherwise the needle has to
- * be whole words of exactly one label. Not a prefix rule — bolts are named after jobs and jobs
+ * be whole words of exactly one label. Not a prefix rule — pipelines are named after jobs and jobs
  * cluster ("Work on core", "Work on the app"), so the distinguishing word is at the end.
  */
-export function matchPipeline(workspace: Workspace, ref: string): { bolt?: Pipeline; candidates: Pipeline[] } {
+export function matchPipeline(workspace: Workspace, ref: string): { pipeline?: Pipeline; candidates: Pipeline[] } {
   const needle = ref.trim().toLowerCase();
   if (!needle) return { candidates: [] };
 
-  const bolts = workspace.bolts;
+  const pipelines = workspace.pipelines;
 
   const exact =
-    bolts.find((bolt) => bolt.id.toLowerCase() === needle) ??
-    bolts.find((bolt) => bolt.label.toLowerCase() === needle);
-  if (exact) return { bolt: exact, candidates: [exact] };
+    pipelines.find((pipeline) => pipeline.id.toLowerCase() === needle) ??
+    pipelines.find((pipeline) => pipeline.label.toLowerCase() === needle);
+  if (exact) return { pipeline: exact, candidates: [exact] };
 
   // A slug is the label with its spaces punched out — the form a shell history hands back.
-  const bySlug = bolts.filter((bolt) => pipelineSlug(bolt) === slugify(needle) || slugify(bolt.label) === slugify(needle));
-  if (bySlug.length === 1) return { bolt: bySlug[0] as Pipeline, candidates: bySlug };
+  const bySlug = pipelines.filter((pipeline) => pipelineSlug(pipeline) === slugify(needle) || slugify(pipeline.label) === slugify(needle));
+  if (bySlug.length === 1) return { pipeline: bySlug[0] as Pipeline, candidates: bySlug };
   if (bySlug.length > 1) return { candidates: bySlug };
 
-  const matches = bolts.filter((bolt) => hasWords(bolt.label, needle));
-  if (matches.length === 1) return { bolt: matches[0] as Pipeline, candidates: matches };
+  const matches = pipelines.filter((pipeline) => hasWords(pipeline.label, needle));
+  if (matches.length === 1) return { pipeline: matches[0] as Pipeline, candidates: matches };
 
   return { candidates: matches };
 }
 
 export function findPipeline(workspace: Workspace, ref: string): Pipeline | undefined {
-  return matchPipeline(workspace, ref).bolt;
+  return matchPipeline(workspace, ref).pipeline;
 }
 
 /** Like {@link findPipeline}, but says what went wrong. */
 export function resolvePipeline(workspace: Workspace, ref: string): Pipeline {
-  const { bolt, candidates } = matchPipeline(workspace, ref);
-  if (bolt) return bolt;
+  const { pipeline, candidates } = matchPipeline(workspace, ref);
+  if (pipeline) return pipeline;
 
   if (candidates.length > 1) {
     throw new WispError(
@@ -79,26 +79,26 @@ export function resolvePipeline(workspace: Workspace, ref: string): Pipeline {
     );
   }
 
-  if (workspace.bolts.length === 0) throw new WispError(`${workspace.name} has no pipelines yet`, "NOT_FOUND");
+  if (workspace.pipelines.length === 0) throw new WispError(`${workspace.name} has no pipelines yet`, "NOT_FOUND");
 
-  const close = closePipelines(workspace.bolts, ref);
+  const close = closePipelines(workspace.pipelines, ref);
   throw new WispError(
     close.length > 0
       ? `${workspace.name} has no pipeline called "${ref}". Did you mean ${close.map((match) => `"${match.label}"`).join(", ")}?`
-      : `${workspace.name} has no pipeline called "${ref}" — it has ${workspace.bolts.map((match) => match.label).join(", ")}`,
+      : `${workspace.name} has no pipeline called "${ref}" — it has ${workspace.pipelines.map((match) => match.label).join(", ")}`,
     "NOT_FOUND",
     close.length > 0 ? "" : undefined,
   );
 }
 
-/** The steps a bolt lists, without its needs — for showing a bolt rather than running it. */
-export function collectPipelineTargets(workspace: Workspace, bolt: Pipeline): SwitchTarget[] {
-  return listSteps(workspace, bolt.steps);
+/** The steps a pipeline lists, without its needs — for showing a pipeline rather than running it. */
+export function collectPipelineTargets(workspace: Workspace, pipeline: Pipeline): SwitchTarget[] {
+  return listSteps(workspace, pipeline.steps);
 }
 
-/** The same, for a bolt's `down` steps. */
-export function collectDownTargets(workspace: Workspace, bolt: Pipeline): SwitchTarget[] {
-  return listSteps(workspace, bolt.down ?? []);
+/** The same, for a pipeline's `down` steps. */
+export function collectDownTargets(workspace: Workspace, pipeline: Pipeline): SwitchTarget[] {
+  return listSteps(workspace, pipeline.down ?? []);
 }
 
 function listSteps(workspace: Workspace, steps: PipelineStep[]): SwitchTarget[] {
@@ -120,7 +120,7 @@ function listStep(step: PipelineStep, byId: Map<string, SwitchTarget>, workspace
       return [{ kind: "wait", id: "wait", label: describeWait(step.wait), value: describeWait(step.wait), wait: step.wait }];
     }
     if (step.kind === "pipeline") {
-      return [{ kind: "pipeline", id: `pipeline:${step.bolt.toLowerCase()}`, label: step.bolt, value: step.bolt }];
+      return [{ kind: "pipeline", id: `pipeline:${step.pipeline.toLowerCase()}`, label: step.pipeline, value: step.pipeline }];
     }
     if (step.kind === "compose") return workspace.trusted ? [composeTarget(step, "up")] : [];
     const target = byId.get(step.id);
@@ -128,7 +128,7 @@ function listStep(step: PipelineStep, byId: Map<string, SwitchTarget>, workspace
   });
 }
 
-/** Every step's target a workspace holds, by kind: what a bolt's steps are looked up in. */
+/** Every step's target a workspace holds, by kind: what a pipeline's steps are looked up in. */
 export function collectTargets(workspace: Workspace): SwitchTarget[] {
   const targets: SwitchTarget[] = [];
 

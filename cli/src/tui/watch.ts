@@ -33,7 +33,7 @@ export function useRuns(services: Services, viewKind: string, notify: Notify, ex
             notify(`${run.label} started (${run.workspaceName})`, "good");
           }
           // Once per question: a command that went quiet asking something can't be answered
-          // in the background, so say so, and how to fix the bolt.
+          // in the background, so say so, and how to fix the pipeline.
           if (run.alive && run.waiting && !askedAbout.current.has(run.id)) {
             askedAbout.current.add(run.id);
             notify(`${run.label} is waiting for an answer: "${run.waiting}". Give it a flag like --yes, or run commands in a terminal window (s)`, "bad");

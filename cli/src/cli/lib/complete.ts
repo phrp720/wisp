@@ -37,7 +37,7 @@ export const SHELLS = ["zsh", "bash", "fish"];
 
 /**
  * The suggestions for the last of `words`, the one being typed. `words` are what follows
- * `wisp` on the line, so `["payments-service", "se"]` asks for that workspace's bolts.
+ * `wisp` on the line, so `["payments-service", "se"]` asks for that workspace's pipelines.
  *
  * Pipelines and workspaces are offered as slugs ("work-on-api"), which need no quoting and
  * which Wisp matches like their names.
@@ -51,9 +51,9 @@ export async function complete(words: string[], sources: CompletionSources = SOU
   if (current.startsWith("-")) return keep(optionsOf(command ?? findCommand("use")), current);
 
   const candidates = await (async (): Promise<Candidate[]> => {
-    if (!first) return [...commands(), ...(await herebolts(sources)), ...(await workspaceSlugs(sources))];
+    if (!first) return [...commands(), ...(await herepipelines(sources)), ...(await workspaceSlugs(sources))];
 
-    // `wisp <name> …`: a bolt here takes nothing more; a workspace takes one of its bolts.
+    // `wisp <name> …`: a pipeline here takes nothing more; a workspace takes one of its pipelines.
     if (!command) return before.length === 1 ? await pipelinesOfNamed(first, sources) : [];
 
     const position = before.length;
@@ -61,7 +61,7 @@ export async function complete(words: string[], sources: CompletionSources = SOU
       case "use":
       case "down":
       case "restart":
-        if (position === 1) return [...(await herebolts(sources)), ...(await workspaceSlugs(sources))];
+        if (position === 1) return [...(await herepipelines(sources)), ...(await workspaceSlugs(sources))];
         if (position === 2) return pipelinesOf(await workspaceNamed(before[1] as string, sources));
         return [];
       case "show":
@@ -73,7 +73,7 @@ export async function complete(words: string[], sources: CompletionSources = SOU
         return (await sources.running()).map((run) => ({ value: run.label, description: `running · ${run.workspaceName}` }));
       case "hook":
         if (position === 1) return HOOKS.map((hook) => ({ value: hook, description: "git hook" }));
-        return position === 2 ? herebolts(sources) : [];
+        return position === 2 ? herepipelines(sources) : [];
       case "open-with":
         if (position === 1) {
           return [
@@ -121,14 +121,14 @@ function optionsOf(command: { options: [string, string][] } | undefined): Candid
   return [...flags, { value: "--help", description: "help for this command" }];
 }
 
-async function herebolts(sources: CompletionSources): Promise<Candidate[]> {
+async function herepipelines(sources: CompletionSources): Promise<Candidate[]> {
   const here = await sources.here();
   return here ? pipelinesOf(here.workspace) : [];
 }
 
 function pipelinesOf(workspace: Workspace | undefined): Candidate[] {
   if (!workspace) return [];
-  return workspace.bolts.map((bolt) => ({ value: pipelineSlug(bolt), description: ["pipeline", bolt.label, bolt.notes].filter(Boolean).join(" · ") }));
+  return workspace.pipelines.map((pipeline) => ({ value: pipelineSlug(pipeline), description: ["pipeline", pipeline.label, pipeline.notes].filter(Boolean).join(" · ") }));
 }
 
 async function workspaceSlugs(sources: CompletionSources): Promise<Candidate[]> {
@@ -145,10 +145,10 @@ async function workspaceNamed(name: string, sources: CompletionSources): Promise
   return matchWorkspace(name, await sources.workspaces()).match?.workspace;
 }
 
-/** After `wisp <name>`: nothing when it is a bolt here, that workspace's bolts when it is one. */
+/** After `wisp <name>`: nothing when it is a pipeline here, that workspace's pipelines when it is one. */
 async function pipelinesOfNamed(name: string, sources: CompletionSources): Promise<Candidate[]> {
   const here = await sources.here();
-  if (here && matchPipeline(here.workspace, name).bolt) return [];
+  if (here && matchPipeline(here.workspace, name).pipeline) return [];
   return pipelinesOf(await workspaceNamed(name, sources));
 }
 

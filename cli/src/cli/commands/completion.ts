@@ -10,7 +10,7 @@ import type { CommandDef } from "../lib/define.js";
 
 /**
  * Tab completion. Each script is a thin shim: on ⇥ it asks `wisp __complete` what fits,
- * so the suggestions are your workspaces, bolts and running commands as they are now.
+ * so the suggestions are your workspaces, pipelines and running commands as they are now.
  */
 const SCRIPTS: Record<string, string> = {
   zsh: `# Wisp's tab completion for zsh. \`wisp completion --install\` sets it up.

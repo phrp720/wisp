@@ -6,7 +6,7 @@ import { unicode, read, acme, infra, services, tick, eventually, ARROW_DOWN, ARR
 
 describe("doing everything without JSON", () => {
   it("offers to set up a folder that has no file yet, and asks about trust right after", async () => {
-    const suggestion = { dir: "/dev/shop", name: "Shop", found: ["package.json pnpm dev", "compose.yaml (postgres)"], bolts: [{ label: "Work on Shop", steps: ["start Docker services: postgres", "start Shop dev"] }], contents: "{}" };
+    const suggestion = { dir: "/dev/shop", name: "Shop", found: ["package.json pnpm dev", "compose.yaml (postgres)"], pipelines: [{ label: "Work on Shop", steps: ["start Docker services: postgres", "start Shop dev"] }], contents: "{}" };
     const setUp = vi.fn(async () => infra.workspace.file);
     const app = await open(services({ suggestSetup: async () => suggestion, setUp }, { reads: [infra], unreadable: [] }));
     await tick();
@@ -64,8 +64,8 @@ describe("doing everything without JSON", () => {
   it("adds a pipeline as a step, picked from this workspace's own, with what it depends on", async () => {
     const addStep = vi.fn(async () => undefined);
     const setAfter = vi.fn(async () => undefined);
-    const bolt = async (_file: string, label: string) => ({ label, steps: [{ folder: "apps/api" }] });
-    const app = await open(services({ editing: { ...services().editing, bolt, addStep, setAfter } }));
+    const pipeline = async (_file: string, label: string) => ({ label, steps: [{ folder: "apps/api" }] });
+    const app = await open(services({ editing: { ...services().editing, pipeline, addStep, setAfter } }));
     app.stdin.write("e");
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ .*1 .*apps\/api/));
     await tick();
@@ -85,8 +85,8 @@ describe("doing everything without JSON", () => {
 
   it("ticks every step at once from the all row, and none again", async () => {
     const setAfter = vi.fn(async () => undefined);
-    const bolt = async (_file: string, label: string) => ({ label, steps: [{ folder: "apps/api" }, { run: "pnpm lint", label: "lint" }, { run: "pnpm build" }] });
-    const app = await open(services({ editing: { ...services().editing, bolt, setAfter } }));
+    const pipeline = async (_file: string, label: string) => ({ label, steps: [{ folder: "apps/api" }, { run: "pnpm lint", label: "lint" }, { run: "pnpm build" }] });
+    const app = await open(services({ editing: { ...services().editing, pipeline, setAfter } }));
     app.stdin.write("e");
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ .*1 .*apps\/api/));
     await tick();
@@ -128,8 +128,8 @@ describe("doing everything without JSON", () => {
     const setPipelineNotes = vi.fn(async () => undefined);
     const renamePipeline = vi.fn(async () => undefined);
     const noted = read("/dev/acme/.wisp.json", { name: "Acme", pipelines: [{ label: "Work on api", notes: "The API and its database", steps: [{ folder: "apps/api" }] }] });
-    const bolt = async () => ({ label: "Work on api", notes: "The API and its database", steps: [] });
-    const app = await open(services({ editing: { ...services().editing, bolt, setPipelineNotes, renamePipeline } }, { reads: [noted], here: noted.workspace.file, unreadable: [] }));
+    const pipeline = async () => ({ label: "Work on api", notes: "The API and its database", steps: [] });
+    const app = await open(services({ editing: { ...services().editing, pipeline, setPipelineNotes, renamePipeline } }, { reads: [noted], here: noted.workspace.file, unreadable: [] }));
     await eventually(() => expect(app.lastFrame()).toContain("The API and its database"));
     await tick();
     app.stdin.write("e");
@@ -153,8 +153,8 @@ describe("doing everything without JSON", () => {
     const renamePipeline = vi.fn(async () => undefined);
     const setKeepGoing = vi.fn(async () => undefined);
     const setSlug = vi.fn(async () => undefined);
-    const bolt = async (_file: string, label: string) => ({ label, steps: [{ folder: "apps/api" }, { run: "pnpm dev" }] });
-    const app = await open(services({ editing: { ...services().editing, bolt, renamePipeline, setKeepGoing, setSlug } }));
+    const pipeline = async (_file: string, label: string) => ({ label, steps: [{ folder: "apps/api" }, { run: "pnpm dev" }] });
+    const app = await open(services({ editing: { ...services().editing, pipeline, renamePipeline, setKeepGoing, setSlug } }));
     app.stdin.write("e");
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ .*1 .*apps\/api/));
     await tick();
@@ -204,7 +204,7 @@ describe("doing everything without JSON", () => {
 
   it("shows what each step waits for, and sets it from the step's form, more than one if need be", async () => {
     const setAfter = vi.fn(async () => undefined);
-    const bolt = async (_file: string, label: string) => ({
+    const pipeline = async (_file: string, label: string) => ({
       label,
       steps: [
         { run: "pnpm install", label: "install", finishes: true },
@@ -212,7 +212,7 @@ describe("doing everything without JSON", () => {
         { run: "pnpm test", after: ["install"], finishes: true },
       ],
     });
-    const app = render(<App services={services({ editing: { ...services().editing, bolt, setAfter } })} glyphs={unicode} size={{ columns: 150, rows: 30 }} />);
+    const app = render(<App services={services({ editing: { ...services().editing, pipeline, setAfter } })} glyphs={unicode} size={{ columns: 150, rows: 30 }} />);
     await eventually(() => expect(app.lastFrame() ?? "").toContain("Work on api"));
     await tick();
     app.stdin.write("e");
@@ -244,8 +244,8 @@ describe("doing everything without JSON", () => {
   it("adds an input from its row, and removes one after asking", async () => {
     const setInput = vi.fn(async () => undefined);
     const removeInput = vi.fn(async () => undefined);
-    const bolt = async (_file: string, label: string) => ({ label, inputs: { tag: { ask: "Which tag?" } }, steps: [{ run: "./deploy.sh {{tag}}", finishes: true }] });
-    const app = await open(services({ editing: { ...services().editing, bolt, setInput, removeInput } }));
+    const pipeline = async (_file: string, label: string) => ({ label, inputs: { tag: { ask: "Which tag?" } }, steps: [{ run: "./deploy.sh {{tag}}", finishes: true }] });
+    const app = await open(services({ editing: { ...services().editing, pipeline, setInput, removeInput } }));
     app.stdin.write("e");
     await eventually(() => expect(app.lastFrame()).toMatch(/│ Inputs .*\n│ +tag  Which tag\?/));
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ .*1 .*deploy\.sh/));
@@ -286,8 +286,8 @@ describe("doing everything without JSON", () => {
 
   it("sets the question a pipeline asks before it runs, from the row above its steps", async () => {
     const setConfirm = vi.fn(async () => undefined);
-    const bolt = async (_file: string, label: string) => ({ label, steps: [{ run: "./deploy.sh", finishes: true }] });
-    const app = await open(services({ editing: { ...services().editing, bolt, setConfirm } }));
+    const pipeline = async (_file: string, label: string) => ({ label, steps: [{ run: "./deploy.sh", finishes: true }] });
+    const app = await open(services({ editing: { ...services().editing, pipeline, setConfirm } }));
     app.stdin.write("e");
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ .*1 .*deploy\.sh/));
     await tick();
@@ -317,8 +317,8 @@ describe("doing everything without JSON", () => {
   it("asks the standard question when yes has no question of its own, and turns it off with no", async () => {
     const setConfirm = vi.fn(async () => undefined);
     let confirm: string | boolean | undefined;
-    const bolt = async (_file: string, label: string) => ({ label, ...(confirm === undefined ? {} : { confirm }), steps: [{ run: "./deploy.sh", finishes: true }] });
-    const app = await open(services({ editing: { ...services().editing, bolt, setConfirm } }));
+    const pipeline = async (_file: string, label: string) => ({ label, ...(confirm === undefined ? {} : { confirm }), steps: [{ run: "./deploy.sh", finishes: true }] });
+    const app = await open(services({ editing: { ...services().editing, pipeline, setConfirm } }));
     app.stdin.write("e");
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ .*1 .*deploy\.sh/));
     await tick();
@@ -349,8 +349,8 @@ describe("doing everything without JSON", () => {
   });
 
   it("edits on one screen at a time on a narrow terminal, and esc goes back to the list", async () => {
-    const bolt = async (_file: string, label: string) => ({ label, steps: [{ folder: "apps/api" }, { run: "pnpm dev" }] });
-    const app = render(<App services={services({ editing: { ...services().editing, bolt } })} glyphs={unicode} size={{ columns: 80, rows: 24 }} />);
+    const pipeline = async (_file: string, label: string) => ({ label, steps: [{ folder: "apps/api" }, { run: "pnpm dev" }] });
+    const app = render(<App services={services({ editing: { ...services().editing, pipeline } })} glyphs={unicode} size={{ columns: 80, rows: 24 }} />);
     await tick();
     await eventually(() => expect(app.lastFrame() ?? "").not.toContain("reading your workspaces"));
     await tick();
@@ -394,7 +394,7 @@ describe("doing everything without JSON", () => {
     await eventually(() => expect(app.lastFrame()).toContain("A new pipeline in Acme"));
     for (const char of "Run the tests") app.stdin.write(char);
     app.stdin.write("\r"); // to the button
-    app.stdin.write("\r"); // Create bolt
+    app.stdin.write("\r"); // Create pipeline
     await tick();
     await tick();
     await eventually(() => expect(addPipeline).toHaveBeenCalledWith(acme.workspace.file, "Run the tests"));
@@ -432,7 +432,7 @@ describe("doing everything without JSON", () => {
     await tick();
     await eventually(() => {
       const frame = app2.lastFrame() ?? "";
-      // Under the bolt whose compose step starts it, in its workspace.
+      // Under the pipeline whose compose step starts it, in its workspace.
       expect(frame).toMatch(/SHOP[\s\S]*Services[\s\S]*● postgres +healthy/);
       expect(frame).toContain("on localhost:5432");
       expect(frame).toContain("ready to accept connections");
@@ -441,10 +441,10 @@ describe("doing everything without JSON", () => {
 
   it("groups what runs under the pipeline that started it, and finds things with /", async () => {
     const server = { kind: "background", workspace: acme.workspace.file, workspaceName: "Acme", asset: "command:x", pid: 1, startedAt: new Date().toISOString(), alive: true, log: "/l" };
-    const api = { ...server, id: "a1", label: "api", command: "pnpm api", bolt: "Work on web", historyId: "h3" };
-    const web = { ...server, id: "w1", label: "web", command: "pnpm web", bolt: "Work on web", historyId: "h5" };
+    const api = { ...server, id: "a1", label: "api", command: "pnpm api", pipeline: "Work on web", historyId: "h3" };
+    const web = { ...server, id: "w1", label: "web", command: "pnpm web", pipeline: "Work on web", historyId: "h5" };
     const lone = { ...server, id: "l1", label: "notes", command: "mdbook serve" };
-    const past = (id: string, number: number) => ({ id, number, workspace: acme.workspace.file, workspaceName: "Acme", bolt: "Work on web", ok: true, startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), steps: [] });
+    const past = (id: string, number: number) => ({ id, number, workspace: acme.workspace.file, workspaceName: "Acme", pipeline: "Work on web", ok: true, startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), steps: [] });
     const app = await open(services({ runs: async () => [api, web, lone] as never, tail: async () => "", history: async () => [past("h5", 5), past("h3", 3)] as never }));
     await tick();
     app.stdin.write("p");

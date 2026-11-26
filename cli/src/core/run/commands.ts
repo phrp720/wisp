@@ -99,7 +99,7 @@ export async function runCommand(step: PlannedStep, index: number, context: Cont
   const { target, workspace } = step;
   const route = routeFor(target, context);
 
-  // Check, then start, as one step: two runs of the same bolt at once (two terminals, a
+  // Check, then start, as one step: two runs of the same pipeline at once (two terminals, a
   // double ⏎) would otherwise both see nothing running and both start the server. The
   // second waits for the first, then finds it up. Other commands never wait on this one.
   if (route.kind !== "inline" && !context.starting) {
@@ -129,7 +129,7 @@ export async function runCommand(step: PlannedStep, index: number, context: Cont
     workspace: workspace.file,
     workspaceName: workspace.name,
     asset: target.id,
-    bolt: step.bolt,
+    pipeline: step.pipeline,
     ...(context.historyId ? { historyId: context.historyId } : {}),
   };
 

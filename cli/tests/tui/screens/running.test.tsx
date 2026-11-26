@@ -40,7 +40,7 @@ describe("commands that finish, down and history in the TUI", () => {
     let finish: () => void = () => undefined;
     const app = await open(
       services({
-        run: async (target, _bolt, callbacks) => {
+        run: async (target, _pipeline, callbacks) => {
           const step = { kind: "command" as const, id: "command:test", label: "test", value: "pnpm test" };
           callbacks.onPlan([step]);
           callbacks.onStep(step, { attached: true });
@@ -66,7 +66,7 @@ describe("commands that finish, down and history in the TUI", () => {
     let finish: () => void = () => undefined;
     const app = await open(
       services({
-        run: async (target, _bolt, callbacks) => {
+        run: async (target, _pipeline, callbacks) => {
           const step = (label: string) => ({ kind: "command" as const, id: `command:${label}`, label, value: label });
           const [up, session, ready, open] = [step("up"), step("session"), step("ready"), step("open")];
           callbacks.onPlan([up, session, ready, open], [[], [0], [0], [2]]);
@@ -111,7 +111,7 @@ describe("commands that finish, down and history in the TUI", () => {
     app.stdin.write("\r");
     await tick();
     await tick();
-    await eventually(() => expect(down).toHaveBeenCalledWith(shop, shop.workspace.bolts[0], { deps: true }));
+    await eventually(() => expect(down).toHaveBeenCalledWith(shop, shop.workspace.pipelines[0], { deps: true }));
   });
 
   it("takes the selected pipeline down with x", async () => {
@@ -119,7 +119,7 @@ describe("commands that finish, down and history in the TUI", () => {
     const app = await open(services({ down }));
     app.stdin.write("x");
     await tick();
-    await eventually(() => expect(down).toHaveBeenCalledWith(acme, acme.workspace.bolts[0], { deps: false }));
+    await eventually(() => expect(down).toHaveBeenCalledWith(acme, acme.workspace.pipelines[0], { deps: false }));
     await eventually(() => expect(app.lastFrame()).toContain("Work on api: stopped 1"));
   });
 
@@ -131,7 +131,7 @@ describe("commands that finish, down and history in the TUI", () => {
   });
 
   it("lines up what follows each run's number, whatever its width", async () => {
-    const run = (number: number, ok: boolean) => ({ id: `r${number}`, number, workspace: acme.workspace.file, workspaceName: "Acme", bolt: "Check", git: { branch: "main", commit: "a1b2c3d", subject: "fix cart total" }, startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), ok, steps: ok ? [] : [{ kind: "command" as const, label: "test", value: "pnpm test", ok: false, durationMs: 1 }] });
+    const run = (number: number, ok: boolean) => ({ id: `r${number}`, number, workspace: acme.workspace.file, workspaceName: "Acme", pipeline: "Check", git: { branch: "main", commit: "a1b2c3d", subject: "fix cart total" }, startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), ok, steps: ok ? [] : [{ kind: "command" as const, label: "test", value: "pnpm test", ok: false, durationMs: 1 }] });
     const app = render(<App services={services({ history: async () => [run(12, true), run(9, true), run(1, false)] })} glyphs={unicode} size={{ columns: 130, rows: 30 }} />);
     await tick();
     app.stdin.write("h");
@@ -147,7 +147,7 @@ describe("commands that finish, down and history in the TUI", () => {
   });
 
   it("says in the list where a run came from only when it wasn't you", async () => {
-    const entry = { id: "aa", number: 3, workspace: acme.workspace.file, workspaceName: "Acme", bolt: "Check", trigger: "tui", git: { branch: "main", commit: "a1b2c3d", subject: "fix cart total" }, startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), ok: true, steps: [] };
+    const entry = { id: "aa", number: 3, workspace: acme.workspace.file, workspaceName: "Acme", pipeline: "Check", trigger: "tui", git: { branch: "main", commit: "a1b2c3d", subject: "fix cart total" }, startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), ok: true, steps: [] };
     const app = render(<App services={services({ history: async () => [entry] })} glyphs={unicode} size={{ columns: 130, rows: 30 }} />);
     await tick();
     app.stdin.write("h");
@@ -162,7 +162,7 @@ describe("commands that finish, down and history in the TUI", () => {
       number: 7,
       workspace: acme.workspace.file,
       workspaceName: "Acme",
-      bolt: "Check",
+      pipeline: "Check",
       trigger: "hook",
       inputs: { env: "staging" },
       git: { branch: "main", commit: "a1b2c3d", subject: "fix cart total" },
@@ -170,7 +170,7 @@ describe("commands that finish, down and history in the TUI", () => {
       finishedAt: new Date(Date.now() - 597_000).toISOString(),
       ok: false,
       steps: [
-        { kind: "command" as const, label: "postgres", value: "docker compose up", ok: true, durationMs: 1200, bolt: "Database" },
+        { kind: "command" as const, label: "postgres", value: "docker compose up", ok: true, durationMs: 1200, pipeline: "Database" },
         { kind: "command" as const, label: "lint", value: "pnpm lint", ok: true, durationMs: 900, log: "/logs/1", finishes: true },
         { kind: "command" as const, label: "test", value: "pnpm test", ok: false, error: "exited with code 1", durationMs: 2100, log: "/logs/2", finishes: true },
         { kind: "command" as const, label: "build", value: "pnpm build", ok: false, skipped: true, note: 'not reached — "test" failed', durationMs: 0 },
@@ -216,7 +216,7 @@ describe("commands that finish, down and history in the TUI", () => {
     await eventually(() => expect(readLog).toHaveBeenCalledWith("/logs/2"));
     await eventually(() => expect(app.lastFrame()).toMatch(/2 FAIL divides by zero/));
 
-    // The tab keys work here too: 3 is the list of runs again, 1 the bolts.
+    // The tab keys work here too: 3 is the list of runs again, 1 the pipelines.
     app.stdin.write("3");
     await eventually(() => expect(app.lastFrame()).not.toContain("Triggered"));
     await eventually(() => expect(app.lastFrame()).toContain("Check #7"));
@@ -232,7 +232,7 @@ describe("commands that finish, down and history in the TUI", () => {
 
   it("hides and shows a run's graph with v", async () => {
     const step = (label: string, stage: number) => ({ kind: "command" as const, label, value: label, ok: true, durationMs: 500, finishes: true, stage });
-    const entry: HistoryEntry = { id: "5a6b7c8d9e0f", number: 2, workspace: acme.workspace.file, workspaceName: "Acme", bolt: "Check", startedAt: new Date(Date.now() - 60_000).toISOString(), finishedAt: new Date().toISOString(), ok: true, steps: [step("install", 1), step("lint", 2), step("test", 2), step("build", 3)] };
+    const entry: HistoryEntry = { id: "5a6b7c8d9e0f", number: 2, workspace: acme.workspace.file, workspaceName: "Acme", pipeline: "Check", startedAt: new Date(Date.now() - 60_000).toISOString(), finishedAt: new Date().toISOString(), ok: true, steps: [step("install", 1), step("lint", 2), step("test", 2), step("build", 3)] };
     const app = render(<App services={services({ history: async () => [entry] })} glyphs={unicode} size={{ columns: 130, rows: 34 }} />);
     await tick();
     app.stdin.write("h");
@@ -256,7 +256,7 @@ describe("commands that finish, down and history in the TUI", () => {
       number: 4,
       workspace: acme.workspace.file,
       workspaceName: "Acme",
-      bolt: "Deploy",
+      pipeline: "Deploy",
       startedAt: new Date(Date.now() - 60_000).toISOString(),
       finishedAt: new Date().toISOString(),
       ok: false,
@@ -280,7 +280,7 @@ describe("commands that finish, down and history in the TUI", () => {
   });
 
   it("says on a run's page where its notification went, and that it didn't arrive", async () => {
-    const entry: HistoryEntry = { id: "4e5f6a7b8c9d", number: 3, workspace: acme.workspace.file, workspaceName: "Acme", bolt: "Backup", startedAt: new Date(Date.now() - 60_000).toISOString(), finishedAt: new Date().toISOString(), ok: false, steps: [{ kind: "command", label: "dump", value: "pg_dump", ok: false, error: "exited with code 1", durationMs: 500 }], notified: [{ url: "https://hooks.slack.com/services/…x7Qa", ok: true }, { url: "https://discord.com/api/…Zk3p", ok: false, problem: "404 Not Found" }] };
+    const entry: HistoryEntry = { id: "4e5f6a7b8c9d", number: 3, workspace: acme.workspace.file, workspaceName: "Acme", pipeline: "Backup", startedAt: new Date(Date.now() - 60_000).toISOString(), finishedAt: new Date().toISOString(), ok: false, steps: [{ kind: "command", label: "dump", value: "pg_dump", ok: false, error: "exited with code 1", durationMs: 500 }], notified: [{ url: "https://hooks.slack.com/services/…x7Qa", ok: true }, { url: "https://discord.com/api/…Zk3p", ok: false, problem: "404 Not Found" }] };
     const app = render(<App services={services({ history: async () => [entry] })} glyphs={unicode} size={{ columns: 130, rows: 30 }} />);
     await tick();
     app.stdin.write("h");
@@ -310,7 +310,7 @@ describe("commands that finish, down and history in the TUI", () => {
   });
 
   it("retries the failed part of a past run from history", async () => {
-    const entry = { id: "aa", workspace: acme.workspace.file, workspaceName: "Acme", bolt: "Work on api", startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), ok: false, steps: [], inputs: { env: "staging" } };
+    const entry = { id: "aa", workspace: acme.workspace.file, workspaceName: "Acme", pipeline: "Work on api", startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), ok: false, steps: [], inputs: { env: "staging" } };
     const planRetry = vi.fn(async () => []);
     const retry = vi.fn(async (read: WorkspaceRead) => ({ workspace: read.workspace, targets: [], dryRun: false, ok: true }) as SwitchResult);
     const app = await open(services({ history: async () => [entry], planRetry: planRetry as never, retry: retry as never }));
@@ -403,7 +403,7 @@ describe("panes", () => {
     app.stdin.write("j");
     await tick();
     await eventually(() => expect(app.lastFrame()).not.toMatch(/web line 1\s+│/));
-    // → goes to the next command, past the bolt rows, back at its newest line.
+    // → goes to the next command, past the pipeline rows, back at its newest line.
     app.stdin.write("\u001B[C");
     await tick();
     await tick();
@@ -498,7 +498,7 @@ describe("filtering logs", () => {
 
   it("filters every step's log of a past run, and says where the matches are", async () => {
     const entry = {
-      id: "c7", number: 7, workspace: acme.workspace.file, workspaceName: "Acme", bolt: "Check", ok: false,
+      id: "c7", number: 7, workspace: acme.workspace.file, workspaceName: "Acme", pipeline: "Check", ok: false,
       startedAt: new Date(Date.now() - 600_000).toISOString(), finishedAt: new Date(Date.now() - 597_000).toISOString(),
       steps: [
         { kind: "command" as const, label: "lint", value: "pnpm lint", ok: true, durationMs: 900, log: "/logs/1", finishes: true },
@@ -546,14 +546,14 @@ describe("filtering logs", () => {
 
 describe("a run in progress", () => {
   const plan = [
-    { target: { kind: "command" as const, id: "command:lint", label: "lint", value: "pnpm lint", finishes: true }, workspace: acme.workspace, keepGoing: false, bolt: "Work on api" },
-    { target: { kind: "command" as const, id: "command:test", label: "test", value: "pnpm test", finishes: true }, workspace: acme.workspace, keepGoing: false, bolt: "Work on api" },
+    { target: { kind: "command" as const, id: "command:lint", label: "lint", value: "pnpm lint", finishes: true }, workspace: acme.workspace, keepGoing: false, pipeline: "Work on api" },
+    { target: { kind: "command" as const, id: "command:test", label: "test", value: "pnpm test", finishes: true }, workspace: acme.workspace, keepGoing: false, pipeline: "Work on api" },
   ];
 
   it("keeps its title in place, with the words that change after it, a star before them", async () => {
     const app = await open(
       services({
-        run: async (target, _bolt, callbacks) => {
+        run: async (target, _pipeline, callbacks) => {
           callbacks.onPlan([plan[0]!.target]);
           callbacks.onStep(plan[0]!.target, { attached: true });
           await new Promise<void>((resolve) => callbacks.signal?.addEventListener("abort", () => resolve()));
@@ -573,7 +573,7 @@ describe("a run in progress", () => {
     let signal: AbortSignal | undefined;
     const app = await open(
       services({
-        run: async (target, _bolt, callbacks) => {
+        run: async (target, _pipeline, callbacks) => {
           signal = callbacks.signal;
           callbacks.onPlan([plan[0]!.target]);
           callbacks.onStep(plan[0]!.target, { attached: true });
@@ -596,7 +596,7 @@ describe("a run in progress", () => {
     const app = await open(
       services({
         retry: retry as never,
-        run: async (target, _bolt, callbacks) => {
+        run: async (target, _pipeline, callbacks) => {
           callbacks.onPlan(plan.map((step) => step.target));
           const targets = [{ ...plan[0]!.target, ok: true }, { ...plan[1]!.target, ok: false, error: "exited with code 1" }];
           for (const result of targets) callbacks.onResult(result);
@@ -616,7 +616,7 @@ describe("a run in progress", () => {
   it("is the first pane, with its live output", async () => {
     const app = await open(
       services({
-        run: async (target, _bolt, callbacks) => {
+        run: async (target, _pipeline, callbacks) => {
           callbacks.onPlan([plan[0]!.target]);
           callbacks.onStep(plan[0]!.target, { attached: true });
           callbacks.onOutput?.(plan[0]!.target, "Creating an optimized production build ...\n");

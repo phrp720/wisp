@@ -12,11 +12,11 @@ let dir: string;
 let file: string;
 let printed: string[];
 
-const run = (id: string, bolt: string, workspace: string, running = false): HistoryEntry => ({
+const run = (id: string, pipeline: string, workspace: string, running = false): HistoryEntry => ({
   id,
   workspace,
   workspaceName: "Shop",
-  bolt,
+  pipeline,
   startedAt: "2026-01-01T00:00:00.000Z",
   finishedAt: "2026-01-01T00:00:01.000Z",
   ok: true,

@@ -26,8 +26,8 @@ export interface HistoryStep {
   running?: boolean;
   /** What an attached command printed. Commands in windows keep their output there. */
   log?: string;
-  /** The bolt it belongs to, when a dependency brought it in — drawn as one group. */
-  bolt?: string;
+  /** The pipeline it belongs to, when a dependency brought it in — drawn as one group. */
+  pipeline?: string;
 }
 
 /** Where a run's notification went, the address without its secret, and whether it arrived. */
@@ -38,20 +38,20 @@ export interface Notified {
 }
 
 /**
- * A run of a bolt, kept so "did last night's build pass, and what did the tests print?"
+ * A run of a pipeline, kept so "did last night's build pass, and what did the tests print?"
  * has an answer. Every real run is kept — jobs most of all, since that is their point.
  */
 export interface HistoryEntry {
   id: string;
   workspace: string;
   workspaceName: string;
-  bolt: string;
+  pipeline: string;
   /** What started it: "tui", "cli", "hook", "retry" — the "triggered by" of a CI run. */
   trigger?: string;
   inputs?: Record<string, string>;
   /** The code it ran against, when the project is a git repository. */
   git?: { branch: string; commit: string; subject?: string };
-  /** Which run of this bolt it was, counting from one: "Check #7". */
+  /** Which run of this pipeline it was, counting from one: "Check #7". */
   number?: number;
   startedAt: string;
   finishedAt: string;
@@ -101,11 +101,11 @@ export async function noteNotified(id: string, notified: Notified[]): Promise<vo
 export async function recordHistory(entry: HistoryEntry): Promise<void> {
   await withLock(historyFile(), async () => {
     const entries = await loadHistory();
-    // Numbered per bolt, as a CI numbers a workflow's runs — kept with the run, so the
+    // Numbered per pipeline, as a CI numbers a workflow's runs — kept with the run, so the
     // number stays the same when older runs are cleared.
-    const label = baseLabel(entry.bolt);
+    const label = baseLabel(entry.pipeline);
     const same = entries.find((other) => other.id === entry.id);
-    const previous = entries.filter((other) => other.workspace === entry.workspace && baseLabel(other.bolt) === label && other.id !== entry.id);
+    const previous = entries.filter((other) => other.workspace === entry.workspace && baseLabel(other.pipeline) === label && other.id !== entry.id);
     const number = entry.number ?? same?.number ?? Math.max(previous.length, ...previous.map((other) => other.number ?? 0)) + 1;
     const { kept, dropped } = retained([{ ...entry, number }, ...entries.filter((other) => other.id !== entry.id)]);
     await Promise.all(dropped.map((old) => rm(join(stateDir(), "history", old.id), { recursive: true, force: true })));
@@ -118,7 +118,7 @@ export function retained(entries: HistoryEntry[]): { kept: HistoryEntry[]; dropp
   const kept: HistoryEntry[] = [];
   const dropped: HistoryEntry[] = [];
   for (const entry of entries) {
-    const key = `${entry.workspace}#${baseLabel(entry.bolt)}`;
+    const key = `${entry.workspace}#${baseLabel(entry.pipeline)}`;
     const count = (counts.get(key) ?? 0) + 1;
     counts.set(key, count);
     (count <= KEEP_PER_PIPELINE && kept.length < KEEP ? kept : dropped).push(entry);
@@ -126,23 +126,23 @@ export function retained(entries: HistoryEntry[]): { kept: HistoryEntry[]; dropp
   return { kept, dropped };
 }
 
-/** Past runs, newest first — of one workspace, or one bolt, when asked. */
-export async function listHistory(filter: { workspace?: string; bolt?: string } = {}): Promise<HistoryEntry[]> {
-  const needle = filter.bolt?.trim().toLowerCase();
+/** Past runs, newest first — of one workspace, or one pipeline, when asked. */
+export async function listHistory(filter: { workspace?: string; pipeline?: string } = {}): Promise<HistoryEntry[]> {
+  const needle = filter.pipeline?.trim().toLowerCase();
   return (await loadHistory()).filter(
     (entry) =>
       (!filter.workspace || entry.workspace === filter.workspace) &&
-      (!needle || entry.bolt.toLowerCase().includes(needle)),
+      (!needle || entry.pipeline.toLowerCase().includes(needle)),
   );
 }
 
-export async function forgetHistory(filter: { ids?: string[]; workspace?: string; bolt?: string }): Promise<{ removed: HistoryEntry[]; running: HistoryEntry[] }> {
+export async function forgetHistory(filter: { ids?: string[]; workspace?: string; pipeline?: string }): Promise<{ removed: HistoryEntry[]; running: HistoryEntry[] }> {
   const ids = filter.ids ? new Set(filter.ids) : undefined;
-  const bolt = filter.bolt?.toLowerCase();
+  const pipeline = filter.pipeline?.toLowerCase();
   const matches = (entry: HistoryEntry) =>
     (!ids || ids.has(entry.id)) &&
     (!filter.workspace || entry.workspace === filter.workspace) &&
-    (!bolt || baseLabel(entry.bolt).toLowerCase() === bolt);
+    (!pipeline || baseLabel(entry.pipeline).toLowerCase() === pipeline);
   return withLock(historyFile(), async () => {
     const entries = await loadHistory();
     const chosen = entries.filter(matches);
@@ -174,10 +174,16 @@ async function loadHistory(): Promise<HistoryEntry[]> {
     (entry): entry is HistoryEntry =>
       typeof entry === "object" && entry !== null && typeof (entry as HistoryEntry).id === "string" && Array.isArray((entry as HistoryEntry).steps),
   );
+  for (const entry of entries) {
+    for (const item of [entry, ...entry.steps, ...(entry.pending ?? [])] as { pipeline?: string; bolt?: string }[]) {
+      if (item.pipeline === undefined && item.bolt !== undefined) item.pipeline = item.bolt;
+      delete item.bolt;
+    }
+  }
   // Runs from before numbering get numbers by their order, oldest first, so no run reads "#?".
   const counts = new Map<string, number>();
   for (const entry of [...entries].reverse()) {
-    const key = `${entry.workspace}#${baseLabel(entry.bolt)}`;
+    const key = `${entry.workspace}#${baseLabel(entry.pipeline)}`;
     const next = Math.max((counts.get(key) ?? 0) + 1, entry.number ?? 0);
     counts.set(key, next);
     if (entry.number === undefined) entry.number = next;

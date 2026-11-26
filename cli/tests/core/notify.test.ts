@@ -9,7 +9,7 @@ import { getNotify, setNotify } from "../../src/core/config.js";
 import { addWebhook, describeEnd, failingWebhooks, lastDelivery, maskWebhook, readDeliveries, webhookKind, notifyRunEnd, notifyWhen, removeWebhook, sendNotification, shouldNotify, webhookProblem, webhookRequest, webhooksFor, type RunEnd } from "../../src/core/notify.js";
 import { configPath } from "../../src/core/paths.js";
 
-const failed: RunEnd = { ok: false, bolt: "Backup", workspace: "Ops", failedStep: "dump", historyId: "abc123", durationMs: 2000, watched: false };
+const failed: RunEnd = { ok: false, pipeline: "Backup", workspace: "Ops", failedStep: "dump", historyId: "abc123", durationMs: 2000, watched: false };
 const desktop = { os: "darwin" as const, gui: true, ssh: false };
 
 let dir: string;

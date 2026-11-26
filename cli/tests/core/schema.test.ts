@@ -86,7 +86,7 @@ describe("the published schema", async () => {
     expect(valid({ pipelines: [{ label: "Open", steps: ["Repository"] }] })).not.toBe(true);
     const read = interpret({ main: { pipelines: [{ label: "Open", steps: ["Repository", { url: "acme.com" }] }] } }, { file: "/w/.wisp.json", personal: false, trust: "trusted", os: "darwin" });
     expect(read.diagnostics.filter((entry) => entry.level === "error").map((entry) => entry.message)).toEqual(['dropped: a step is an object, like { "run": "pnpm dev" } or { "url": "localhost:3000" }']);
-    expect(read.workspace.bolts[0]?.steps).toHaveLength(1);
+    expect(read.workspace.pipelines[0]?.steps).toHaveLength(1);
   });
 
   it("flags what the reader would warn about", () => {

@@ -36,7 +36,7 @@ export const list: CommandDef<{ json?: boolean }> = {
             ? green(" ✓")
             : yellow(read.trust === "stale" ? " ! changed" : " ! untrusted")
           : "";
-      // What to type for it from any folder: `wisp payments-service`, or `wisp payments-service <bolt>`.
+      // What to type for it from any folder: `wisp payments-service`, or `wisp payments-service <pipeline>`.
       console.log(`${current} ${title(workspace)} ${cyan(slugify(workspace.name))}  ${counts(workspace)}  ${where}${trust}`);
     }
 
@@ -56,6 +56,6 @@ export function workspaceSummaries(reads: WorkspaceRead[]) {
     file: read.workspace.file,
     personal: read.workspace.personal,
     trust: read.workspace.personal ? "personal" : read.trust,
-    pipelines: read.workspace.bolts.map((bolt) => bolt.label),
+    pipelines: read.workspace.pipelines.map((pipeline) => pipeline.label),
   }));
 }

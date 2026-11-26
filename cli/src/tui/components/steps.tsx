@@ -13,7 +13,7 @@ import type { Glyphs } from "../terminal/glyphs.js";
 import { TONE } from "../terminal/tones.js";
 import { describeStep, shortUrl } from "../model.js";
 
-/** One line of a bolt's steps, already laid out. */
+/** One line of a pipeline's steps, already laid out. */
 export interface Line {
   key: string;
   node: ReactNode;
@@ -21,31 +21,31 @@ export interface Line {
 
 type Status = { text: string; color: string } | undefined;
 
-export function usedBy(read: WorkspaceRead, bolt: Pipeline): string[] {
-  return read.workspace.bolts.filter((candidate) => candidate.steps.some((step) => step.kind === "pipeline" && step.bolt.toLowerCase() === bolt.label.toLowerCase())).map((candidate) => candidate.label);
+export function usedBy(read: WorkspaceRead, pipeline: Pipeline): string[] {
+  return read.workspace.pipelines.filter((candidate) => candidate.steps.some((step) => step.kind === "pipeline" && step.pipeline.toLowerCase() === pipeline.label.toLowerCase())).map((candidate) => candidate.label);
 }
 
-/** The bolts in the order a run goes through them: the ones it runs, deepest first, then itself. */
-export function flow(read: WorkspaceRead, bolt: Pipeline, seen = new Set<string>()): string[] {
+/** The pipelines in the order a run goes through them: the ones it runs, deepest first, then itself. */
+export function flow(read: WorkspaceRead, pipeline: Pipeline, seen = new Set<string>()): string[] {
   const order: string[] = [];
-  for (const step of bolt.steps) {
+  for (const step of pipeline.steps) {
     if (step.kind !== "pipeline") continue;
-    const found = findPipeline(read, step.bolt);
+    const found = findPipeline(read, step.pipeline);
     if (!found || seen.has(found.label)) continue;
     seen.add(found.label);
     for (const name of flow(read, found, seen)) if (!order.includes(name)) order.push(name);
   }
-  order.push(bolt.label);
+  order.push(pipeline.label);
   return order;
 }
 
-/** Every step, numbered by when it can start, each bolt it runs opened up beneath it. */
+/** Every step, numbered by when it can start, each pipeline it runs opened up beneath it. */
 type Shown = SwitchTarget & { held?: boolean };
 
-export function shownTargets(read: WorkspaceRead, bolt: Pipeline): Shown[] {
-  const aligned = stepTargets(read.workspace, bolt.steps);
+export function shownTargets(read: WorkspaceRead, pipeline: Pipeline): Shown[] {
+  const aligned = stepTargets(read.workspace, pipeline.steps);
   const heldById = new Map(read.withheld.map((item) => [item.id, item]));
-  return bolt.steps.flatMap((step, at): Shown[] => {
+  return pipeline.steps.flatMap((step, at): Shown[] => {
     const target = aligned[at];
     if (target) return [target];
     const placed = { ...(step.name ? { name: step.name } : {}), ...(step.after && step.after.length > 0 ? { after: step.after } : {}), held: true };
@@ -62,15 +62,15 @@ export interface LiveState {
   last?: HistoryEntry | undefined;
 }
 
-export function planGraph(read: WorkspaceRead, bolt: Pipeline, glyphs: Glyphs, live: LiveState = { runs: [], containers: [] }): GraphNode[] {
-  const all = shownTargets(read, bolt);
+export function planGraph(read: WorkspaceRead, pipeline: Pipeline, glyphs: Glyphs, live: LiveState = { runs: [], containers: [] }): GraphNode[] {
+  const all = shownTargets(read, pipeline);
   const byName = new Map(all.flatMap((target, at) => (target.name ? [[target.name, at] as const] : [])));
   const statuses = all.map((target) => (target.held || target.kind === "pipeline" ? undefined : statusOf(target, read, live.runs, live.containers, glyphs)));
   const up = statuses.some(Boolean);
   const last = live.last && (live.last.running || up) ? live.last : undefined;
   const past = last ? lastSteps(all, last) : [];
   return all.map((target, at) => {
-    const label = target.kind === "pipeline" ? `${glyphs.bolt}${target.label}` : (target.name ?? target.label);
+    const label = target.kind === "pipeline" ? `${glyphs.pipeline}${target.label}` : (target.name ?? target.label);
     const after = (target.after ?? []).flatMap((name) => (byName.has(name) ? [byName.get(name) as number] : []));
     const base = { label, after, ...(target.held ? { detail: "not trusted yet" } : {}) };
     const status = statuses[at];
@@ -89,13 +89,13 @@ function lastSteps(all: Shown[], entry: HistoryEntry): ((HistoryStep & { state?:
   const used = new Set<number>();
   return all.map((target) => {
     if (target.kind === "pipeline") {
-      const owned = steps.filter((step) => step.bolt?.toLowerCase() === target.label.toLowerCase());
+      const owned = steps.filter((step) => step.pipeline?.toLowerCase() === target.label.toLowerCase());
       if (owned.length === 0) return undefined;
       const running = owned.find((step) => step.state === "running");
       const waiting = owned.every((step) => step.state === "waiting");
       return { ...(owned[0] as HistoryStep), ok: owned.every((step) => step.ok || step.skipped), ...(running ? { state: "running" } : waiting ? { state: "waiting" } : {}) };
     }
-    const free = (step: HistoryStep, index: number) => !used.has(index) && !step.bolt && step.kind === target.kind;
+    const free = (step: HistoryStep, index: number) => !used.has(index) && !step.pipeline && step.kind === target.kind;
     let at = steps.findIndex((step, index) => free(step, index) && step.label === target.label);
     if (at < 0 && target.name) at = steps.findIndex((step, index) => free(step, index) && step.label === target.name);
     if (at < 0) return undefined;
@@ -104,19 +104,19 @@ function lastSteps(all: Shown[], entry: HistoryEntry): ((HistoryStep & { state?:
   });
 }
 
-export function stepLines(context: { read: WorkspaceRead; bolt: Pipeline; reads: WorkspaceRead[]; runs: RunStatus[]; containers: Container[]; glyphs: Glyphs; after?: boolean }): Line[] {
+export function stepLines(context: { read: WorkspaceRead; pipeline: Pipeline; reads: WorkspaceRead[]; runs: RunStatus[]; containers: Container[]; glyphs: Glyphs; after?: boolean }): Line[] {
   const { glyphs } = context;
   const lines: Line[] = [];
   const done = new Set<string>();
 
-  const walk = (read: WorkspaceRead, bolt: Pipeline, depth: number, tag: string) => {
+  const walk = (read: WorkspaceRead, pipeline: Pipeline, depth: number, tag: string) => {
     const indent = "   ".repeat(depth);
     const withheld = new Set(read.withheld.map((item) => item.id));
-    const all = shownTargets(read, bolt);
+    const all = shownTargets(read, pipeline);
     const stages = stagesOfTargets(all);
 
     all.forEach((target, index) => {
-      const key = `${read.workspace.file}#${bolt.label}#${tag}${index}`;
+      const key = `${read.workspace.file}#${pipeline.label}#${tag}${index}`;
       const shown = `${indent}${`${tag}${stages[index]}.`.padStart(3)} `;
       const after = target.after && (context.after !== false || depth > 0 || tag !== "") ? <Text dimColor>{`  after ${target.after.join(", ")}`}</Text> : null;
       if (target.kind === "pipeline") {
@@ -127,7 +127,7 @@ export function stepLines(context: { read: WorkspaceRead; bolt: Pipeline; reads:
           node: (
             <Text wrap="truncate-end">
               <Text dimColor>{shown}</Text>
-              <Text color={found?.color ?? TONE.accent} bold>{`${glyphs.bolt}${found?.label ?? target.label}`}</Text>
+              <Text color={found?.color ?? TONE.accent} bold>{`${glyphs.pipeline}${found?.label ?? target.label}`}</Text>
               {!found ? <Text color="red">{`  ${glyphs.fail} no pipeline by that name`}</Text> : twice ? <Text dimColor>  — already run above, not again</Text> : null}
               {after}
             </Text>
@@ -173,12 +173,12 @@ export function stepLines(context: { read: WorkspaceRead; bolt: Pipeline; reads:
     });
   };
 
-  done.add(`${context.read.workspace.file}#${context.bolt.label}`);
-  walk(context.read, context.bolt, 0, "");
-  if (context.bolt.down && context.bolt.down.length > 0) {
+  done.add(`${context.read.workspace.file}#${context.pipeline.label}`);
+  walk(context.read, context.pipeline, 0, "");
+  if (context.pipeline.down && context.pipeline.down.length > 0) {
     lines.push({ key: "down:gap", node: <Text> </Text> });
     lines.push({ key: "down", node: <Text dimColor>When you take it down (x), after stopping what it started:</Text> });
-    walk(context.read, { ...context.bolt, steps: context.bolt.down }, 0, "↓");
+    walk(context.read, { ...context.pipeline, steps: context.pipeline.down }, 0, "↓");
   }
   return lines;
 }
@@ -211,7 +211,7 @@ function details(target: SwitchTarget, read: WorkspaceRead): string {
 
 /**
  * What a step's thing is doing right now — said only when it is up, or up and in trouble.
- * Not running is how a bolt normally sits until you run it, so it is left blank rather than
+ * Not running is how a pipeline normally sits until you run it, so it is left blank rather than
  * shown as "stopped" or "exited", which would read as something wrong.
  */
 function statusOf(target: SwitchTarget, read: WorkspaceRead, runs: RunStatus[], containers: Container[], glyphs: Glyphs): Status {
@@ -231,6 +231,6 @@ function statusOf(target: SwitchTarget, read: WorkspaceRead, runs: RunStatus[], 
 }
 
 function findPipeline(read: WorkspaceRead, name: string): Pipeline | undefined {
-  return read.workspace.bolts.find((candidate) => candidate.label.toLowerCase() === name.toLowerCase() || candidate.id === name);
+  return read.workspace.pipelines.find((candidate) => candidate.label.toLowerCase() === name.toLowerCase() || candidate.id === name);
 }
 

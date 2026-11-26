@@ -39,7 +39,7 @@ export interface Context {
   withheld: Withheld[];
   /** The id each entry ended up with, by where it was written — how inline steps find theirs. */
   idsByAt: Map<string, string>;
-  /** What each id was declared as, so two bolts listing the same thing inline share it. */
+  /** What each id was declared as, so two pipelines listing the same thing inline share it. */
   valueById: Map<string, string>;
 }
 
@@ -93,14 +93,14 @@ export function inlineKind(target: Record<string, unknown>): InlineSection | und
   return INLINE_KINDS.find(([key]) => target[key] !== undefined)?.[1];
 }
 
-/** Every inline asset in every bolt, sorted into the section it would have been written in. */
+/** Every inline asset in every pipeline, sorted into the section it would have been written in. */
 export function inlineEntries(pipelineEntries: Entry[]): Record<InlineSection, Entry[]> {
   const found: Record<InlineSection, Entry[]> = { links: [], folders: [], files: [], apps: [], commands: [] };
-  for (const { value: bolt, at } of pipelineEntries) {
-    if (!isRecord(bolt)) continue;
+  for (const { value: pipeline, at } of pipelineEntries) {
+    if (!isRecord(pipeline)) continue;
     for (const list of ["steps", "down"] as const) {
-      if (!Array.isArray(bolt[list])) continue;
-      (bolt[list] as unknown[]).forEach((target, index) => {
+      if (!Array.isArray(pipeline[list])) continue;
+      (pipeline[list] as unknown[]).forEach((target, index) => {
         if (!isRecord(target)) return;
         const section = inlineKind(target);
         if (section) found[section].push({ value: target, at: `${at}.${list}[${index}]` });

@@ -104,13 +104,13 @@ export function TrustPanel({ read, then, glyphs, height, loadChanges, onAnswer }
 /** "I looked at this folder, and here's what I'd set up" — the first thing a new project sees. */
 /**
  * "I looked at this folder, and here's what I'd set up" — the first thing a new project sees.
- * Every suggested bolt is a box to tick, all ticked to start: keep what you want, untick the
- * rest. A kept bolt that needed an unticked one simply stops asking for it.
+ * Every suggested pipeline is a box to tick, all ticked to start: keep what you want, untick the
+ * rest. A kept pipeline that needed an unticked one simply stops asking for it.
  */
 export function SetupPanel({ suggestion, glyphs, height, onAnswer }: { suggestion: SetupSuggestion; glyphs: Glyphs; height: number; onAnswer: (chosen: string[] | undefined | "never") => void }) {
   const [index, setIndexState] = useState(0);
   const indexRef = useRef(0);
-  const [ticked, setTickedState] = useState<Set<string>>(() => new Set(suggestion.bolts.map((bolt) => bolt.label)));
+  const [ticked, setTickedState] = useState<Set<string>>(() => new Set(suggestion.pipelines.map((pipeline) => pipeline.label)));
   const tickedRef = useRef(ticked);
   const answered = useRef(false);
   const setIndex = (next: number) => {
@@ -136,25 +136,25 @@ export function SetupPanel({ suggestion, glyphs, height, onAnswer }: { suggestio
     if (key.escape || input === "q" || input === "n") return answer(undefined);
     if (input === "N") return answer("never");
     if (key.upArrow || input === "k") return setIndex(Math.max(0, indexRef.current - 1));
-    if (key.downArrow || input === "j") return setIndex(Math.min(suggestion.bolts.length - 1, indexRef.current + 1));
+    if (key.downArrow || input === "j") return setIndex(Math.min(suggestion.pipelines.length - 1, indexRef.current + 1));
     if (input === " ") {
-      const bolt = suggestion.bolts[indexRef.current];
-      if (bolt) toggle(bolt.label);
+      const pipeline = suggestion.pipelines[indexRef.current];
+      if (pipeline) toggle(pipeline.label);
       return;
     }
     if (input === "a") {
-      const all = tickedRef.current.size === suggestion.bolts.length;
-      const next = new Set(all ? [] : suggestion.bolts.map((bolt) => bolt.label));
+      const all = tickedRef.current.size === suggestion.pipelines.length;
+      const next = new Set(all ? [] : suggestion.pipelines.map((pipeline) => pipeline.label));
       tickedRef.current = next;
       return setTickedState(next);
     }
     if (key.return) {
-      const chosen = suggestion.bolts.map((bolt) => bolt.label).filter((label) => tickedRef.current.has(label));
+      const chosen = suggestion.pipelines.map((pipeline) => pipeline.label).filter((label) => tickedRef.current.has(label));
       if (chosen.length > 0) answer(chosen);
     }
   });
 
-  // A click on a bolt ticks or unticks it; on the button, sets up the ones ticked.
+  // A click on a pipeline ticks or unticks it; on the button, sets up the ones ticked.
   const rows = useRefs<number>();
   const button = useRef<DOMElement>(null);
   const later = useRef<DOMElement>(null);
@@ -162,17 +162,17 @@ export function SetupPanel({ suggestion, glyphs, height, onAnswer }: { suggestio
   useMouse((event, at) => {
     if (event.kind !== "click" || answered.current) return false;
     if (at(button.current)) {
-      const chosen = suggestion.bolts.map((bolt) => bolt.label).filter((label) => tickedRef.current.has(label));
+      const chosen = suggestion.pipelines.map((pipeline) => pipeline.label).filter((label) => tickedRef.current.has(label));
       if (chosen.length > 0) answer(chosen);
       return true;
     }
     if (at(later.current)) return answer(undefined), true;
     if (at(never.current)) return answer("never"), true;
     const hit = rows.entries().find(([, node]) => at(node));
-    const bolt = hit ? suggestion.bolts[hit[0]] : undefined;
-    if (!hit || !bolt) return false;
+    const pipeline = hit ? suggestion.pipelines[hit[0]] : undefined;
+    if (!hit || !pipeline) return false;
     setIndex(hit[0]);
-    toggle(bolt.label);
+    toggle(pipeline.label);
     return true;
   });
 
@@ -188,17 +188,17 @@ export function SetupPanel({ suggestion, glyphs, height, onAnswer }: { suggestio
       ))}
       <Text> </Text>
       <Text>So you could run these. Keep the ones you want:</Text>
-      {suggestion.bolts.map((bolt, at) => {
-        const on = ticked.has(bolt.label);
+      {suggestion.pipelines.map((pipeline, at) => {
+        const on = ticked.has(pipeline.label);
         const selected = at === index;
         return (
-          <Box key={bolt.label} ref={rows.set(at)} flexDirection="column">
+          <Box key={pipeline.label} ref={rows.set(at)} flexDirection="column">
             <Text wrap="truncate-end">
               <Text color={TONE.accent}>{selected ? `${glyphs.pointer} ` : "  "}</Text>
               <Text color={on ? TONE.accent : undefined} dimColor={!on}>{on ? "[✓] " : "[ ] "}</Text>
-              <Text bold={selected} color={on ? (selected ? TONE.accent : undefined) : undefined} dimColor={!on}>{`${glyphs.bolt}${bolt.label}`}</Text>
+              <Text bold={selected} color={on ? (selected ? TONE.accent : undefined) : undefined} dimColor={!on}>{`${glyphs.pipeline}${pipeline.label}`}</Text>
             </Text>
-            <Text wrap="truncate-end" dimColor>{`        ${bolt.steps.join(", then ")}`}</Text>
+            <Text wrap="truncate-end" dimColor>{`        ${pipeline.steps.join(", then ")}`}</Text>
           </Box>
         );
       })}
@@ -206,7 +206,7 @@ export function SetupPanel({ suggestion, glyphs, height, onAnswer }: { suggestio
       <Text dimColor>It's saved as .wisp.json in this folder, and you can change all of it afterwards with e.</Text>
       <Box>
         <Box ref={button}>
-          <Text color={count > 0 ? "black" : undefined} backgroundColor={count > 0 ? TONE.accent : undefined} bold dimColor={count === 0}>{count > 0 ? ` ▸ ${count === 1 ? (suggestion.bolts.length === 1 ? "Set up this pipeline" : "Set up 1 pipeline") : count === suggestion.bolts.length ? `Set up all ${count} pipelines` : `Set up ${count} pipelines`} ` : " Tick at least one "}</Text>
+          <Text color={count > 0 ? "black" : undefined} backgroundColor={count > 0 ? TONE.accent : undefined} bold dimColor={count === 0}>{count > 0 ? ` ▸ ${count === 1 ? (suggestion.pipelines.length === 1 ? "Set up this pipeline" : "Set up 1 pipeline") : count === suggestion.pipelines.length ? `Set up all ${count} pipelines` : `Set up ${count} pipelines`} ` : " Tick at least one "}</Text>
         </Box>
         <Box ref={later} marginLeft={1}>
           <Text dimColor>{" [ Not now ] "}</Text>

@@ -11,13 +11,13 @@ export interface AskOptions {
   input?: string[];
 }
 
-export async function beforeRun(workspace: Workspace, bolt: Pipeline, options: AskOptions, recorded?: InputValues): Promise<InputValues | undefined> {
+export async function beforeRun(workspace: Workspace, pipeline: Pipeline, options: AskOptions, recorded?: InputValues): Promise<InputValues | undefined> {
   const interactive = !options.json && process.stdin.isTTY === true && process.stdout.isTTY === true;
   const values: InputValues = { ...recorded };
 
   if (!recorded) {
-    const specs = await inputsFor(workspace, bolt);
-    Object.assign(values, parseGiven(options.input ?? [], specs, bolt.label));
+    const specs = await inputsFor(workspace, pipeline);
+    Object.assign(values, parseGiven(options.input ?? [], specs, pipeline.label));
     const missing = specs.filter((spec) => values[spec.name] === undefined);
     for (const spec of missing) {
       if (spec.default !== undefined && (options.dryRun || options.yes || !interactive)) values[spec.name] = spec.default;
@@ -25,7 +25,7 @@ export async function beforeRun(workspace: Workspace, bolt: Pipeline, options: A
     if (options.dryRun) return values;
     const unasked = missing.filter((spec) => values[spec.name] === undefined);
     if (unasked.length > 0 && !interactive) {
-      throw new WispError(`"${bolt.label}" needs ${unasked.map((spec) => (spec.ask === spec.name ? spec.name : `${spec.name} (${spec.ask})`)).join(", ")}: pass ${unasked.map((spec) => `--input ${spec.name}=…`).join(" ")}`, "INPUT_NEEDED");
+      throw new WispError(`"${pipeline.label}" needs ${unasked.map((spec) => (spec.ask === spec.name ? spec.name : `${spec.name} (${spec.ask})`)).join(", ")}: pass ${unasked.map((spec) => `--input ${spec.name}=…`).join(" ")}`, "INPUT_NEEDED");
     }
     for (const spec of unasked) {
       const value = await askFor(spec);
@@ -35,9 +35,9 @@ export async function beforeRun(workspace: Workspace, bolt: Pipeline, options: A
   }
   if (options.dryRun) return values;
 
-  const questions = await questionsFor(workspace, bolt, values);
+  const questions = await questionsFor(workspace, pipeline, values);
   if (questions.length === 0 || options.yes) return values;
-  if (!interactive) throw new WispError(`"${bolt.label}" asks before it runs: ${questions.join(" ")}`, "CONFIRM_NEEDED");
+  if (!interactive) throw new WispError(`"${pipeline.label}" asks before it runs: ${questions.join(" ")}`, "CONFIRM_NEEDED");
   const prompt = new Prompter();
   try {
     for (const question of questions) {

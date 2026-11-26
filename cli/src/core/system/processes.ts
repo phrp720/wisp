@@ -14,7 +14,7 @@ import type { Invocation } from "../types.js";
  * A command Wisp started and is keeping track of — in the background, or in a window.
  *
  * Without this a command is fire and forget: no way to see whether it is still up, no
- * way to stop it short of hunting for its PID, and running the bolt again starts a second
+ * way to stop it short of hunting for its PID, and running the pipeline again starts a second
  * copy fighting the first for its port.
  */
 export interface Run {
@@ -29,8 +29,8 @@ export interface Run {
   workspace: string;
   workspaceName: string;
   asset: string;
-  /** The bolt that started it, for showing; `down` goes by asset. */
-  bolt?: string;
+  /** The pipeline that started it, for showing; `down` goes by asset. */
+  pipeline?: string;
   /** The run in history that started it. */
   historyId?: string;
   /** 0 until a window's shell has written its PID file. */
@@ -286,7 +286,7 @@ export interface RunInfo {
   workspace: string;
   workspaceName: string;
   asset: string;
-  bolt?: string;
+  pipeline?: string;
   /** The run in history that started it — how the Running list says "#4". */
   historyId?: string;
 }
@@ -388,7 +388,7 @@ function info(request: RunInfo): RunInfo {
     workspace: request.workspace,
     workspaceName: request.workspaceName,
     asset: request.asset,
-    ...(request.bolt ? { bolt: request.bolt } : {}),
+    ...(request.pipeline ? { pipeline: request.pipeline } : {}),
     ...(request.historyId ? { historyId: request.historyId } : {}),
   };
 }
@@ -546,7 +546,7 @@ export async function restartRun(run: RunStatus): Promise<StartResult> {
     workspace: run.workspace,
     workspaceName: run.workspaceName,
     asset: run.asset,
-    ...(run.bolt ? { bolt: run.bolt } : {}),
+    ...(run.pipeline ? { pipeline: run.pipeline } : {}),
     ...(run.historyId ? { historyId: run.historyId } : {}),
     invocation: run.invocation,
   });
@@ -803,5 +803,8 @@ async function loadRuns(): Promise<Run[]> {
         typeof (entry as Run).id === "string" &&
         typeof (entry as Run).pid === "number",
     )
-    .map((entry) => ({ ...entry, kind: entry.kind ?? "background" }));
+    .map((entry) => {
+      const { bolt, ...run } = entry as Run & { bolt?: string };
+      return { ...run, kind: run.kind ?? "background", ...(run.pipeline === undefined && bolt !== undefined ? { pipeline: bolt } : {}) };
+    });
 }

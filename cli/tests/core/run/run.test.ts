@@ -68,20 +68,20 @@ describe("matchPipeline", () => {
   });
 
   it("matches any distinctive part of a label", () => {
-    expect(matchPipeline(ws, "core").bolt?.label).toBe("Work on core");
-    expect(matchPipeline(ws, "cli").bolt?.label).toBe("Work on the CLI");
+    expect(matchPipeline(ws, "core").pipeline?.label).toBe("Work on core");
+    expect(matchPipeline(ws, "cli").pipeline?.label).toBe("Work on the CLI");
   });
 
   it("refuses a slug two pipelines share, rather than guessing from a word", () => {
     const twins = workspace({ pipelines: [{ label: "Start the whole stack", slug: "up" }, { label: "Bring it up", slug: "up" }] });
-    expect(matchPipeline(twins, "up").bolt).toBeUndefined();
+    expect(matchPipeline(twins, "up").pipeline).toBeUndefined();
     expect(() => resolvePipeline(twins, "up")).toThrow(/several pipelines/);
   });
 
   it("answers to a pipeline's own slug, and still to the words of its label", () => {
     const own = workspace({ pipelines: [{ label: "Start the whole stack", slug: "up" }, { label: "Verify" }] });
-    expect(matchPipeline(own, "up").bolt?.label).toBe("Start the whole stack");
-    expect(matchPipeline(own, "stack").bolt?.label).toBe("Start the whole stack");
+    expect(matchPipeline(own, "up").pipeline?.label).toBe("Start the whole stack");
+    expect(matchPipeline(own, "stack").pipeline?.label).toBe("Start the whole stack");
   });
 
   it("says when a word is ambiguous", () => {
@@ -90,13 +90,13 @@ describe("matchPipeline", () => {
 
   it("takes only whole words, or a run of them, never part of one", () => {
     const docs = workspace({ pipelines: [{ label: "Documentation" }, { label: "Document" }, { label: "Work on the CLI" }] });
-    expect(matchPipeline(docs, "doc").bolt).toBeUndefined();
+    expect(matchPipeline(docs, "doc").pipeline).toBeUndefined();
     expect(matchPipeline(docs, "doc").candidates).toEqual([]);
-    expect(matchPipeline(docs, "ation").bolt).toBeUndefined();
-    expect(matchPipeline(docs, "document").bolt?.label).toBe("Document");
-    expect(matchPipeline(docs, "the cli").bolt?.label).toBe("Work on the CLI");
-    expect(matchPipeline(docs, "on-the").bolt?.label).toBe("Work on the CLI");
-    expect(matchPipeline(docs, "work-on-the-cli").bolt?.label).toBe("Work on the CLI");
+    expect(matchPipeline(docs, "ation").pipeline).toBeUndefined();
+    expect(matchPipeline(docs, "document").pipeline?.label).toBe("Document");
+    expect(matchPipeline(docs, "the cli").pipeline?.label).toBe("Work on the CLI");
+    expect(matchPipeline(docs, "on-the").pipeline?.label).toBe("Work on the CLI");
+    expect(matchPipeline(docs, "work-on-the-cli").pipeline?.label).toBe("Work on the CLI");
   });
 });
 
@@ -218,7 +218,7 @@ describe("switchToWorkspace", () => {
       join(dir, ".wisp.json"),
     );
     const platform = recorder();
-    const result = await switchToWorkspace(ws, { bolt: "go" }, { platform, environment: desktop, defaults: { terminal: "Terminal" } });
+    const result = await switchToWorkspace(ws, { pipeline: "go" }, { platform, environment: desktop, defaults: { terminal: "Terminal" } });
 
     expect(result.targets.every((target) => target.ok)).toBe(true);
     expect(platform.calls[0]).toBe("app Slack");
@@ -236,18 +236,18 @@ describe("switchToWorkspace", () => {
     const platform = recorder();
     process.env["WISP_TEST_SHOP"] = "https://shop.example.com";
     try {
-      const opened = await switchToWorkspace(ws, { bolt: "go" }, { platform, environment: desktop, defaults: {} });
+      const opened = await switchToWorkspace(ws, { pipeline: "go" }, { platform, environment: desktop, defaults: {} });
       expect(opened.targets[0]).toMatchObject({ ok: true, value: "{{env.WISP_TEST_SHOP}}/admin" });
       expect(platform.calls).toEqual(["url https://shop.example.com/admin"]);
     } finally {
       delete process.env["WISP_TEST_SHOP"];
     }
-    const missing = await switchToWorkspace(ws, { bolt: "go" }, { platform, environment: desktop, defaults: {} });
+    const missing = await switchToWorkspace(ws, { pipeline: "go" }, { platform, environment: desktop, defaults: {} });
     expect(missing.targets[0]).toMatchObject({ ok: false, error: expect.stringContaining("$WISP_TEST_SHOP isn't set here") });
     expect(platform.calls).toHaveLength(1);
     process.env["WISP_TEST_SHOP"] = "https://shop.example.com";
     try {
-      const headless = await switchToWorkspace(ws, { bolt: "go" }, { platform, environment: server, defaults: {} });
+      const headless = await switchToWorkspace(ws, { pipeline: "go" }, { platform, environment: server, defaults: {} });
       expect(headless.targets[0]).toMatchObject({ ok: true, value: "{{env.WISP_TEST_SHOP}}/admin", note: "no display: open it yourself, from $WISP_TEST_SHOP" });
       expect(JSON.stringify(headless.targets)).not.toContain("shop.example.com");
     } finally {
@@ -260,7 +260,7 @@ describe("switchToWorkspace", () => {
     const platform = recorder();
     process.env["WISP_TEST_SECRET"] = "hunter2";
     try {
-      await switchToWorkspace(ws, { bolt: "go" }, { platform, environment: desktop, defaults: {} });
+      await switchToWorkspace(ws, { pipeline: "go" }, { platform, environment: desktop, defaults: {} });
     } finally {
       delete process.env["WISP_TEST_SECRET"];
     }
@@ -279,7 +279,7 @@ describe("switchToWorkspace", () => {
   it("prints links and skips windows when there is no display", async () => {
     const ws = workspace({ pipelines: [{ label: "go", steps: [{ url: "acme.com" }, { app: "Slack" }] }] });
     const platform = recorder();
-    const result = await switchToWorkspace(ws, { bolt: "go" }, { platform, environment: server, defaults: {} });
+    const result = await switchToWorkspace(ws, { pipeline: "go" }, { platform, environment: server, defaults: {} });
 
     expect(platform.calls).toEqual([]);
     expect(result.targets.map((target) => [target.ok, target.skipped ?? false, target.note])).toEqual([
@@ -293,7 +293,7 @@ describe("switchToWorkspace", () => {
       pipelines: [{ label: "go", steps: [{ wait: { port: 1, timeout: 0.3 }, label: "ready" }, { url: "acme.com", after: "ready" }] }],
     });
     const platform = recorder();
-    const result = await switchToWorkspace(ws, { bolt: "go" }, { platform, environment: desktop, defaults: {} });
+    const result = await switchToWorkspace(ws, { pipeline: "go" }, { platform, environment: desktop, defaults: {} });
 
     expect(result.targets[0]).toMatchObject({ ok: false, error: expect.stringContaining("gave up") });
     expect(result.targets[1]).toMatchObject({ ok: false, skipped: true });
@@ -306,7 +306,7 @@ describe("switchToWorkspace", () => {
     const result = await switchToWorkspace(
       ws,
       {
-        bolt: "go",
+        pipeline: "go",
         mode: "inline",
         runInline: async (_target, invocation) => {
           seen.push(invocation.args.at(-1) ?? "");
@@ -324,7 +324,7 @@ describe("switchToWorkspace", () => {
     await chmod(join(dir, "go"), 0o755);
     const ws = workspace({ pipelines: [{ label: "x", steps: [{ file: "go" }] }] }, join(dir, ".wisp.json"), false);
     const platform = recorder();
-    const result = await switchToWorkspace(ws, { bolt: "x" }, { platform, environment: desktop, defaults: {} });
+    const result = await switchToWorkspace(ws, { pipeline: "x" }, { platform, environment: desktop, defaults: {} });
 
     expect(result.targets[0]).toMatchObject({ ok: false, error: expect.stringContaining("executable") });
     expect(platform.calls).toEqual([]);
@@ -333,7 +333,7 @@ describe("switchToWorkspace", () => {
   it("does nothing at all on a dry run", async () => {
     const ws = workspace({ pipelines: [{ label: "x", steps: [{ run: "rm -rf /" }, { url: "acme.com" }] }] });
     const platform = recorder();
-    const result = await switchToWorkspace(ws, { bolt: "x", dryRun: true }, { platform, environment: desktop, defaults: {} });
+    const result = await switchToWorkspace(ws, { pipeline: "x", dryRun: true }, { platform, environment: desktop, defaults: {} });
     expect(platform.calls).toEqual([]);
     expect(result.targets[0]!.note).toBe("in the background");
   });

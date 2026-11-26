@@ -14,11 +14,11 @@ import { beforeRun } from "../lib/ask.js";
 import { withFailureOutput } from "../lib/failures.js";
 import { named, resultLine } from "../lib/render.js";
 
-/** The bolt a lifecycle command means, by the same rules as running one. */
-async function target(first: string | undefined, second: string | undefined): Promise<{ read: WorkspaceRead; bolt: Pipeline }> {
-  const { read, bolt } = await resolveRun(first, second, undefined);
-  if (!bolt) throw new WispError("Name the pipeline: `wisp down api`", "NO_PIPELINE");
-  return { read, bolt: resolvePipeline(read.workspace, bolt) };
+/** The pipeline a lifecycle command means, by the same rules as running one. */
+async function target(first: string | undefined, second: string | undefined): Promise<{ read: WorkspaceRead; pipeline: Pipeline }> {
+  const { read, pipeline } = await resolveRun(first, second, undefined);
+  if (!pipeline) throw new WispError("Name the pipeline: `wisp down api`", "NO_PIPELINE");
+  return { read, pipeline: resolvePipeline(read.workspace, pipeline) };
 }
 
 export const down: CommandDef<{ deps?: boolean; dryRun?: boolean; json?: boolean }> = {
@@ -36,10 +36,10 @@ export const down: CommandDef<{ deps?: boolean; dryRun?: boolean; json?: boolean
   examples: ["wisp down api", "wisp down api --deps   # the database too"],
 
   async run([first, second], options) {
-    const { read, bolt } = await target(first, second);
+    const { read, pipeline } = await target(first, second);
     const result = await downPipeline(
       read.workspace,
-      bolt,
+      pipeline,
       { deps: options.deps ?? false, dryRun: options.dryRun ?? false, echo: !options.json },
     );
 
@@ -48,7 +48,7 @@ export const down: CommandDef<{ deps?: boolean; dryRun?: boolean; json?: boolean
       return emitJson({ stopped: result.stopped.map((run) => ({ id: run.id, label: run.label })), teardown: result.teardown?.targets ?? [] });
     }
 
-    console.log(`${options.dryRun ? yellow("dry run") : green("down")} ${title(read.workspace)} ${dim("·")} ${bold(bolt.label)}`);
+    console.log(`${options.dryRun ? yellow("dry run") : green("down")} ${title(read.workspace)} ${dim("·")} ${bold(pipeline.label)}`);
     if (result.stopped.length === 0 && !result.teardown) console.log(dim("  nothing of it was running"));
     for (const run of result.stopped) console.log(`  ${green("■")} ${dim("stop  ")} ${run.label} ${dim(`(${run.id})`)}`);
     for (const step of result.teardown?.targets ?? []) console.log(resultLine(step));
@@ -71,21 +71,21 @@ export const restart: CommandDef<{ deps?: boolean; yes?: boolean; input?: string
   examples: ["wisp restart api"],
 
   async run([first, second], options) {
-    const { read, bolt } = await target(first, second);
-    const inputs = await beforeRun(read.workspace, bolt, options);
+    const { read, pipeline } = await target(first, second);
+    const inputs = await beforeRun(read.workspace, pipeline, options);
     if (!inputs) {
       console.log(dim("Nothing ran."));
       process.exitCode = 1;
       return;
     }
-    const stopped = await downPipeline(read.workspace, bolt, { deps: options.deps ?? false, echo: true });
-    console.log(`${green("down")} ${title(read.workspace)} ${dim("·")} ${bold(bolt.label)} ${dim(`— ${plural(stopped.stopped.length, "command")} stopped`)}`);
+    const stopped = await downPipeline(read.workspace, pipeline, { deps: options.deps ?? false, echo: true });
+    console.log(`${green("down")} ${title(read.workspace)} ${dim("·")} ${bold(pipeline.label)} ${dim(`— ${plural(stopped.stopped.length, "command")} stopped`)}`);
 
     // Give stopped servers a moment to let go of their ports.
     if (stopped.stopped.length > 0) await new Promise((done) => setTimeout(done, 500));
 
-    console.log(`${green("running")} ${title(read.workspace)} ${dim("·")} ${bold(bolt.label)}`);
-    const result = await switchToWorkspace(read.workspace, { bolt: bolt.id, inputs, echo: true, watched: process.stdout.isTTY === true || process.stderr.isTTY === true, onResult: (step) => console.log(resultLine(step)) });
+    console.log(`${green("running")} ${title(read.workspace)} ${dim("·")} ${bold(pipeline.label)}`);
+    const result = await switchToWorkspace(read.workspace, { pipeline: pipeline.id, inputs, echo: true, watched: process.stdout.isTTY === true || process.stderr.isTTY === true, onResult: (step) => console.log(resultLine(step)) });
     if (!result.ok) process.exitCode = 1;
   },
 };
@@ -108,7 +108,7 @@ export const history: CommandDef<{ all?: boolean; log?: string; clear?: boolean;
     if (found) return showEntry((await currentNames([found]))[0] as HistoryEntry, options);
 
     const here = options.all ? undefined : await maybeProject();
-    const entries = await currentNames(await listHistory({ ...(here ? { workspace: here.workspace.file } : {}), ...(query ? { bolt: query } : {}) }));
+    const entries = await currentNames(await listHistory({ ...(here ? { workspace: here.workspace.file } : {}), ...(query ? { pipeline: query } : {}) }));
 
     if (entries.length === 0 && query && !(await isPipelineName(query, here))) {
       throw new WispError(
@@ -130,7 +130,7 @@ export const history: CommandDef<{ all?: boolean; log?: string; clear?: boolean;
       const number = run.number ? dim(` #${run.number}`) : "";
       const state = run.running ? ` · running, step ${Math.min(run.steps.length + 1, run.total ?? run.steps.length + 1)} of ${run.total ?? "?"}` : run.interrupted ? " · interrupted" : run.cancelled ? " · cancelled" : "";
       const took = run.interrupted ? "" : ` · ${duration(run)}`;
-      console.log(`${mark} ${bold(run.id)}  ${run.bolt}${number}${where} ${dim(`· ${ago(run.startedAt)} ago${took}${state}${context ? ` · ${context}` : ""}`)}`);
+      console.log(`${mark} ${bold(run.id)}  ${run.pipeline}${number}${where} ${dim(`· ${ago(run.startedAt)} ago${took}${state}${context ? ` · ${context}` : ""}`)}`);
     }
     if (entries.length > 30) console.log(dim(`… ${entries.length - 30} older`));
   },
@@ -151,7 +151,7 @@ async function showEntry(entry: HistoryEntry, options: { log?: string; json?: bo
 
   const mark = entry.running ? cyan("running") : entry.interrupted ? yellow("interrupted") : entry.ok ? green("passed") : entry.cancelled ? dim("cancelled") : red("failed");
   const context = [TRIGGERS[entry.trigger ?? ""] ? `from ${TRIGGERS[entry.trigger ?? ""]}` : "", entry.git ? `${entry.git.branch} @ ${entry.git.commit}` : ""].filter(Boolean).join(" · ");
-  console.log(`${mark} ${bold(entry.bolt)} ${dim(`· ${entry.workspaceName} · ${new Date(entry.startedAt).toLocaleString()}${entry.interrupted ? "" : ` · ${duration(entry)}`}${context ? ` · ${context}` : ""}`)}`);
+  console.log(`${mark} ${bold(entry.pipeline)} ${dim(`· ${entry.workspaceName} · ${new Date(entry.startedAt).toLocaleString()}${entry.interrupted ? "" : ` · ${duration(entry)}`}${context ? ` · ${context}` : ""}`)}`);
   if (entry.inputs) console.log(dim(`  with ${Object.entries(entry.inputs).map(([name, value]) => `${name}=${value}`).join(" ")}`));
   entry.steps.forEach((step, index) => {
     const markStep = !step.ok ? (step.skipped ? dim("–") : step.cancelled ? dim("⊘") : red("✗")) : step.skipped ? dim("–") : green("✓");
@@ -178,23 +178,23 @@ async function clearHistory(query: string | undefined, options: { all?: boolean;
   if (!one && !here && !options.all) {
     throw new WispError("Not in a project: name a run, or add --all to clear every project's runs", "NO_TARGET");
   }
-  const bolt = !one && query ? (here ? (matchPipeline(here.workspace, query).bolt?.label ?? query) : query) : undefined;
+  const pipeline = !one && query ? (here ? (matchPipeline(here.workspace, query).pipeline?.label ?? query) : query) : undefined;
   const { removed, running } = await forgetHistory({
     ...(one ? { ids: [one.id] } : {}),
     ...(!one && here ? { workspace: here.workspace.file } : {}),
-    ...(bolt ? { bolt } : {}),
+    ...(pipeline ? { pipeline } : {}),
   });
 
   if (options.json) return emitJson({ cleared: removed.map((entry) => entry.id), running: running.map((entry) => entry.id) });
 
-  const what = one ? `run ${one.id}` : bolt ? `the runs of "${bolt}"` : here ? `${here.workspace.name}'s runs` : "every run";
+  const what = one ? `run ${one.id}` : pipeline ? `the runs of "${pipeline}"` : here ? `${here.workspace.name}'s runs` : "every run";
   console.log(removed.length > 0 ? `${green("✓")} cleared ${plural(removed.length, "run")} ${dim(`(${what})`)}` : dim(`Nothing to clear (${what}).`));
   if (running.length > 0) console.log(dim(`  kept ${plural(running.length, "run")} still going`));
 }
 
 async function isPipelineName(query: string, here: WorkspaceRead | undefined): Promise<boolean> {
   const reads = here ? [here] : await everything().catch(() => []);
-  return reads.some((read) => matchPipeline(read.workspace, query).candidates.length > 0 || read.workspace.bolts.some((bolt) => bolt.label.toLowerCase().includes(query.trim().toLowerCase())));
+  return reads.some((read) => matchPipeline(read.workspace, query).candidates.length > 0 || read.workspace.pipelines.some((pipeline) => pipeline.label.toLowerCase().includes(query.trim().toLowerCase())));
 }
 
 async function currentNames(entries: HistoryEntry[]): Promise<HistoryEntry[]> {
@@ -240,8 +240,8 @@ export const hook: CommandDef<{ remove?: boolean; list?: boolean; force?: boolea
         const text = await readFile(join(dir, file), "utf8").catch(() => "");
         if (!text.includes(MARKER)) continue;
         found += 1;
-        const bolt = /wisp use '[^']*' '([^']*)'/.exec(text)?.[1] ?? "?";
-        console.log(`  ${bold(file)} ${dim("→")} ${bolt}`);
+        const pipeline = /wisp use '[^']*' '([^']*)'/.exec(text)?.[1] ?? "?";
+        console.log(`  ${bold(file)} ${dim("→")} ${pipeline}`);
       }
       if (found === 0) console.log(dim("No Wisp hooks here. `wisp hook pre-push verify` adds one."));
       return;
@@ -266,25 +266,25 @@ export const hook: CommandDef<{ remove?: boolean; list?: boolean; force?: boolea
 
     const here = await maybeProject();
     if (!here) throw new WispError("Run this inside a project with a .wisp.json", "NO_PROJECT");
-    const bolt = resolvePipeline(here.workspace, pipelineRef);
+    const pipeline = resolvePipeline(here.workspace, pipelineRef);
 
-    // The file by path, so the hook runs the same bolt however the repository is entered;
+    // The file by path, so the hook runs the same pipeline however the repository is entered;
     // and a clear failure when wisp is missing, rather than a push that skips its checks.
     const script = `#!/bin/sh
 ${MARKER} — \`wisp hook ${name} --remove\` takes it out.
 command -v wisp >/dev/null 2>&1 || { echo "wisp is not on PATH — install it, or remove this hook: .git/hooks/${name}" >&2; exit 1; }
-WISP_TRIGGER=hook exec wisp use '${here.workspace.file.replace(/'/g, `'\\''`)}' '${bolt.label.replace(/'/g, `'\\''`)}' --yes
+WISP_TRIGGER=hook exec wisp use '${here.workspace.file.replace(/'/g, `'\\''`)}' '${pipeline.label.replace(/'/g, `'\\''`)}' --yes
 `;
     await mkdir(dir, { recursive: true });
     await writeFile(path, script, "utf8");
     await chmod(path, 0o755);
 
-    console.log(`${green("✓")} ${name} runs ${bold(bolt.label)} ${dim(`— ${tildify(path)}`)}`);
-    const running = keepsRunning(here, bolt);
+    console.log(`${green("✓")} ${name} runs ${bold(pipeline.label)} ${dim(`— ${tildify(path)}`)}`);
+    const running = keepsRunning(here, pipeline);
     if (running.length > 0) console.log(yellow(`! ${running.map((label) => `"${label}"`).join(", ")} ${running.length === 1 ? "keeps" : "keep"} running, so ${running.length === 1 ? "its" : "their"} result can't stop the ${name}. Mark ${running.length === 1 ? "it" : "them"} "finishes": true.`));
-    const questions = await questionsFor(here.workspace, bolt);
+    const questions = await questionsFor(here.workspace, pipeline);
     if (questions.length > 0) console.log(yellow(`! it asks before it runs (${questions.join(" ")}); from the hook it runs without asking`));
-    const unanswerable = (await inputsFor(here.workspace, bolt)).filter((spec) => spec.default === undefined);
+    const unanswerable = (await inputsFor(here.workspace, pipeline)).filter((spec) => spec.default === undefined);
     if (unanswerable.length > 0) console.log(yellow(`! a hook can't answer ${unanswerable.map((spec) => spec.name).join(", ")}: give ${unanswerable.length === 1 ? "it a default" : "them defaults"}, or the ${name} stops`));
     if (!here.workspace.trusted && here.withheld.length > 0) console.log(yellow("! its commands wait for `wisp trust` — until then the hook stops, rather than pass without checking"));
   },
@@ -302,7 +302,7 @@ function hooksDir(): string {
 }
 
 function publicRun(entry: HistoryEntry) {
-  const { bolt, steps, pending, ...rest } = entry;
-  const step = ({ bolt: group, ...other }: HistoryEntry["steps"][number]) => ({ ...other, ...(group ? { pipeline: group } : {}) });
-  return { ...rest, pipeline: bolt, steps: steps.map(step), ...(pending ? { pending: pending.map(step) } : {}) };
+  const { pipeline, steps, pending, ...rest } = entry;
+  const step = ({ pipeline: group, ...other }: HistoryEntry["steps"][number]) => ({ ...other, ...(group ? { pipeline: group } : {}) });
+  return { ...rest, pipeline: pipeline, steps: steps.map(step), ...(pending ? { pending: pending.map(step) } : {}) };
 }

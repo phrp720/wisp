@@ -29,7 +29,7 @@ describe("wisp init --personal", () => {
     await init.run([], { personal: true, name: "Homelab" });
     const file = join(workspacesDir(), "Homelab.wisp.json");
     const read = await readProjectFile(file);
-    expect(read.workspace).toMatchObject({ name: "Homelab", personal: true, bolts: [] });
+    expect(read.workspace).toMatchObject({ name: "Homelab", personal: true, pipelines: [] });
     expect(JSON.parse(await readFile(file, "utf8"))).toMatchObject({ name: "Homelab", pipelines: [] });
     expect(printed.join("\n")).toContain("wisp homelab <pipeline>");
   });

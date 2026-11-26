@@ -75,7 +75,7 @@ describe("commands that finish, and failures", () => {
     const seen: string[] = [];
     const result = await switchToWorkspace(
       ws,
-      { bolt: "check", onOutput: (_target, chunk) => seen.push(chunk.trim()) },
+      { pipeline: "check", onOutput: (_target, chunk) => seen.push(chunk.trim()) },
       { platform, environment: desktop, defaults: {} },
     );
 
@@ -90,7 +90,7 @@ describe("commands that finish, and failures", () => {
     expect(seen).toEqual(["linting", "tests broke"]);
 
     const entry = await getHistory(result.historyId!);
-    expect(entry).toMatchObject({ bolt: "Check", ok: false });
+    expect(entry).toMatchObject({ pipeline: "Check", ok: false });
     expect(entry!.steps[0]!.finishes).toBe(true);
     expect(await readFile(entry!.steps[1]!.log!, "utf8")).toBe("tests broke\n");
   });
@@ -104,7 +104,7 @@ describe("commands that finish, and failures", () => {
       ],
     });
     const platform = recorder();
-    const result = await switchToWorkspace(ws, { bolt: "test" }, { platform, environment: desktop, defaults: { terminal: "Terminal" } });
+    const result = await switchToWorkspace(ws, { pipeline: "test" }, { platform, environment: desktop, defaults: { terminal: "Terminal" } });
 
     expect(platform.calls).toEqual(["terminal db"]); // the service, the way services start
     expect(result.targets.map((step) => [step.label, step.ok, step.skipped ?? false])).toEqual([
@@ -117,7 +117,7 @@ describe("commands that finish, and failures", () => {
   it("stop at the first failure, whatever failed", async () => {
     const ws = workspace({ pipelines: [{ label: "go", steps: [{ folder: "missing", label: "src" }, { url: "acme.com", after: "src" }] }] });
     const platform = recorder();
-    const result = await switchToWorkspace(ws, { bolt: "go" }, { platform, environment: desktop, defaults: {} });
+    const result = await switchToWorkspace(ws, { pipeline: "go" }, { platform, environment: desktop, defaults: {} });
     expect(result.targets.map((step) => [step.ok, step.skipped ?? false])).toEqual([[false, false], [false, true]]);
     expect(platform.calls).toEqual([]);
   });
@@ -136,7 +136,7 @@ describe("commands that finish, and failures", () => {
       ],
     });
     const began = Date.now();
-    const result = await switchToWorkspace(ws, { bolt: "go" }, { platform: recorder(), environment: desktop, defaults: {} });
+    const result = await switchToWorkspace(ws, { pipeline: "go" }, { platform: recorder(), environment: desktop, defaults: {} });
     expect(Date.now() - began).toBeLessThan(2000);
     expect(result.targets.map((step) => [step.label, step.ok, step.skipped ?? false])).toEqual([
       ["broken", false, false],
@@ -149,7 +149,7 @@ describe("commands that finish, and failures", () => {
   it("keep going after a failure when the pipeline says so", async () => {
     const ws = workspace({ pipelines: [{ label: "go", keepGoing: true, steps: [{ folder: "missing", label: "src" }, { url: "acme.com", after: "src" }] }] });
     const platform = recorder();
-    const result = await switchToWorkspace(ws, { bolt: "go" }, { platform, environment: desktop, defaults: {} });
+    const result = await switchToWorkspace(ws, { pipeline: "go" }, { platform, environment: desktop, defaults: {} });
     expect(result.ok).toBe(false);
     expect(result.targets.map((step) => step.ok)).toEqual([false, true]);
     expect(platform.calls).toEqual(["url https://acme.com/"]);
@@ -158,25 +158,25 @@ describe("commands that finish, and failures", () => {
   it("are listed in history newest first, and can be filtered by pipeline", async () => {
     const ws = workspace({ pipelines: [{ label: "Lint", steps: [{ run: "true", finishes: true }] }, { label: "Build", steps: [{ run: "true", finishes: true }] }] });
     const deps = { platform: recorder(), environment: desktop, defaults: {} };
-    await switchToWorkspace(ws, { bolt: "lint" }, deps);
-    await switchToWorkspace(ws, { bolt: "build" }, deps);
+    await switchToWorkspace(ws, { pipeline: "lint" }, deps);
+    await switchToWorkspace(ws, { pipeline: "build" }, deps);
 
-    expect((await listHistory()).map((entry) => entry.bolt)).toEqual(["Build", "Lint"]);
-    expect((await listHistory({ bolt: "lin" })).map((entry) => entry.bolt)).toEqual(["Lint"]);
+    expect((await listHistory()).map((entry) => entry.pipeline)).toEqual(["Build", "Lint"]);
+    expect((await listHistory({ pipeline: "lin" })).map((entry) => entry.pipeline)).toEqual(["Lint"]);
   });
 
   it("keep the last runs of each pipeline, so a check run every minute pushes out only its own", () => {
-    const run = (bolt: string, at: number): HistoryEntry => ({ id: `${bolt}${at}`, workspace: "/w/.wisp.json", workspaceName: "W", bolt, startedAt: "", finishedAt: "", ok: true, steps: [] });
+    const run = (pipeline: string, at: number): HistoryEntry => ({ id: `${pipeline}${at}`, workspace: "/w/.wisp.json", workspaceName: "W", pipeline, startedAt: "", finishedAt: "", ok: true, steps: [] });
     const entries = [...Array.from({ length: KEEP_PER_PIPELINE + 10 }, (_, at) => run("Check", at)), run("Deploy (retry)", 0), run("Deploy", 1)];
     const { kept, dropped } = retained(entries);
-    expect(kept.filter((entry) => entry.bolt === "Check")).toHaveLength(KEEP_PER_PIPELINE);
-    expect(kept.filter((entry) => entry.bolt.startsWith("Deploy"))).toHaveLength(2);
+    expect(kept.filter((entry) => entry.pipeline === "Check")).toHaveLength(KEEP_PER_PIPELINE);
+    expect(kept.filter((entry) => entry.pipeline.startsWith("Deploy"))).toHaveLength(2);
     expect(dropped.map((entry) => entry.id)).toEqual(Array.from({ length: 10 }, (_, at) => `Check${KEEP_PER_PIPELINE + at}`));
   });
 
   it("are not recorded on a dry run", async () => {
     const ws = workspace({ pipelines: [{ label: "Lint", steps: [{ run: "true", finishes: true }] }] });
-    const result = await switchToWorkspace(ws, { bolt: "lint", dryRun: true }, { platform: recorder(), environment: desktop, defaults: {} });
+    const result = await switchToWorkspace(ws, { pipeline: "lint", dryRun: true }, { platform: recorder(), environment: desktop, defaults: {} });
     expect(result.historyId).toBeUndefined();
     expect(result.targets[0]!.note).toBe("here, and waited for");
     expect(await listHistory()).toEqual([]);
@@ -189,7 +189,7 @@ describe("waits", () => {
       pipelines: [{ label: "api", steps: [{ run: "sleep 2; exit 1", label: "server", background: true }, { wait: { port: 1, timeout: 30 } }] }],
     });
     const began = Date.now();
-    const result = await switchToWorkspace(ws, { bolt: "api" }, { platform: recorder(), environment: desktop, defaults: {} });
+    const result = await switchToWorkspace(ws, { pipeline: "api" }, { platform: recorder(), environment: desktop, defaults: {} });
     expect(Date.now() - began).toBeLessThan(10_000);
     expect(result.targets[1]!.error).toMatch(/^server stopped before it was ready — `wisp logs \w+`$/);
   }, 15_000);
@@ -201,12 +201,12 @@ describe("commands in windows", () => {
     const platform = recorder();
     const deps = { platform, environment: desktop, defaults: { terminal: "Terminal" } };
 
-    const first = await switchToWorkspace(ws, { bolt: "api" }, deps);
+    const first = await switchToWorkspace(ws, { pipeline: "api" }, deps);
     expect(first.targets[0]!.run).toBeDefined();
     const [run] = await listRuns();
     expect(run).toMatchObject({ kind: "window", where: "Terminal", label: "server", alive: true });
 
-    const second = await switchToWorkspace(ws, { bolt: "api" }, deps);
+    const second = await switchToWorkspace(ws, { pipeline: "api" }, deps);
     expect(second.targets[0]!.note).toMatch(/^already running/);
     expect(platform.calls).toEqual(["terminal server"]);
   });
@@ -244,7 +244,7 @@ describe("down", () => {
       ],
     });
     const deps = { platform: recorder(), environment: desktop, defaults: {} };
-    await switchToWorkspace(ws, { bolt: "api" }, deps);
+    await switchToWorkspace(ws, { pipeline: "api" }, deps);
     expect((await listRuns()).filter((run) => run.alive).map((run) => run.label).sort()).toEqual(["db", "server"]);
     expect(pipelineStatus(ws, resolvePipeline(ws, "api"), await listRuns())).toEqual({ commands: 1, running: 1, failing: 0 });
 
@@ -264,7 +264,7 @@ describe("down", () => {
       ],
     });
     const deps = { platform: recorder(), environment: desktop, defaults: {} };
-    await switchToWorkspace(ws, { bolt: "api" }, deps);
+    await switchToWorkspace(ws, { pipeline: "api" }, deps);
     const down = await downPipeline(ws, resolvePipeline(ws, "api"), { deps: true }, deps);
     expect(down.stopped.map((run) => run.label).sort()).toEqual(["db", "server"]);
     await expect(readFile(marker)).resolves.toBeDefined();
@@ -332,7 +332,7 @@ describe("steps that wait for others", () => {
     });
     const output: string[] = [];
     const began = Date.now();
-    const result = await switchToWorkspace(ws, { bolt: "check", onOutput: (_target, chunk) => void output.push(chunk) }, { platform: recorder(), environment: desktop, defaults: {} });
+    const result = await switchToWorkspace(ws, { pipeline: "check", onOutput: (_target, chunk) => void output.push(chunk) }, { platform: recorder(), environment: desktop, defaults: {} });
     expect(Date.now() - began).toBeLessThan(2500);
     expect(result.targets.map((target) => [target.label, target.ok, target.skipped ?? false])).toEqual([
       ["install", true, false],
@@ -389,7 +389,7 @@ describe("a run's pipeline", () => {
         },
       ],
     });
-    const result = await switchToWorkspace(ws, { bolt: "check" }, { platform: recorder(), environment: desktop, defaults: {} });
+    const result = await switchToWorkspace(ws, { pipeline: "check" }, { platform: recorder(), environment: desktop, defaults: {} });
     const { pipeline } = await import("../../../src/tui/screens/history.js");
     const entry = await getHistory(result.historyId as string);
     const graph = pipeline(entry!);
@@ -406,7 +406,7 @@ describe("a run's pipeline, from before runs kept their edges", () => {
   it("connects steps by the names they waited for, else to the stage before", async () => {
     const { pipeline } = await import("../../../src/tui/screens/history.js");
     const step = (label: string, stage: number, after?: string[]) => ({ kind: "command", label, value: label, ok: true, durationMs: 1, stage, ...(after ? { after } : {}) }) as never;
-    const entry = { id: "old", workspace: "/w", workspaceName: "W", bolt: "Grace1", startedAt: "2026-01-01T00:00:00.000Z", finishedAt: "2026-01-01T00:00:01.000Z", ok: true, steps: [step("up", 1), step("session", 2, ["up"]), step("ready", 2, ["up"]), step("open", 3)] } as never;
+    const entry = { id: "old", workspace: "/w", workspaceName: "W", pipeline: "Grace1", startedAt: "2026-01-01T00:00:00.000Z", finishedAt: "2026-01-01T00:00:01.000Z", ok: true, steps: [step("up", 1), step("session", 2, ["up"]), step("ready", 2, ["up"]), step("open", 3)] } as never;
     const graph = pipeline(entry);
     expect(graph.map((node) => node.after.map((at) => graph[at]?.label))).toEqual([[], ["up"], ["up"], ["session", "ready"]]);
   });
@@ -414,7 +414,7 @@ describe("a run's pipeline, from before runs kept their edges", () => {
   it("draws a step you stopped as cancelled, not failed", async () => {
     const { pipeline } = await import("../../../src/tui/screens/history.js");
     const step = (label: string, stage: number, extra: object) => ({ kind: "command", label, value: label, durationMs: 1, stage, ...extra }) as never;
-    const entry = { id: "stop", workspace: "/w", workspaceName: "W", bolt: "Dev", startedAt: "2026-01-01T00:00:00.000Z", finishedAt: "2026-01-01T00:00:01.000Z", ok: false, cancelled: true, steps: [step("postgres", 1, { ok: false, cancelled: true, error: "you stopped the run" }), step("web", 2, { ok: false, skipped: true })] } as never;
+    const entry = { id: "stop", workspace: "/w", workspaceName: "W", pipeline: "Dev", startedAt: "2026-01-01T00:00:00.000Z", finishedAt: "2026-01-01T00:00:01.000Z", ok: false, cancelled: true, steps: [step("postgres", 1, { ok: false, cancelled: true, error: "you stopped the run" }), step("web", 2, { ok: false, skipped: true })] } as never;
     const [postgres, web] = pipeline(entry);
     expect(postgres).toMatchObject({ label: "postgres", cancelled: true, ok: true });
     expect(web).toMatchObject({ label: "web", skipped: true });
@@ -428,9 +428,9 @@ describe("telling you a run failed", () => {
     const ws = workspace({ pipelines: [{ label: "Backup", steps: [{ run: "exit 3", label: "dump", finishes: true }] }] });
     process.env["WISP_NOTIFY"] = "failures";
     try {
-      await switchToWorkspace(ws, { bolt: "backup", watched: true }, { platform, environment: desktop, defaults: {} });
+      await switchToWorkspace(ws, { pipeline: "backup", watched: true }, { platform, environment: desktop, defaults: {} });
       expect(shown).toEqual([]);
-      const result = await switchToWorkspace(ws, { bolt: "backup", watched: false }, { platform, environment: desktop, defaults: {} });
+      const result = await switchToWorkspace(ws, { pipeline: "backup", watched: false }, { platform, environment: desktop, defaults: {} });
       expect(shown).toEqual([`✗ Backup failed | at dump: exited with code 3 · ${ws.name} · wisp history ${result.historyId}`]);
     } finally {
       process.env["WISP_NOTIFY"] = "off";
@@ -448,7 +448,7 @@ describe("telling you a run failed", () => {
     process.env["WISP_NOTIFY"] = "failures";
     try {
       await setNotify({ webhooks: [{ url: `http://127.0.0.1:${port}/hook-secret` }] });
-      const result = await switchToWorkspace(ws, { bolt: "backup", watched: false }, { platform: recorder(), environment: { ...desktop, gui: false }, defaults: {} });
+      const result = await switchToWorkspace(ws, { pipeline: "backup", watched: false }, { platform: recorder(), environment: { ...desktop, gui: false }, defaults: {} });
       const entry = await getHistory(result.historyId as string);
       expect(entry?.notified).toEqual([{ url: `http://127.0.0.1:${port}/…cret`, ok: false, problem: "410 Gone" }]);
       expect(entry?.ok).toBe(false);
@@ -464,7 +464,7 @@ describe("telling you a run failed", () => {
     const platform = { ...recorder(), notify: async (title: string) => void shown.push(title) };
     const flag = join(dir, "up");
     const ws = workspace({ pipelines: [{ label: "Check", steps: [{ run: `test -f "${flag}"`, label: "site", finishes: true }] }] });
-    const check = () => switchToWorkspace(ws, { bolt: "check", watched: false }, { platform, environment: desktop, defaults: {} });
+    const check = () => switchToWorkspace(ws, { pipeline: "check", watched: false }, { platform, environment: desktop, defaults: {} });
     process.env["WISP_NOTIFY"] = "changes";
     try {
       await check();
@@ -496,7 +496,7 @@ describe("inputs", () => {
       ],
     });
     const deps = { platform: recorder(), environment: desktop, defaults: {} };
-    const first = await switchToWorkspace(ws, { bolt: "deploy", inputs: { env: "staging" } }, deps);
+    const first = await switchToWorkspace(ws, { pipeline: "deploy", inputs: { env: "staging" } }, deps);
     expect(first.targets[0]).toMatchObject({ label: "deploy staging", ok: true });
     const entry = await getHistory(first.historyId as string);
     expect(entry?.inputs).toEqual({ env: "staging" });
@@ -510,7 +510,7 @@ describe("inputs", () => {
   it("runs nothing when a value isn't one word, however it got there", async () => {
     const marker = join(dir, "pwned");
     const ws = workspace({ pipelines: [{ label: "Deploy", inputs: { env: {} }, steps: [{ run: "echo {{env}}", finishes: true }] }] });
-    await expect(switchToWorkspace(ws, { bolt: "deploy", inputs: { env: `x; touch '${marker}'` } }, { platform: recorder(), environment: desktop, defaults: {} })).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    await expect(switchToWorkspace(ws, { pipeline: "deploy", inputs: { env: `x; touch '${marker}'` } }, { platform: recorder(), environment: desktop, defaults: {} })).rejects.toMatchObject({ code: "INVALID_INPUT" });
     await expect(readFile(marker, "utf8")).rejects.toThrow();
   });
 });
@@ -523,7 +523,7 @@ describe("stopping and retrying", () => {
     const controller = new AbortController();
     setTimeout(() => controller.abort(), 300);
     const began = Date.now();
-    const result = await switchToWorkspace(ws, { bolt: "build", signal: controller.signal }, { platform: recorder(), environment: desktop, defaults: {} });
+    const result = await switchToWorkspace(ws, { pipeline: "build", signal: controller.signal }, { platform: recorder(), environment: desktop, defaults: {} });
     expect(Date.now() - began).toBeLessThan(5000);
     expect(result.ok).toBe(false);
     expect(result.cancelled).toBe(true);
@@ -546,7 +546,7 @@ describe("stopping and retrying", () => {
       }
     }, 100);
     const began = Date.now();
-    const result = await switchToWorkspace(ws, { bolt: "dev" }, { platform: recorder(), environment: desktop, defaults: {} });
+    const result = await switchToWorkspace(ws, { pipeline: "dev" }, { platform: recorder(), environment: desktop, defaults: {} });
     clearInterval(stopper);
     expect(Date.now() - began).toBeLessThan(10_000);
     expect(result).toMatchObject({ ok: false, cancelled: true });
@@ -564,7 +564,7 @@ describe("stopping and retrying", () => {
         stopRun(server);
       }
     }, 20);
-    const result = await switchToWorkspace(ws, { bolt: "dev" }, { platform: recorder(), environment: desktop, defaults: {} });
+    const result = await switchToWorkspace(ws, { pipeline: "dev" }, { platform: recorder(), environment: desktop, defaults: {} });
     clearInterval(stopper);
     expect(result).toMatchObject({ ok: false, cancelled: true });
     expect(result.targets[0]).toMatchObject({ ok: false, cancelled: true, error: "you stopped server" });
@@ -574,7 +574,7 @@ describe("stopping and retrying", () => {
     const ws = workspace({
       pipelines: [{ label: "Dev", steps: [{ run: "sleep 3; exit 1", label: "server" }, { wait: { port: 1, timeout: 20 }, label: "up", after: "server" }] }],
     });
-    const result = await switchToWorkspace(ws, { bolt: "dev" }, { platform: recorder(), environment: desktop, defaults: {} });
+    const result = await switchToWorkspace(ws, { pipeline: "dev" }, { platform: recorder(), environment: desktop, defaults: {} });
     expect(result.ok).toBe(false);
     expect(result.cancelled).toBeUndefined();
     expect(result.targets[1]).toMatchObject({ ok: false, error: expect.stringContaining("server stopped before it was ready") });
@@ -586,7 +586,7 @@ describe("stopping and retrying", () => {
       pipelines: [{ label: "Backup", steps: [{ run: `sleep 37.25; touch "${join(dir, "went-on")}"`, label: "dump", finishes: true, timeout: 0.5 }, { run: "echo never", label: "clean", after: "dump", finishes: true }] }],
     });
     const began = Date.now();
-    const result = await switchToWorkspace(ws, { bolt: "backup" }, { platform: recorder(), environment: desktop, defaults: {} });
+    const result = await switchToWorkspace(ws, { pipeline: "backup" }, { platform: recorder(), environment: desktop, defaults: {} });
     expect(Date.now() - began).toBeLessThan(5000);
     expect(result.ok).toBe(false);
     expect(result.targets[0]).toMatchObject({ ok: false, error: "ran over its 0.5s timeout, so Wisp stopped it" });
@@ -598,7 +598,7 @@ describe("stopping and retrying", () => {
 
   it("leaves a command that finishes within its timeout alone", async () => {
     const ws = workspace({ pipelines: [{ label: "Check", steps: [{ run: "echo ok", label: "test", finishes: true, timeout: "1m" }] }] });
-    const result = await switchToWorkspace(ws, { bolt: "check" }, { platform: recorder(), environment: desktop, defaults: {} });
+    const result = await switchToWorkspace(ws, { pipeline: "check" }, { platform: recorder(), environment: desktop, defaults: {} });
     expect(result.targets[0]).toMatchObject({ ok: true });
   });
 
@@ -618,7 +618,7 @@ describe("stopping and retrying", () => {
       ],
     });
     const deps = { platform: recorder(), environment: desktop, defaults: {} };
-    const first = await switchToWorkspace(ws, { bolt: "check" }, deps);
+    const first = await switchToWorkspace(ws, { pipeline: "check" }, deps);
     const again = retryPlan(first);
     expect(again.map((step) => step.target.label)).toEqual(["test", "build"]);
 
@@ -635,7 +635,7 @@ describe("restart policies", () => {
     const ws = workspace({
       pipelines: [{ label: "api", steps: [{ run: `echo started >> '${counter}'; exit 1`, label: "server", background: true, restart: "on-failure" }] }],
     });
-    await switchToWorkspace(ws, { bolt: "api" }, { platform: recorder(), environment: desktop, defaults: {} });
+    await switchToWorkspace(ws, { pipeline: "api" }, { platform: recorder(), environment: desktop, defaults: {} });
     await new Promise((resolve) => setTimeout(resolve, 2600));
     const starts = (await readFile(counter, "utf8")).trim().split("\n").length;
     expect(starts).toBeGreaterThanOrEqual(2);
@@ -673,11 +673,11 @@ describe("history like a CI", () => {
       ],
     });
     const deps = { platform: recorder(), environment: desktop, defaults: {} };
-    await switchToWorkspace(ws, { bolt: "check" }, deps);
-    await switchToWorkspace(ws, { bolt: "check" }, deps);
-    const [latest, earlier] = await listHistory({ bolt: "Check" });
+    await switchToWorkspace(ws, { pipeline: "check" }, deps);
+    await switchToWorkspace(ws, { pipeline: "check" }, deps);
+    const [latest, earlier] = await listHistory({ pipeline: "Check" });
     expect([latest?.number, earlier?.number]).toEqual([2, 1]);
-    expect(latest?.steps.map((step) => [step.label, step.bolt])).toEqual([
+    expect(latest?.steps.map((step) => [step.label, step.pipeline])).toEqual([
       ["postgres", "Database"],
       ["test", undefined],
     ]);
@@ -702,7 +702,7 @@ describe("history like a CI", () => {
       first = false;
       void listHistory().then(([entry]) => entry && seen.push(entry));
     };
-    await switchToWorkspace(ws, { bolt: "check", onStep }, deps);
+    await switchToWorkspace(ws, { pipeline: "check", onStep }, deps);
     expect(seen).toHaveLength(1);
     expect(seen[0]).toMatchObject({ running: true, total: 2, pid: process.pid, steps: [] });
     expect(seen[0]?.pending?.map((step) => step.label)).toEqual(["lint", "test"]);
@@ -719,7 +719,7 @@ describe("history like a CI", () => {
 
   it("calls a run whose Wisp went away interrupted", async () => {
     const step = (label: string, log?: string) => ({ kind: "command" as const, label, value: `pnpm ${label}`, ok: false, durationMs: 0, ...(log ? { log } : {}) });
-    await recordHistory({ id: "aaaaaaaaaaaa", workspace: "/a/.wisp.json", workspaceName: "A", bolt: "Check", startedAt: "2026-01-01T00:00:00.000Z", finishedAt: "2026-01-01T00:00:00.000Z", ok: false, steps: [{ ...step("lint"), ok: true }], running: true, pid: 999_999_999, total: 3, pending: [step("test", "/logs/2.log"), step("build")] });
+    await recordHistory({ id: "aaaaaaaaaaaa", workspace: "/a/.wisp.json", workspaceName: "A", pipeline: "Check", startedAt: "2026-01-01T00:00:00.000Z", finishedAt: "2026-01-01T00:00:00.000Z", ok: false, steps: [{ ...step("lint"), ok: true }], running: true, pid: 999_999_999, total: 3, pending: [step("test", "/logs/2.log"), step("build")] });
     const [entry] = await listHistory();
     expect(entry?.running).toBeUndefined();
     expect(entry?.pending).toBeUndefined();
@@ -733,19 +733,19 @@ describe("history like a CI", () => {
   });
 
   it("shows a renamed workspace's runs under its name now, and a gone one's under the name it had", () => {
-    const run = (id: string, workspace: string, workspaceName: string): HistoryEntry => ({ id, workspace, workspaceName, bolt: "Check", startedAt: "2026-01-01T00:00:00.000Z", finishedAt: "2026-01-01T00:00:01.000Z", ok: true, steps: [] });
+    const run = (id: string, workspace: string, workspaceName: string): HistoryEntry => ({ id, workspace, workspaceName, pipeline: "Check", startedAt: "2026-01-01T00:00:00.000Z", finishedAt: "2026-01-01T00:00:01.000Z", ok: true, steps: [] });
     const named = withWorkspaceNames([run("a1", "/a/.wisp.json", "Mira"), run("a2", "/a/.wisp.json", "Mira Web"), run("b1", "/b/.wisp.json", "Gone")], new Map([["/a/.wisp.json", "Mira Web"]]));
     expect(named.map((entry) => entry.workspaceName)).toEqual(["Mira Web", "Mira Web", "Gone"]);
   });
 
   it("deletes runs by id, workspace or pipeline, keeping the ones still going", async () => {
-    const run = (id: string, bolt: string, workspace = "/a/.wisp.json", running = false): HistoryEntry => ({
-      id, workspace, workspaceName: "A", bolt, startedAt: "2026-01-01T00:00:00.000Z", finishedAt: "2026-01-01T00:00:01.000Z", ok: true, steps: [],
+    const run = (id: string, pipeline: string, workspace = "/a/.wisp.json", running = false): HistoryEntry => ({
+      id, workspace, workspaceName: "A", pipeline, startedAt: "2026-01-01T00:00:00.000Z", finishedAt: "2026-01-01T00:00:01.000Z", ok: true, steps: [],
       ...(running ? { running: true, pid: process.pid, total: 1 } : {}),
     });
     for (const entry of [run("a1", "Check"), run("a2", "Check (retry)"), run("a3", "Build"), run("b1", "Check", "/b/.wisp.json"), run("a4", "Check", "/a/.wisp.json", true)]) await recordHistory(entry);
 
-    const byPipeline = await forgetHistory({ workspace: "/a/.wisp.json", bolt: "check" });
+    const byPipeline = await forgetHistory({ workspace: "/a/.wisp.json", pipeline: "check" });
     expect(byPipeline.removed.map((entry) => entry.id).sort()).toEqual(["a1", "a2"]);
     expect(byPipeline.running.map((entry) => entry.id)).toEqual(["a4"]);
     expect((await listHistory()).map((entry) => entry.id).sort()).toEqual(["a3", "a4", "b1"]);

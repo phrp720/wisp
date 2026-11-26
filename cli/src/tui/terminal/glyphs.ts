@@ -15,8 +15,8 @@ export interface Glyphs {
   dot: string;
   here: string;
   arrow: string;
-  /** Before each bolt's name: what you run. Empty where emoji would show as boxes. */
-  bolt: string;
+  /** Before each pipeline's name: what you run. Empty where emoji would show as boxes. */
+  pipeline: string;
   /** Before the words shown while waiting: a star, one column wide (an emoji would be two). */
   spark: string;
   border: "round" | "classic";
@@ -33,7 +33,7 @@ const UNICODE: Glyphs = {
   dot: "●",
   here: "●",
   arrow: "›",
-  bolt: "⚡ ",
+  pipeline: "⚡ ",
   spark: "✦",
   border: "round",
 };
@@ -49,7 +49,7 @@ const ASCII: Glyphs = {
   dot: "*",
   here: "*",
   arrow: ">",
-  bolt: "",
+  pipeline: "",
   spark: "*",
   border: "classic",
 };

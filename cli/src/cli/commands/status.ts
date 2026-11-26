@@ -27,11 +27,11 @@ export async function status(options: { json?: boolean } = {}): Promise<void> {
     console.log(`${title(workspace)}  ${counts(workspace)}`);
     console.log(dim(tildify(workspace.file)));
 
-    if (workspace.bolts.length > 0) {
+    if (workspace.pipelines.length > 0) {
       console.log();
       printPipelines(workspace, false, here.withheld, await listRuns());
       console.log();
-      console.log(dim(`Run one with \`wisp ${shortest(workspace.bolts[0]!, workspace.bolts, true)}\`, or \`wisp pick\` to choose.`));
+      console.log(dim(`Run one with \`wisp ${shortest(workspace.pipelines[0]!, workspace.pipelines, true)}\`, or \`wisp pick\` to choose.`));
     } else {
       console.log();
       console.log(noPipelinesLine(here, "No pipelines in this file yet. Add some, then `wisp <pipeline>`."));

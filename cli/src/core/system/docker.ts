@@ -8,7 +8,7 @@ const exec = promisify(execFile);
 
 /** A container of a compose project, as the TUI and `wisp ps` show it. */
 export interface Container {
-  /** The compose file it belongs to — how Wisp knows it is a bolt's. */
+  /** The compose file it belongs to — how Wisp knows it is a pipeline's. */
   file: string;
   project: string;
   service: string;

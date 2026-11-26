@@ -21,22 +21,22 @@ export const rename: CommandDef<{ json?: boolean }> = {
     }
     const [query, ref, label] = names.length === 3 ? names : [undefined, names[0], names[1]];
     const read = await workspaceFor(query);
-    const { bolt, candidates } = matchPipeline(read.workspace, ref as string);
-    if (!bolt) {
+    const { pipeline, candidates } = matchPipeline(read.workspace, ref as string);
+    if (!pipeline) {
       if (candidates.length > 1) throw new WispError(`"${ref}" could be ${candidates.map((candidate) => `"${candidate.label}"`).join(" or ")}: say more of the name`, "AMBIGUOUS");
       throw new WispError(`${read.workspace.name} has no pipeline called "${ref}"`, "NO_PIPELINE");
     }
 
     const name = (label as string).trim();
-    await renamePipeline(read.workspace.file, bolt.label, name, { keepTrust: false });
+    await renamePipeline(read.workspace.file, pipeline.label, name, { keepTrust: false });
     const after = await readProjectFile(read.workspace.file);
-    const renamed = after.workspace.bolts.find((entry) => entry.label === name);
+    const renamed = after.workspace.pipelines.find((entry) => entry.label === name);
     const trust = read.workspace.personal ? "personal" : after.trust;
 
-    if (options.json) return emitJson({ workspace: read.workspace.name, file: read.workspace.file, from: bolt.label, to: name, trust });
+    if (options.json) return emitJson({ workspace: read.workspace.name, file: read.workspace.file, from: pipeline.label, to: name, trust });
 
-    console.log(`${green("✓")} renamed ${bold(bolt.label)} to ${bold(name)} in ${read.workspace.name} ${dim("· with the steps that run it")}`);
+    console.log(`${green("✓")} renamed ${bold(pipeline.label)} to ${bold(name)} in ${read.workspace.name} ${dim("· with the steps that run it")}`);
     if (read.trust === "trusted" && trust !== "trusted") console.log(yellow("The file changed, so its commands wait for `wisp trust` again."));
-    if (renamed) console.log(dim(`Run it from any folder with \`wisp ${slugify(read.workspace.name)} ${shortest(renamed, after.workspace.bolts)}\`.`));
+    if (renamed) console.log(dim(`Run it from any folder with \`wisp ${slugify(read.workspace.name)} ${shortest(renamed, after.workspace.pipelines)}\`.`));
   },
 };

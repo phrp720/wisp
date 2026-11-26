@@ -3,7 +3,7 @@ import { basename, dirname } from "node:path";
 import type { AppRef, Diagnostic, FileRef, Folder, Link, OS, OpenWithDefaults, TrustState, Workspace, WorkspaceRead } from "../types.js";
 import { APPS, FILES, FOLDERS, LINKS, assets, commands } from "./assets.js";
 import { type Context, type Entry, type Sources, allow, inlineEntries, sectionEntries } from "./context.js";
-import { bolts } from "./pipelines.js";
+import { pipelines } from "./pipelines.js";
 import { isRecord, optionalString, plural } from "./values.js";
 
 /** Keys a workspace file may set. Anything else is a typo worth reporting. */
@@ -79,7 +79,7 @@ export function interpret(
     // parsed and shown whatever happens; they only become part of the workspace once you
     // have looked at them and said yes to these bytes.
     commands: trusted ? declaredCommands : [],
-    bolts: [],
+    pipelines: [],
   };
 
   if (!trusted) {
@@ -101,7 +101,7 @@ export function interpret(
   const notes = scalar("notes");
   if (notes) workspace.notes = notes;
 
-  workspace.bolts = bolts(pipelineEntries, ctx);
+  workspace.pipelines = pipelines(pipelineEntries, ctx);
 
   if (!trusted && ctx.withheld.length > 0) {
     const commandCount = ctx.withheld.filter((item) => item.kind === "command").length;

@@ -40,8 +40,8 @@ describe("the TUI", () => {
   });
 
   it("puts a dot before a run's workspace only when something comes before it", async () => {
-    const plain: HistoryEntry = { id: "cccccccccccc", workspace: acme.workspace.file, workspaceName: "Acme", bolt: "Dev", number: 1, startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), ok: true, steps: [] };
-    const committed: HistoryEntry = { ...plain, id: "dddddddddddd", bolt: "Verify", git: { branch: "main", commit: "630d9e5", subject: "feat: login" } };
+    const plain: HistoryEntry = { id: "cccccccccccc", workspace: acme.workspace.file, workspaceName: "Acme", pipeline: "Dev", number: 1, startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), ok: true, steps: [] };
+    const committed: HistoryEntry = { ...plain, id: "dddddddddddd", pipeline: "Verify", git: { branch: "main", commit: "630d9e5", subject: "feat: login" } };
     const app = await open(services({ history: async () => [committed, plain] }));
     app.stdin.write("h");
     await eventually(() => expect(app.lastFrame()).toContain("feat: login  · A"));
@@ -103,7 +103,7 @@ describe("the TUI", () => {
   });
 
   it("puts History's keys along the bottom, like the other tabs, and keeps your run across ?", async () => {
-    const run = (id: string, number: number): HistoryEntry => ({ id, workspace: acme.workspace.file, workspaceName: "Acme", bolt: "Check", number, startedAt: new Date(Date.now() - number * 60_000).toISOString(), finishedAt: new Date().toISOString(), ok: true, steps: [] });
+    const run = (id: string, number: number): HistoryEntry => ({ id, workspace: acme.workspace.file, workspaceName: "Acme", pipeline: "Check", number, startedAt: new Date(Date.now() - number * 60_000).toISOString(), finishedAt: new Date().toISOString(), ok: true, steps: [] });
     const app = await open(services({ history: async () => [run("bbbbbbbbbbbb", 2), run("aaaaaaaaaaaa", 1)] }));
     app.stdin.write("h");
     await tick();
@@ -131,7 +131,7 @@ describe("the TUI", () => {
   });
 
   it("shows a renamed workspace's runs in History under the name it has now", async () => {
-    const run = (id: string, workspace: string, workspaceName: string, bolt: string): HistoryEntry => ({ id, workspace, workspaceName, bolt, number: 1, startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), ok: true, steps: [] });
+    const run = (id: string, workspace: string, workspaceName: string, pipeline: string): HistoryEntry => ({ id, workspace, workspaceName, pipeline, number: 1, startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), ok: true, steps: [] });
     const app = await open(services({ history: async () => [run("aaaaaaaaaaaa", acme.workspace.file, "Acme Old", "Check"), run("bbbbbbbbbbbb", acme.workspace.file, "Acme", "Lint"), run("cccccccccccc", "/dev/gone/.wisp.json", "Gone", "Deploy")] }));
     app.stdin.write("h");
     await tick();
@@ -146,7 +146,7 @@ describe("the TUI", () => {
   });
 
   it("cuts a long pipeline name in History short, never into its count", async () => {
-    const entry: HistoryEntry = { id: "", workspace: acme.workspace.file, workspaceName: "Acme", bolt: "Work on the whole Flower Testbed", number: 1, startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), ok: true, steps: [] };
+    const entry: HistoryEntry = { id: "", workspace: acme.workspace.file, workspaceName: "Acme", pipeline: "Work on the whole Flower Testbed", number: 1, startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), ok: true, steps: [] };
     const app = await open(services({ history: async () => Array.from({ length: 14 }, (_, at) => ({ ...entry, id: `${at}`.padStart(12, "a"), number: at + 1 })) }));
     app.stdin.write("h");
     await tick();
@@ -160,7 +160,7 @@ describe("the TUI", () => {
   });
 
   it("shows a run still going in History, and D deletes a finished run or a pipeline's runs after asking", async () => {
-    const done: HistoryEntry = { id: "aaaaaaaaaaaa", workspace: acme.workspace.file, workspaceName: "Acme", bolt: "Check", number: 1, startedAt: new Date(Date.now() - 90_000).toISOString(), finishedAt: new Date(Date.now() - 80_000).toISOString(), ok: true, steps: [] };
+    const done: HistoryEntry = { id: "aaaaaaaaaaaa", workspace: acme.workspace.file, workspaceName: "Acme", pipeline: "Check", number: 1, startedAt: new Date(Date.now() - 90_000).toISOString(), finishedAt: new Date(Date.now() - 80_000).toISOString(), ok: true, steps: [] };
     const going: HistoryEntry = { ...done, id: "bbbbbbbbbbbb", number: 2, ok: false, running: true, pid: 1, total: 3, startedAt: new Date().toISOString(), steps: [{ kind: "command", label: "lint", value: "pnpm lint", ok: true, durationMs: 1000 }] };
     const forgetRuns = vi.fn(async () => undefined);
     const app = await open(services({ history: async () => [going, done], forgetRuns }));
@@ -240,8 +240,8 @@ describe("the TUI", () => {
 
   it("asks about removing a step on its row in the editor, and esc keeps it", async () => {
     const removeStep = vi.fn(async () => undefined);
-    const bolt = async () => ({ label: "Work on api", steps: [{ folder: "apps/api" }, { run: "pnpm dev" }] });
-    const app = await open(services({ editing: { ...services().editing, bolt, removeStep } }));
+    const pipeline = async () => ({ label: "Work on api", steps: [{ folder: "apps/api" }, { run: "pnpm dev" }] });
+    const app = await open(services({ editing: { ...services().editing, pipeline, removeStep } }));
     app.stdin.write("e");
     await eventually(() => expect(app.lastFrame()).toMatch(/❯ .*1 .*apps\/api/));
     await tick();
@@ -269,10 +269,10 @@ describe("the TUI", () => {
   it("opens a run that is going on the step it is on, with its output so far and the steps still to come", async () => {
     const step = (label: string) => ({ kind: "command" as const, label, value: `pnpm ${label}`, ok: false, durationMs: 0, finishes: true });
     const going: HistoryEntry = {
-      id: "cccccccccccc", workspace: acme.workspace.file, workspaceName: "Acme", bolt: "Check", number: 3, startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), ok: false,
+      id: "cccccccccccc", workspace: acme.workspace.file, workspaceName: "Acme", pipeline: "Check", number: 3, startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), ok: false,
       steps: [{ ...step("lint"), ok: true, durationMs: 1200 }],
       running: true, pid: 1, total: 3,
-      pending: [{ ...step("test"), bolt: "Tests", running: true, log: "/logs/2.log" }, step("build")],
+      pending: [{ ...step("test"), pipeline: "Tests", running: true, log: "/logs/2.log" }, step("build")],
     };
     const readLog = vi.fn(async (path: string) => (path === "/logs/2.log" ? "compiling the tests" : ""));
     const app = await open(services({ history: async () => [going], readLog }));
@@ -348,7 +348,7 @@ describe("the TUI", () => {
 
   it("asks on the pipeline's row before running a pipeline that asks first: y runs it, esc runs nothing", async () => {
     const run = vi.fn(services().run);
-    const questions = vi.fn(async (_read: WorkspaceRead, bolt: string) => (bolt === "Work on web" ? ["Deploy the web?"] : []));
+    const questions = vi.fn(async (_read: WorkspaceRead, pipeline: string) => (pipeline === "Work on web" ? ["Deploy the web?"] : []));
     const app = await open(services({ run, questions }));
     app.stdin.write(ARROW_DOWN);
     await eventually(() => expect(app.lastFrame()).toContain("❯ Work on web"));
@@ -373,10 +373,10 @@ describe("the TUI", () => {
 
   it("asks for a pipeline's inputs in a form, then its question with the values in it, then runs with them", async () => {
     const run = vi.fn(services().run);
-    const inputs = vi.fn(async (_read: WorkspaceRead, bolt: string) =>
-      bolt === "Work on web" ? [{ name: "env", ask: "Deploy where?", choices: ["staging", "production"] }, { name: "tag", ask: "Which tag?", default: "latest" }] : [],
+    const inputs = vi.fn(async (_read: WorkspaceRead, pipeline: string) =>
+      pipeline === "Work on web" ? [{ name: "env", ask: "Deploy where?", choices: ["staging", "production"] }, { name: "tag", ask: "Which tag?", default: "latest" }] : [],
     );
-    const questions = vi.fn(async (_read: WorkspaceRead, _bolt: string, values?: Record<string, string>) => (values?.["env"] ? [`Deploy to ${values["env"]}?`] : []));
+    const questions = vi.fn(async (_read: WorkspaceRead, _pipeline: string, values?: Record<string, string>) => (values?.["env"] ? [`Deploy to ${values["env"]}?`] : []));
     const app = await open(services({ run, inputs, questions }));
     app.stdin.write(ARROW_DOWN);
     await eventually(() => expect(app.lastFrame()).toContain("❯ Work on web"));
@@ -399,7 +399,7 @@ describe("the TUI", () => {
 
   it("says under the field when a value isn't one word, and runs nothing", async () => {
     const run = vi.fn(services().run);
-    const inputs = vi.fn(async (_read: WorkspaceRead, bolt: string) => (bolt === "Work on web" ? [{ name: "tag", ask: "Which tag?" }] : []));
+    const inputs = vi.fn(async (_read: WorkspaceRead, pipeline: string) => (pipeline === "Work on web" ? [{ name: "tag", ask: "Which tag?" }] : []));
     const app = await open(services({ run, inputs }));
     app.stdin.write(ARROW_DOWN);
     await eventually(() => expect(app.lastFrame()).toContain("❯ Work on web"));
@@ -505,7 +505,7 @@ describe("the TUI", () => {
     await tick();
     app.stdin.write(ARROW_RIGHT);
     await tick();
-    // On a bolt, t opens the trust dialog; ⏎ on its Cancel must stop there.
+    // On a pipeline, t opens the trust dialog; ⏎ on its Cancel must stop there.
     app.stdin.write("t");
     await tick();
     await eventually(() => expect(app.lastFrame()).toContain("Trust infra?"));
@@ -561,7 +561,7 @@ describe("the TUI", () => {
       number: 1,
       workspace: acme.workspace.file,
       workspaceName: "Acme",
-      bolt: "Cleanup",
+      pipeline: "Cleanup",
       startedAt: new Date(Date.now() - 60_000).toISOString(),
       finishedAt: new Date(Date.now() - 58_000).toISOString(),
       ok: true,
@@ -615,7 +615,7 @@ describe("the TUI", () => {
     }
     await eventually(() => expect(run).not.toHaveBeenCalled());
     await eventually(() => expect(deleteProjectFile).not.toHaveBeenCalled());
-    // Still on the workspaces: D asks about the workspace again, not about a bolt.
+    // Still on the workspaces: D asks about the workspace again, not about a pipeline.
     app.stdin.write("D");
     await tick();
     await eventually(() => expect(app.lastFrame()).toContain("Delete its .wisp.json?"));
@@ -676,14 +676,14 @@ describe("the TUI", () => {
       trust: vi.fn(async () => {
         current = shop("trusted");
       }),
-      run: async (target, bolt, callbacks) => {
-        ran.push(`${bolt}:${target.workspace.trusted ? "trusted" : "untrusted"}`);
-        return base.run(target, bolt, callbacks);
+      run: async (target, pipeline, callbacks) => {
+        ran.push(`${pipeline}:${target.workspace.trusted ? "trusted" : "untrusted"}`);
+        return base.run(target, pipeline, callbacks);
       },
     });
     const app = await open(api);
 
-    // Its own step is a link, but the bolt it needs runs a command: ⏎ asks, nothing starts.
+    // Its own step is a link, but the pipeline it needs runs a command: ⏎ asks, nothing starts.
     app.stdin.write("\r");
     await tick();
     await eventually(() => expect(app.lastFrame()).toContain("Trust Shop?"));
@@ -698,7 +698,7 @@ describe("the TUI", () => {
     await eventually(() => expect(ran).toEqual([]));
     await eventually(() => expect(app.lastFrame()).toContain("didn't run"));
 
-    // A bolt with nothing waiting for trust runs straight away.
+    // A pipeline with nothing waiting for trust runs straight away.
     app.stdin.write(ARROW_DOWN);
     await tick();
     app.stdin.write(ARROW_DOWN);
@@ -710,7 +710,7 @@ describe("the TUI", () => {
     app.stdin.write("\u001B");
     await tick();
 
-    // Trust and run: trusts the file, then runs the bolt, whole.
+    // Trust and run: trusts the file, then runs the pipeline, whole.
     app.stdin.write("\u001B[A");
     await tick();
     app.stdin.write("\u001B[A");
@@ -784,7 +784,7 @@ describe("the TUI", () => {
     });
     const alive = (label: string, id: string) => ({ kind: "background", workspace: shop.workspace.file, workspaceName: "Shop", pid: 1, startedAt: new Date().toISOString(), alive: true, log: "/l", id, label, command: label, asset: `command:${label}` });
     const step = (kind: string, label: string) => ({ kind, label, value: label, ok: true, durationMs: 10 });
-    const last = { id: "a1b2c3d4e5f6", number: 14, workspace: shop.workspace.file, workspaceName: "Shop", bolt: "Dev", startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), ok: true, steps: [step("command", "db"), step("command", "web"), step("wait", "up"), step("link", "http://localhost:3000")] };
+    const last = { id: "a1b2c3d4e5f6", number: 14, workspace: shop.workspace.file, workspaceName: "Shop", pipeline: "Dev", startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), ok: true, steps: [step("command", "db"), step("command", "web"), step("wait", "up"), step("link", "http://localhost:3000")] };
     const app = render(<App services={services({ runs: async () => [alive("db", "d1"), alive("web", "w1")] as never, history: async () => [last] as never }, { reads: [shop], here: shop.workspace.file, unreadable: [] })} glyphs={unicode} size={{ columns: 120, rows: 40 }} />);
     await eventually(() => expect(app.lastFrame()).toMatch(/│ ● db │ ─+▶ │ ● web │ ─+▶ │ ✓ up │ ─+▶ │ ✓ http:\/\/localhost:3000 │/));
     expect(app.lastFrame()).toContain("Running now, from #14:");
@@ -792,7 +792,7 @@ describe("the TUI", () => {
 
   it("says a pipeline was stopped, not that it ran, after it was taken down", async () => {
     const shop = read("/dev/shop/.wisp.json", { name: "Shop", pipelines: [{ label: "Dev", steps: [{ run: "pnpm dev", label: "web" }] }] });
-    const entry = (id: string, bolt: string, number: number, minutes: number) => ({ id, number, workspace: shop.workspace.file, workspaceName: "Shop", bolt, startedAt: new Date(Date.now() - minutes * 60_000).toISOString(), finishedAt: new Date(Date.now() - minutes * 60_000).toISOString(), ok: true, steps: [] });
+    const entry = (id: string, pipeline: string, number: number, minutes: number) => ({ id, number, workspace: shop.workspace.file, workspaceName: "Shop", pipeline, startedAt: new Date(Date.now() - minutes * 60_000).toISOString(), finishedAt: new Date(Date.now() - minutes * 60_000).toISOString(), ok: true, steps: [] });
     const app = render(<App services={services({ history: async () => [entry("bbb", "Dev (down)", 15, 1), entry("aaa", "Dev", 14, 7)] as never }, { reads: [shop], here: shop.workspace.file, unreadable: [] })} glyphs={unicode} size={{ columns: 120, rows: 40 }} />);
     await eventually(() => expect(app.lastFrame()).toContain("– stopped 1m ago"));
     expect(app.lastFrame()).toContain("last run ✓ #14");
@@ -801,7 +801,7 @@ describe("the TUI", () => {
 
   it("says a cancelled run was cancelled, not that it failed", async () => {
     const shop = read("/dev/shop/.wisp.json", { name: "Shop", pipelines: [{ label: "Dev", steps: [{ run: "pnpm dev", label: "web" }] }] });
-    const cancelled = { id: "ccc", number: 11, workspace: shop.workspace.file, workspaceName: "Shop", bolt: "Dev", startedAt: new Date(Date.now() - 60_000).toISOString(), finishedAt: new Date().toISOString(), ok: false, cancelled: true, steps: [] };
+    const cancelled = { id: "ccc", number: 11, workspace: shop.workspace.file, workspaceName: "Shop", pipeline: "Dev", startedAt: new Date(Date.now() - 60_000).toISOString(), finishedAt: new Date().toISOString(), ok: false, cancelled: true, steps: [] };
     const app = render(<App services={services({ history: async () => [cancelled] as never }, { reads: [shop], here: shop.workspace.file, unreadable: [] })} glyphs={unicode} size={{ columns: 120, rows: 40 }} />);
     await eventually(() => expect(app.lastFrame()).toContain("⊘ cancelled 1m ago"));
     expect(app.lastFrame()).not.toContain("failed");
@@ -809,7 +809,7 @@ describe("the TUI", () => {
 
   it("says a cancelled run was cancelled, not that it failed", async () => {
     const shop = read("/dev/shop/.wisp.json", { name: "Shop", pipelines: [{ label: "Dev", steps: [{ run: "pnpm dev", label: "web" }] }] });
-    const cancelled = { id: "ccc", number: 11, workspace: shop.workspace.file, workspaceName: "Shop", bolt: "Dev", startedAt: new Date(Date.now() - 60_000).toISOString(), finishedAt: new Date().toISOString(), ok: false, cancelled: true, steps: [] };
+    const cancelled = { id: "ccc", number: 11, workspace: shop.workspace.file, workspaceName: "Shop", pipeline: "Dev", startedAt: new Date(Date.now() - 60_000).toISOString(), finishedAt: new Date().toISOString(), ok: false, cancelled: true, steps: [] };
     const app = render(<App services={services({ history: async () => [cancelled] as never }, { reads: [shop], here: shop.workspace.file, unreadable: [] })} glyphs={unicode} size={{ columns: 120, rows: 40 }} />);
     await eventually(() => expect(app.lastFrame()).toContain("⊘ cancelled 1m ago"));
     expect(app.lastFrame()).not.toContain("failed");
@@ -1165,7 +1165,7 @@ describe("the TUI", () => {
       dir: "/dev/shop",
       name: "Shop",
       found: ["package.json pnpm dev"],
-      bolts: [
+      pipelines: [
         { label: "Services", steps: ["start Docker services: postgres"] },
         { label: "Work on Shop", steps: ["start Shop dev"] },
         { label: "Check", steps: ["run test"] },
@@ -1188,7 +1188,7 @@ describe("the TUI", () => {
   });
 
   it("stops offering setup in a folder after d, don't ask again", async () => {
-    const suggestion = { dir: "/dev/shop", name: "Shop", found: [], bolts: [{ label: "Services", steps: ["start Docker services: postgres"] }], contents: "{}" };
+    const suggestion = { dir: "/dev/shop", name: "Shop", found: [], pipelines: [{ label: "Services", steps: ["start Docker services: postgres"] }], contents: "{}" };
     const setUp = vi.fn(async () => infra.workspace.file);
     const declineSetup = vi.fn(async () => undefined);
     const app = await open(services({ suggestSetup: async () => suggestion, setUp, declineSetup }, { reads: [infra], unreadable: [] }));
@@ -1457,7 +1457,7 @@ describe("the mouse", () => {
       dir: "/dev/shop",
       name: "Shop",
       found: ["package.json pnpm dev"],
-      bolts: [
+      pipelines: [
         { label: "Services", steps: ["start Docker services: postgres"] },
         { label: "Check", steps: ["run test"] },
       ],
@@ -1553,8 +1553,8 @@ describe("the mouse", () => {
 
   it("chooses a step in the pipeline editor with a click, and opens it with a second", async () => {
     const api = services();
-    const bolt = async (_file: string, label: string) => ({ label, steps: [{ folder: "apps/api" }, { run: "pnpm dev" }] });
-    const { app, mouse, frame } = await withMouse({ ...api, editing: { ...api.editing, bolt } as never });
+    const pipeline = async (_file: string, label: string) => ({ label, steps: [{ folder: "apps/api" }, { run: "pnpm dev" }] });
+    const { app, mouse, frame } = await withMouse({ ...api, editing: { ...api.editing, pipeline } as never });
     app.stdin.write("e");
     await tick();
     await tick();
@@ -1571,14 +1571,14 @@ describe("the mouse", () => {
   it("chooses and opens runs in History, shows a step's log with a click, and filters by pipeline", async () => {
     const at10 = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
     const check = {
-      id: "c7", number: 7, workspace: acme.workspace.file, workspaceName: "Acme", bolt: "Check", startedAt: at10(10), finishedAt: at10(9), ok: false,
+      id: "c7", number: 7, workspace: acme.workspace.file, workspaceName: "Acme", pipeline: "Check", startedAt: at10(10), finishedAt: at10(9), ok: false,
       steps: [
-        { kind: "command" as const, label: "postgres", value: "docker compose up", ok: true, durationMs: 1200, bolt: "Database" },
+        { kind: "command" as const, label: "postgres", value: "docker compose up", ok: true, durationMs: 1200, pipeline: "Database" },
         { kind: "command" as const, label: "lint", value: "pnpm lint", ok: true, durationMs: 900, log: "/logs/1", finishes: true },
         { kind: "command" as const, label: "test", value: "pnpm test", ok: false, error: "exited with code 1", durationMs: 2100, log: "/logs/2", finishes: true },
       ],
     };
-    const web = { id: "w3", number: 3, workspace: acme.workspace.file, workspaceName: "Acme", bolt: "Work on web", startedAt: at10(20), finishedAt: at10(20), ok: true, steps: [{ kind: "folder" as const, label: "web", value: "apps/web", ok: true, durationMs: 5 }] };
+    const web = { id: "w3", number: 3, workspace: acme.workspace.file, workspaceName: "Acme", pipeline: "Work on web", startedAt: at10(20), finishedAt: at10(20), ok: true, steps: [{ kind: "folder" as const, label: "web", value: "apps/web", ok: true, durationMs: 5 }] };
     const lint = Array.from({ length: 60 }, (_, line) => `lint line ${line + 1}`).join("\n");
     const readLog = vi.fn(async (path: string) => (path === "/logs/2" ? "FAIL divides by zero" : lint));
     const mouse = terminalMouse(() => undefined);
@@ -1625,7 +1625,7 @@ describe("the mouse", () => {
     await eventually(() => expect(frame()).not.toContain("run postgres"));
     await eventually(() => expect(frame()).toContain("lint line 9"));
 
-    // Back to the runs: the bolts on the left filter them.
+    // Back to the runs: the pipelines on the left filter them.
     app.stdin.write("\u001B");
     await tick();
     mouse.emit({ kind: "click", ...(await spot(frame, "Work on web   ")) });

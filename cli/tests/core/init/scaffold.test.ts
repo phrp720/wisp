@@ -31,11 +31,11 @@ async function files(tree: Record<string, unknown>): Promise<void> {
 async function draft() {
   const result = await draftProject(dir);
   const raw = JSON.parse(result.contents) as { name: string; pipelines: { label: string; color?: string; steps: unknown[]; down?: unknown[] }[] };
-  // Every bolt gets a colour, and no two the same; compared apart from the rest, since it is random.
-  const colors = raw.pipelines.map((bolt) => bolt.color);
+  // Every pipeline gets a colour, and no two the same; compared apart from the rest, since it is random.
+  const colors = raw.pipelines.map((pipeline) => pipeline.color);
   expect(colors.every((color) => /^#[0-9a-f]{6}$/.test(color ?? ""))).toBe(true);
   expect(new Set(colors).size).toBe(colors.length);
-  const parsed = { ...raw, pipelines: raw.pipelines.map(({ color: _color, ...bolt }) => bolt) };
+  const parsed = { ...raw, pipelines: raw.pipelines.map(({ color: _color, ...pipeline }) => pipeline) };
   return { ...result, parsed };
 }
 
@@ -59,7 +59,7 @@ describe("init reads what the project already has", () => {
     const { parsed, detected } = await draft();
 
     expect(parsed.name).toBe("Root");
-    expect(parsed.pipelines.map((bolt) => bolt.label)).toEqual(["Services", "Work on api", "Work on web", "Run everything", "Check"]);
+    expect(parsed.pipelines.map((pipeline) => pipeline.label)).toEqual(["Services", "Work on api", "Work on web", "Run everything", "Check"]);
     expect(parsed.pipelines[0]).toEqual({ label: "Services", steps: [{ compose: "compose.yaml" }] });
     expect(parsed.pipelines[1]!.steps).toEqual([
       { pipeline: "Services", label: "services" },
@@ -87,7 +87,7 @@ describe("init reads what the project already has", () => {
   it("uses a task runner when there is no package to start", async () => {
     await files({ Makefile: ".PHONY: dev test\ndev:\n\tgo run ./cmd/server\n\ntest:\n\tgo test ./...\n" });
     const { parsed } = await draft();
-    expect(parsed.pipelines.map((bolt) => [bolt.label, bolt.steps])).toEqual([
+    expect(parsed.pipelines.map((pipeline) => [pipeline.label, pipeline.steps])).toEqual([
       [`Work on ${parsed.name}`, [{ run: "make dev", label: `${parsed.name} dev` }]],
       ["Check", [{ run: "make test", label: "test", finishes: true }]],
     ]);
@@ -120,7 +120,7 @@ describe("init reads what the project already has", () => {
 
   it("does not mistake a production start script for a dev server", async () => {
     await files({ "package.json": { name: "svc", scripts: { start: "node dist/index.js", test: "node --test" } } });
-    expect((await draft()).parsed.pipelines.map((bolt) => bolt.label)).toEqual(["Check"]);
+    expect((await draft()).parsed.pipelines.map((pipeline) => pipeline.label)).toEqual(["Check"]);
   });
 
   it("falls back to folders when there is nothing to run", async () => {
@@ -137,7 +137,7 @@ describe("init reads what the project already has", () => {
     await writeProjectDraft(result);
     const read = interpret({ main: JSON.parse(result.contents) }, { file: result.file, personal: false, trust: "trusted", os: "darwin" });
     expect(read.diagnostics).toEqual([]);
-    expect(read.workspace.bolts.map((bolt) => bolt.label)).toEqual(["Services", "Work on App", "Check"]);
+    expect(read.workspace.pipelines.map((pipeline) => pipeline.label)).toEqual(["Services", "Work on App", "Check"]);
     await expect(writeProjectDraft(result)).rejects.toThrow(/already exists/);
   });
 

@@ -15,7 +15,7 @@ export const LONG_RUN_MS = 30_000;
 
 export interface RunEnd {
   ok: boolean;
-  bolt: string;
+  pipeline: string;
   workspace: string;
   workspaceFile?: string;
   failedStep?: string;
@@ -56,7 +56,7 @@ export function failureLines(end: RunEnd): string | undefined {
 }
 
 function headline(end: RunEnd): string {
-  return end.ok ? (end.previousOk === false ? `${end.bolt} works again` : `${end.bolt} finished`) : end.cancelled ? `${end.bolt} was cancelled` : `${end.bolt} failed`;
+  return end.ok ? (end.previousOk === false ? `${end.pipeline} works again` : `${end.pipeline} finished`) : end.cancelled ? `${end.pipeline} was cancelled` : `${end.pipeline} failed`;
 }
 
 export function describeEnd(end: RunEnd, marks: "glyphs" | "emoji" | "none" = "glyphs"): { title: string; message: string } {
@@ -267,7 +267,7 @@ export function webhookRequest(url: string, end: RunEnd, host = hostname(), now 
       text,
       ok: end.ok,
       ...(end.cancelled ? { cancelled: true } : {}),
-      pipeline: end.bolt,
+      pipeline: end.pipeline,
       workspace: end.workspace,
       ...(end.failedStep ? { failedStep: end.failedStep } : {}),
       ...(reason ? { error: reason } : {}),

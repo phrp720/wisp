@@ -64,7 +64,7 @@ export function perOS(value: unknown, at: string, ctx: Context): Picked {
 
   if (entries.length === 0) return { kind: "missing" };
 
-  // Labelled by the first value written, so the label is the same on every OS — a bolt
+  // Labelled by the first value written, so the label is the same on every OS — a pipeline
   // that names it has to resolve everywhere, not just where it was written.
   const label = (entries[0] as [OS, string])[1];
   const here = entries.find(([os]) => os === ctx.os);

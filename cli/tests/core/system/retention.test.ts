@@ -6,7 +6,8 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { stateDir } from "../../../src/core/paths.js";
-import { tidyState, trimLog } from "../../../src/core/system/processes.js";
+import { listRuns, tidyState, trimLog } from "../../../src/core/system/processes.js";
+import { listHistory } from "../../../src/core/history.js";
 
 let dir: string;
 
@@ -31,7 +32,7 @@ async function file(path: string, text: string, hoursAgo = 0) {
   await utimes(path, at, at);
 }
 const run = (id: string, alive: boolean) => ({ id, kind: "background", label: id, command: "x", workspace: "/w/.wisp.json", workspaceName: "W", asset: `command:${id}`, pid: alive ? process.pid : 999_999, startedAt: new Date().toISOString(), log: join(logs(), `${id}.log`) });
-const historyRun = (id: string, stepLogs: string[]) => ({ id, workspace: "/w/.wisp.json", workspaceName: "W", bolt: "B", startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), ok: true, steps: stepLogs.map((log) => ({ kind: "command", label: "c", value: "c", ok: true, durationMs: 1, log })) });
+const historyRun = (id: string, stepLogs: string[]) => ({ id, workspace: "/w/.wisp.json", workspaceName: "W", pipeline: "B", startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), ok: true, steps: stepLogs.map((log) => ({ kind: "command", label: "c", value: "c", ok: true, durationMs: 1, log })) });
 
 describe("a log kept to its cap", () => {
   it("keeps its last part from a whole line on, under a line saying so", async () => {
@@ -105,5 +106,24 @@ describe("tidying what Wisp keeps", () => {
     expect(existsSync(join(logs(), "oldest.log"))).toBe(false);
     expect(existsSync(join(stateDir(), "history", "h1", "1.log"))).toBe(true);
     expect(existsSync(join(logs(), "newest.log"))).toBe(true);
+  });
+});
+
+describe("files written before pipelines were called pipelines", () => {
+  it("still reads the pipeline a run and its steps belonged to", async () => {
+    const { pipeline: _pipeline, ...old } = historyRun("old", [join(logs(), "old.log")]);
+    const steps = old.steps.map((step) => ({ ...step, bolt: "Services" }));
+    await writeFile(join(stateDir(), "history.json"), JSON.stringify({ version: 1, runs: [{ ...old, bolt: "Up", steps }] }));
+    const [entry] = await listHistory();
+    expect(entry?.pipeline).toBe("Up");
+    expect(entry?.steps[0]?.pipeline).toBe("Services");
+    expect(entry && "bolt" in entry).toBe(false);
+  });
+
+  it("still knows which pipeline started a process", async () => {
+    await writeFile(join(stateDir(), "runs.json"), JSON.stringify({ version: 2, runs: [{ ...run("old", true), bolt: "Up" }] }));
+    const [found] = await listRuns();
+    expect(found?.pipeline).toBe("Up");
+    expect(found && "bolt" in found).toBe(false);
   });
 });

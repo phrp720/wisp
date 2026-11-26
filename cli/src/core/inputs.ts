@@ -49,7 +49,7 @@ export function fillTarget(target: SwitchTarget, values: InputValues): SwitchTar
   return filled;
 }
 
-export function parseGiven(pairs: string[], specs: InputSpec[], bolt: string): InputValues {
+export function parseGiven(pairs: string[], specs: InputSpec[], pipeline: string): InputValues {
   const values: InputValues = {};
   for (const pair of pairs) {
     const at = pair.indexOf("=");
@@ -58,7 +58,7 @@ export function parseGiven(pairs: string[], specs: InputSpec[], bolt: string): I
     const spec = specs.find((entry) => entry.name === name);
     if (!spec) {
       const known = specs.map((entry) => entry.name);
-      throw new WispError(`"${bolt}" has no input called ${name}${known.length > 0 ? `; it has ${known.join(", ")}` : ""}`, "INVALID_INPUT");
+      throw new WispError(`"${pipeline}" has no input called ${name}${known.length > 0 ? `; it has ${known.join(", ")}` : ""}`, "INVALID_INPUT");
     }
     const problem = checkValue(spec, pair.slice(at + 1));
     if (problem) throw new WispError(problem, "INVALID_INPUT");

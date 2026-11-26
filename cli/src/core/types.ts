@@ -34,8 +34,8 @@ export type RunMode = "auto" | "terminal" | "background" | "inline";
 /**
  * Shared by every kind of asset.
  *
- * An asset is declared once and says nothing about when it opens. That is a bolt's job,
- * and a bolt refers to assets by label, so an asset can belong to any number of them.
+ * An asset is declared once and says nothing about when it opens. That is a pipeline's job,
+ * and a pipeline refers to assets by label, so an asset can belong to any number of them.
  */
 export interface AssetBase {
   /** `folder:api` — derived from kind and label, the same on every read. */
@@ -93,7 +93,7 @@ export interface Command extends AssetBase {
 }
 
 /**
- * A pause in a bolt until something is ready: the database is listening, the dev server
+ * A pause in a pipeline until something is ready: the database is listening, the dev server
  * answers, or a few seconds have passed.
  */
 export type WaitSpec =
@@ -102,15 +102,15 @@ export type WaitSpec =
   | { seconds: number };
 
 /**
- * One step of a bolt: open an asset, wait for something, or first run another bolt —
+ * One step of a pipeline: open an asset, wait for something, or first run another pipeline —
  * this workspace's, or another workspace's when `workspace` names one. A dependency runs
- * once per run however many bolts need it, and a command it would start is skipped when
+ * once per run however many pipelines need it, and a command it would start is skipped when
  * Wisp already has it running.
  */
 export type PipelineStep = (
   | { kind: "asset"; id: string }
   | { kind: "wait"; wait: WaitSpec; held?: string }
-  | { kind: "pipeline"; bolt: string }
+  | { kind: "pipeline"; pipeline: string }
   /**
    * Services of a compose file: started with `up --wait`, so the step is done when they are
    * healthy; stopped by `wisp down`; shown with their state, health and logs.
@@ -123,7 +123,7 @@ export type PipelineStep = (
  * A named action over some of a workspace's assets: "API development", "Doc writing".
  *
  * Running one opens its assets in the order listed — the user's order, not any inherent
- * one. A bolt is a small pipeline, and a wait step is how a pipeline says "not yet".
+ * one. A pipeline is a small pipeline, and a wait step is how a pipeline says "not yet".
  */
 export interface Pipeline {
   id: string;
@@ -136,7 +136,7 @@ export interface Pipeline {
   keepGoing?: boolean;
   confirm?: string;
   inputs?: InputSpec[];
-  /** Run by `wisp down` after stopping what the bolt started: `docker compose stop`. */
+  /** Run by `wisp down` after stopping what the pipeline started: `docker compose stop`. */
   down?: PipelineStep[];
 }
 
@@ -168,7 +168,7 @@ export interface Workspace {
   apps: AppRef[];
   /** Only the commands that may run: empty for an untrusted project file. */
   commands: Command[];
-  bolts: Pipeline[];
+  pipelines: Pipeline[];
 }
 
 /**
@@ -249,7 +249,7 @@ export type TrustState =
 /**
  * Something worth saying about a workspace file that is not worth refusing it over.
  *
- * A committed `.wisp.json` is read by people who did not write it, so a bolt naming an
+ * A committed `.wisp.json` is read by people who did not write it, so a pipeline naming an
  * asset that is not there has to be reported rather than quietly dropped.
  */
 export interface Diagnostic {
@@ -295,7 +295,7 @@ export interface WorkspaceRead {
 
 export type TargetKind = "app" | "command" | "folder" | "file" | "link";
 
-/** A step a bolt can take: opening an asset, or waiting for something to be ready. */
+/** A step a pipeline can take: opening an asset, or waiting for something to be ready. */
 export type StepKind = TargetKind | "wait" | "pipeline" | "compose";
 
 /** One asset, flattened to what opening it needs. */
@@ -343,7 +343,7 @@ export interface SwitchResult {
   workspace: Workspace;
   targets: TargetResult[];
   dryRun: boolean;
-  bolt?: Pipeline;
+  pipeline?: Pipeline;
   /** The run's entry in history, for `wisp history <id>`. */
   historyId?: string;
   ok: boolean;
@@ -367,8 +367,8 @@ export interface SwitchOptions {
   dryRun?: boolean;
   /** Open without stealing focus, where the platform can. */
   background?: boolean;
-  /** Which bolt to run, by id or any distinctive part of its label. */
-  bolt?: string;
+  /** Which pipeline to run, by id or any distinctive part of its label. */
+  pipeline?: string;
   /** Focus a link's existing tab rather than opening a second one, where possible. */
   reuseTabs?: boolean;
   /** How commands run. Defaults to `auto`. */

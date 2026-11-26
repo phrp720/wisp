@@ -27,7 +27,7 @@ export const show: CommandDef<{ json?: boolean }> = {
     if (workspace.notes) console.log(dim(workspace.notes));
 
     console.log();
-    if (workspace.bolts.length === 0) {
+    if (workspace.pipelines.length === 0) {
       console.log(noPipelinesLine(read, "No pipelines yet. `wisp` opens the dashboard, where `a` adds one."));
     } else {
       console.log(bold("Pipelines"));
@@ -40,26 +40,26 @@ export const show: CommandDef<{ json?: boolean }> = {
     if (trust) console.log(trust);
     if (health) console.log(health);
 
-    const first = workspace.bolts[0];
+    const first = workspace.pipelines[0];
     if (first) {
       const here = await maybeProject().catch(() => undefined);
       const prefix = here?.workspace.file === workspace.file ? "" : `${slugify(workspace.name)} `;
       console.log();
-      console.log(dim(`Run one with \`wisp ${prefix}${shortest(first, workspace.bolts, prefix === "")}\`, or \`wisp pick${prefix ? ` ${prefix.trim()}` : ""}\` to choose.`));
+      console.log(dim(`Run one with \`wisp ${prefix}${shortest(first, workspace.pipelines, prefix === "")}\`, or \`wisp pick${prefix ? ` ${prefix.trim()}` : ""}\` to choose.`));
     }
   },
 };
 
 export function workspaceJson(read: WorkspaceRead) {
   const { workspace } = read;
-  const { links: _links, folders: _folders, files: _files, apps: _apps, commands: _commands, bolts, ...rest } = workspace;
+  const { links: _links, folders: _folders, files: _files, apps: _apps, commands: _commands, pipelines, ...rest } = workspace;
   return {
     ...rest,
-    pipelines: bolts.map(({ steps: _steps, down, ...bolt }) => ({
-      ...bolt,
-      slug: pipelineSlug(bolt),
-      steps: collectPipelineTargets(workspace, { ...bolt, steps: _steps }),
-      ...(down ? { down: collectDownTargets(workspace, { ...bolt, steps: _steps, down }) } : {}),
+    pipelines: pipelines.map(({ steps: _steps, down, ...pipeline }) => ({
+      ...pipeline,
+      slug: pipelineSlug(pipeline),
+      steps: collectPipelineTargets(workspace, { ...pipeline, steps: _steps }),
+      ...(down ? { down: collectDownTargets(workspace, { ...pipeline, steps: _steps, down }) } : {}),
     })),
     trust: read.trust,
     diagnostics: read.diagnostics,

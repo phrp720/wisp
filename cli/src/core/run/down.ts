@@ -7,25 +7,25 @@ import { composeTarget } from "./targets.js";
 
 export interface DownResult {
   stopped: RunStatus[];
-  /** The bolt's own `down` steps, run after stopping. */
+  /** The pipeline's own `down` steps, run after stopping. */
   teardown?: SwitchResult;
 }
 
 /**
- * Stop what a bolt started, then run its `down` steps.
+ * Stop what a pipeline started, then run its `down` steps.
  *
  * Its own commands by default: `down api` should not take the database out from under
  * `web`, which needs it too. With `deps`, its dependencies' commands and teardown as well.
  */
 export async function downPipeline(
   workspace: Workspace,
-  bolt: Pipeline,
+  pipeline: Pipeline,
   options: { deps?: boolean; dryRun?: boolean; echo?: boolean; onResult?: (result: TargetResult) => void } = {},
   deps: RunDeps = {},
 ): Promise<DownResult> {
   const plan = options.deps
-    ? await planPipeline(workspace, bolt)
-    : await planPipeline(workspace, { ...bolt, steps: bolt.steps.filter((step) => step.kind !== "pipeline") });
+    ? await planPipeline(workspace, pipeline)
+    : await planPipeline(workspace, { ...pipeline, steps: pipeline.steps.filter((step) => step.kind !== "pipeline") });
 
   const commands = plan.filter((step) => step.target.kind === "command");
   const runs = (await listRuns()).filter((run) => run.alive);
@@ -34,15 +34,15 @@ export async function downPipeline(
   );
   if (!options.dryRun) for (const run of stopped) stopRun(run);
 
-  // Teardown: the compose services it started, then its `down` steps — this bolt's, and
+  // Teardown: the compose services it started, then its `down` steps — this pipeline's, and
   // with `deps`, each dependency's — once each.
-  const owners = options.deps ? uniquePipelines(plan) : [{ workspace, bolt: bolt.label }];
+  const owners = options.deps ? uniquePipelines(plan) : [{ workspace, pipeline: pipeline.label }];
   const teardownSteps: PlannedStep[] = plan
     .filter((step) => step.target.kind === "compose" && step.target.compose)
     .map((step) => ({ ...step, key: `${step.key}#stop`, deps: [], keepGoing: false, target: composeTarget(step.target.compose!, "stop") }));
   const stopping = teardownSteps.map((step) => step.key);
   for (const owner of owners) {
-    const source = owner.workspace.bolts.find((entry) => entry.label === owner.bolt);
+    const source = owner.workspace.pipelines.find((entry) => entry.label === owner.pipeline);
     if (!source?.down?.length) continue;
     const steps = await planPipeline(owner.workspace, { ...source, steps: source.down.filter((step) => step.kind !== "pipeline"), keepGoing: false });
     teardownSteps.push(
@@ -60,7 +60,7 @@ export async function downPipeline(
     workspace,
     teardownSteps,
     {
-      label: `${bolt.label} (down)`,
+      label: `${pipeline.label} (down)`,
       ...(options.dryRun ? { dryRun: true } : {}),
       ...(options.echo ? { echo: true } : {}),
       ...(options.onResult ? { onResult: options.onResult } : {}),
