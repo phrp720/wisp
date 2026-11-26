@@ -49,6 +49,15 @@ export function groupPanes(head: PaneItem[], runs: RunStatus[], containers: Cont
     );
   }
 
+  for (const { group } of [...groups.values()]) {
+    if (!group.bolt || !group.workspace) continue;
+    const latest = history.find((candidate) => candidate.workspace === group.workspace && !candidate.bolt.endsWith(" (down)") && allSteps(candidate).some((step) => (step.bolt ?? baseLabel(candidate.bolt)) === group.bolt));
+    const caller = latest && baseLabel(latest.bolt);
+    if (!latest || !caller || caller === group.bolt) continue;
+    const key = `${group.workspace}#${caller}`;
+    if (!groups.has(key)) groups.set(key, { group: { key, workspace: group.workspace, workspaceName: group.workspaceName, bolt: caller, title: caller }, members: [] });
+  }
+
   for (const found of groups.values()) {
     found.members = pipeline(found.group, found.members, history);
     const from = found.members.find((member) => member.type === "step");
@@ -105,7 +114,7 @@ function nestNeededPipelines(groups: Map<string, { group: PaneGroup; members: Pa
 export function pipeline(group: PaneGroup, members: PaneItem[], history: HistoryEntry[]): PaneItem[] {
   if (!group.bolt || !group.workspace) return members;
   const owns = (entry: HistoryEntry, step: HistoryStep) => (step.bolt ?? baseLabel(entry.bolt)) === group.bolt;
-  const entry = history.find((candidate) => candidate.workspace === group.workspace && !candidate.bolt.endsWith(" (down)") && allSteps(candidate).some((step) => owns(candidate, step)));
+  const entry = history.find((candidate) => candidate.workspace === group.workspace && !candidate.bolt.endsWith(" (down)") && (baseLabel(candidate.bolt) === group.bolt || allSteps(candidate).some((step) => owns(candidate, step))));
   if (!entry) return members;
 
   const left = [...members];
