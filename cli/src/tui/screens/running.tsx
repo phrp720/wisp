@@ -71,12 +71,14 @@ export function PanesPanel(props: {
   const list = paneList({ items, active, index, height, searching: Boolean(typing || query), activity: activity.length });
   const width = listWidth - 4;
   /** One line: the left part truncates; the right part is always shown. */
+  const pipelineMark = [...glyphs.pipeline].reduce((sum, char) => sum + (/\p{Extended_Pictographic}/u.test(char) ? 2 : 1), 0);
+  const indent = (depth: number) => (depth > 1 ? 5 + Math.max(pipelineMark, 2) : depth * 2 + 1);
   const line = (selected: boolean, depth: number, mark: ReactNode, label: ReactNode, right: string, rightColor?: string | undefined) => (
     <Box width={width}>
       <Box flexGrow={1} minWidth={0}>
         <Text wrap="truncate-end">
           <Text color={TONE.accent}>{selected ? glyphs.pointer : " "}</Text>
-          {" ".repeat(depth * 2 + 1)}
+          {" ".repeat(indent(depth))}
           {mark}
           {mark ? " " : ""}
           <Text bold={selected} color={selected ? TONE.accent : undefined}>{label}</Text>
