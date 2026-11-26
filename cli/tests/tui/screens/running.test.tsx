@@ -2,6 +2,7 @@ import { render } from "ink-testing-library";
 import { describe, expect, it, vi } from "vitest";
 
 import type { HistoryEntry } from "../../../src/core/history.js";
+import type { RunStatus } from "../../../src/core/system/processes.js";
 import type { SwitchResult, WorkspaceRead } from "../../../src/core/types.js";
 import { App } from "../../../src/tui/App.js";
 import { unicode, read, acme, services, tick, eventually, open } from "../../support/tui-app.js";
@@ -655,5 +656,36 @@ describe("running and history", () => {
     app.stdin.write("p");
     await tick();
     await eventually(() => expect(app.lastFrame()).toContain("Nothing is running"));
+  });
+});
+
+describe("the Running list", () => {
+  it("indents what a pipeline brought up under that pipeline's name, not beside it", async () => {
+    const shop = read("/dev/shop/.wisp.json", {
+      name: "Shop",
+      pipelines: [
+        { label: "Database", steps: [{ run: "postgres", label: "db" }] },
+        { label: "Up", steps: [{ pipeline: "Database" }] },
+      ],
+    });
+    const db = { id: "dbdbdbdbdbdb", kind: "background", label: "db", command: "postgres", workspace: shop.workspace.file, workspaceName: "Shop", asset: "command:db", pipeline: "Database", pid: 1, startedAt: new Date().toISOString(), log: "/tmp/db.log", alive: true } as RunStatus;
+    const up: HistoryEntry = {
+      id: "up1",
+      workspace: shop.workspace.file,
+      workspaceName: "Shop",
+      pipeline: "Up",
+      number: 1,
+      startedAt: new Date().toISOString(),
+      finishedAt: new Date().toISOString(),
+      ok: true,
+      steps: [{ kind: "command", label: "db", value: "postgres", ok: true, durationMs: 1200, pipeline: "Database" }],
+    };
+    const app = await open(services({ runs: async () => [db], history: async () => [up] }, { reads: [shop], here: shop.workspace.file, unreadable: [] }));
+    app.stdin.write("2");
+    await eventually(() => expect(app.lastFrame()).toMatch(/⚡ Database[^\n]*\n[^\n]*● db/));
+    const lines = (app.lastFrame() ?? "").split("\n");
+    const at = lines.findIndex((line) => line.includes("⚡ Database"));
+    const column = (line: string, text: string) => [...line.slice(0, line.indexOf(text))].reduce((sum, char) => sum + (/\p{Extended_Pictographic}/u.test(char) ? 2 : 1), 0);
+    expect(column(lines[at + 1]!, "●")).toBe(column(lines[at]!, "Database"));
   });
 });
